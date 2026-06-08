@@ -1223,7 +1223,7 @@ async function findNearbyCities(lat, lon) {
   }
 
   let viewbox = scaleViewbox(lat, lon, 0.45);
-  let url = `${NOMINATIM}?q=city&format=jsonv2&viewbox=${viewbox}&bounded=1&limit=20`;
+  let url = `${NOMINATIM}?q=city&format=jsonv2&viewbox=${viewbox}&bounded=1&limit=20&addressdetails=1`;
   console.log('[hasW] Nominatim URL (50km):', url);
 
   let results;
@@ -1239,7 +1239,7 @@ async function findNearbyCities(lat, lon) {
 
   if (results.length < 6) {
     viewbox = scaleViewbox(lat, lon, 1.0);
-    url = `${NOMINATIM}?q=city&format=jsonv2&viewbox=${viewbox}&bounded=1&limit=30`;
+    url = `${NOMINATIM}?q=city&format=jsonv2&viewbox=${viewbox}&bounded=1&limit=30&addressdetails=1`;
     console.log('[hasW] Nominatim URL (100km):', url);
     try {
       const resp = await fetch(url);
@@ -1261,11 +1261,10 @@ async function findNearbyCities(lat, lon) {
   }
 
   const cities = results.map(item => {
-    const display = item.display_name || '';
-    const parts = display.split(',').map(s => s.trim());
-    let name = parts[0] || item.name;
-    let state = parts[2] || '';
-    let country = parts[3] || '';
+    const address = item.address || {};
+    let name = item.name || address.city || '';
+    let state = address.state || address.county || '';
+    let country = address.country || '';
     name = name.replace(/^City of\s+/i, '');
 
     return {
@@ -1512,6 +1511,11 @@ function renderCityCard(data) {
 
   const highTemp = daily?.temperature_2m_max?.[0] != null ? convertTemp(daily.temperature_2m_max[0]) : '—';
   const lowTemp = daily?.temperature_2m_min?.[0] != null ? convertTemp(daily.temperature_2m_min[0]) : '—';
+
+  // Store high/low on data object so drawMergedChart can use them
+  data.highTemp = highTemp;
+  data.lowTemp = lowTemp;
+
   const sunrise = daily?.sunrise?.[0]?.split('T')[1]?.split('+')[0];
   const sunset = daily?.sunset?.[0]?.split('T')[1]?.split('+')[0];
 
@@ -1692,15 +1696,15 @@ function drawMergedChart(canvasId, cityData, dayHigh, dayLow) {
   ctx.scale(dpr, dpr);
   const w = rect.width;
   const h = rect.height;
-  const pad = { top: -15, right: 0, bottom: 0, left: 0 };
+  const pad = { top: 6, right: 0, bottom: 6, left: 0 };
   const plotW = w - pad.left - pad.right;
   const plotH = h - pad.top - pad.bottom;
 
   ctx.clearRect(0, 0, w, h);
 
   const hourly = cityData.hourly || {};
-  // Slice to 24 hours (current day only)
-  const temps = (hourly.temperature_2m || []).slice(0, 24);
+  // Slice to 24 hours (current day only), convert temps to current unit
+  const temps = (hourly.temperature_2m || []).slice(0, 24).map(v => convertTemp(v));
   const rain = (hourly.precipitation || []).slice(0, 24);
   const wind = (hourly.wind_speed_10m || []).slice(0, 24);
 
@@ -1804,7 +1808,7 @@ function drawMergedChart(canvasId, cityData, dayHigh, dayLow) {
   for (let i = 0; i <= 3; i++) {
     const val = tempMax - (tempRange / 3) * i;
     const y = pad.top + (plotH / 3) * i;
-    ctx.fillText(Math.round(val) + '°', pad.left + 14, y + 3);
+    ctx.fillText(Math.round(val) + '°', pad.left + 17, y + 3);
   }
 
 }
