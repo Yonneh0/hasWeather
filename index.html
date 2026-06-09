@@ -1358,7 +1358,7 @@ async function fetchWeatherForCities(cities) {
   cities.forEach((c, i) => console.log(`  ${i}: ${c.name} (${c.latitude}, ${c.longitude})`));
 
   try {
-    const weatherUrl = `${WEATHER_API}?latitude=${cities.map(c => c.latitude).join(',')}&longitude=${cities.map(c => c.longitude).join(',')}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m,surface_pressure,uv_index,visibility&hourly=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,uv_index_max,precipitation_sum&forecast_days=8&temperature_unit=celsius&wind_speed_unit=kmh&precipitation_unit=mm&timezone=auto`;
+    const weatherUrl = `${WEATHER_API}?latitude=${cities.map(c => c.latitude).join(',')}&longitude=${cities.map(c => c.longitude).join(',')}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m,surface_pressure,uv_index,visibility&hourly=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,uv_index_max,precipitation_sum,wind_speed_10m_max&forecast_days=8&temperature_unit=celsius&wind_speed_unit=kmh&precipitation_unit=mm&timezone=auto`;
     console.log('[hasW] Weather API URL:', weatherUrl);
 
     const weatherRes = await fetch(weatherUrl);
@@ -1496,7 +1496,7 @@ function renderCityCard(data) {
   const current = w.current || {};
   const hourly = w.hourly || {};
   const daily = w.daily || {};
-  const aqiData = aqiLabel(a.us_aqi || 0);
+  const aqiData = aqiLabel(a.us_aqi);
 
   const curTemp = current?.temperature_2m != null ? convertTemp(current.temperature_2m) : '—';
   const feelsLike = current?.apparent_temperature != null ? convertTemp(current.apparent_temperature) : '—';
@@ -1521,8 +1521,15 @@ function renderCityCard(data) {
 
   const now = new Date();
   const currentHour = now.getHours();
-  const sunriseTime = sunrise ? parseInt(sunrise.split(':')[0]) : 6;
-  const sunsetTime = sunset ? parseInt(sunset.split(':')[0]) : 19;
+
+  // Parse as decimal hours so minutes are accounted for (e.g., 18:45 → 18.75)
+  function parseDecimalTime(timeStr, fallback) {
+    if (!timeStr) return fallback;
+    const [h, m] = timeStr.split(':').map(Number);
+    return h + (m / 60);
+  }
+  const sunriseTime = parseDecimalTime(sunrise, 6);
+  const sunsetTime = parseDecimalTime(sunset, 19);
   const isDay = isDaytime(currentHour, sunriseTime, sunsetTime);
 
   const curIcon = isDay ? getWeatherIcon(curWeatherCode) : getMoonIcon(curWeatherCode);
@@ -1537,7 +1544,7 @@ function renderCityCard(data) {
 
   let hourlyHTML = '';
   for (let i = 0; i < 12; i++) {
-    const hIdx = currentIdx >= 0 ? currentIdx + 1 + i : currentHour + 1 + i;
+    const hIdx = currentIdx >= 0 ? currentIdx + i : currentHour + i;
     if (hIdx < 0 || hIdx >= timeArr.length) break;
     const hTime = timeArr[hIdx]?.split('T')[1]?.split('+')[0]?.slice(0, 5);
     const hTemp = hourly?.temperature_2m?.[hIdx] != null ? convertTemp(hourly.temperature_2m[hIdx]) : 0;
@@ -1545,8 +1552,8 @@ function renderCityCard(data) {
     const hPrecip = precipMM > 0.1 ? `${Math.round(precipMM)}mm` : '';
     const hCode = hourly?.weather_code?.[hIdx] ?? 0;
     const isCurrent = i === 0;
-    const hHour = parseInt(hTime.split(':')[0]);
-    const hIsDay = isDaytime(hHour, sunriseTime, sunsetTime);
+    const hHourDecimal = parseDecimalTime(hTime, 12);
+    const hIsDay = isDaytime(hHourDecimal, sunriseTime, sunsetTime);
     const hWind = hourly?.wind_speed_10m?.[hIdx] != null ? `${Math.round(hourly.wind_speed_10m[hIdx])} km/h` : '';
     hourlyHTML += `<div class="hour-slot${isCurrent ? ' current' : ''}">
       <div class="hour-time">${hTime}</div>
@@ -1562,7 +1569,7 @@ function renderCityCard(data) {
   const globalMin = -40, globalMax = 80;
   const dailyArr = daily?.time || [];
   const todayIdx = dailyArr.findIndex(d => d && d.split('T')[0] === currentDay);
-  const startIdx = todayIdx >= 0 ? todayIdx + 1 : 0;
+  const startIdx = todayIdx >= 0 ? todayIdx : 0;
 
   for (let i = 0; i < 7; i++) {
     const idx = startIdx + i;
