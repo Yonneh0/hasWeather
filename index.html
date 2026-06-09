@@ -798,6 +798,24 @@ const AIR_QUALITY_API = 'https://air-quality-api.open-meteo.com/v1/air-quality';
 const IP_API = 'https://ipinfo.io/json';
 const NOMINATIM = 'https://nominatim.openstreetmap.org/search';
 
+// ===== CONSTANTS =====
+const EARTH_RADIUS_MI = 3958.8;
+const GEOLOCATION_TIMEOUT_MS = 8000;
+const NEARBY_CACHE_TTL_MS = 600000;
+const NOMINATIM_CLOSE_RADIUS = 0.45;
+const NOMINATIM_WIDE_RADIUS = 1.0;
+const MAX_CITIES = 6;
+const MIN_CITY_DISTANCE_MI = 8;
+const FORECAST_DAYS = 8;
+const HOURLY_FORECAST_SLOTS = 12;
+const DAILY_FORECAST_DAYS = 7;
+const CHART_DRAW_DELAY_MS = 400;
+const CHART_RESIZE_DEBOUNCE_MS = 250;
+const TOGGLE_DEBOUNCE_MS = 300;
+const PARTICLE_COUNT = 30;
+const TEMP_GLOBAL_MIN = -40;
+const TEMP_GLOBAL_MAX = 80;
+
 // ===== WMO WEATHER CODES =====
 const WMO_CODES = {
   0: { icon: 'sun', label: 'Clear Sky' },
@@ -860,22 +878,34 @@ let weatherData = [];
 let isLoading = false;
 let _nearbyCache = null;
 let _nearbyCacheTime = 0;
+let _toggleDebounceTimer = null;
+let _chartResizeTimer = null;
 
 // ===== UTILITY FUNCTIONS =====
-function toF(c) { return c * 9/5 + 32; }
-function toC(f) { return (f - 32) * 5/9; }
+function toF(c) { return c * 9 / 5 + 32; }
+function toC(f) { return (f - 32) * 5 / 9; }
 function convertTemp(celsius) {
   if (celsius == null || celsius !== celsius) return NaN;
   return unit === 'F' ? toF(celsius) : toC(celsius);
 }
 function tempUnit() { return unit === 'F' ? '°F' : '°C'; }
 
+function escapeHTML(str) {
+  if (typeof str !== 'string') return str;
+  return str
+    .replace(/&/g, '\u0026amp;')
+    .replace(/</g, '\u0026lt;')
+    .replace(/>/g, '\u0026gt;')
+    .replace(/"/g, '\u0026quot;')
+    .replace(/'/g, '\u0026#039;');
+}
+
 function haversine(lat1, lon1, lat2, lon2) {
-  const R = 3958.8;
+  const R = EARTH_RADIUS_MI;
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLon/2)**2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 function bearing(lat1, lon1, lat2, lon2) {
@@ -1194,8 +1224,6 @@ function loudWeatherIcon(type, size) {
 
 // ===== WIND COMPASS =====
 function getWindCompass(deg) {
-  const dirs = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
-  const idx = Math.round(deg / 22.5) % 16;
   const arrow = ['⬆', '↗', '➡', '↘', '⬇', '↙', '⬅', '↖'][Math.round(deg / 45) % 8];
   return `<span class="wind-compass"><span class="compass-dial">${arrow}</span> ${bearingToCompass(deg)} ${deg}°</span>`;
 }
@@ -1215,47 +1243,38 @@ function scaleViewbox(lat, lon, radiusDeg) {
 }
 
 async function findNearbyCities(lat, lon) {
-  console.log('[hasW] findNearbyCities(lat=%s, lon=%s)', lat, lon);
-
-  if (_nearbyCache && Date.now() - _nearbyCacheTime < 600000) {
-    console.log('[hasW] findNearbyCities() returning cached (%d cities)', _nearbyCache.length);
+  if (_nearbyCache && Date.now() - _nearbyCacheTime < NEARBY_CACHE_TTL_MS) {
     return _nearbyCache;
   }
 
-  let viewbox = scaleViewbox(lat, lon, 0.45);
+  let viewbox = scaleViewbox(lat, lon, NOMINATIM_CLOSE_RADIUS);
   let url = `${NOMINATIM}?q=city&format=jsonv2&viewbox=${viewbox}&bounded=1&limit=20&addressdetails=1`;
-  console.log('[hasW] Nominatim URL (50km):', url);
 
   let results;
   try {
     const resp = await fetch(url);
     if (!resp.ok) throw new Error(`Nominatim ${resp.status}`);
     results = await resp.json();
-    console.log('[hasW] Nominatim results (50km):', results.length);
-  } catch (e) {
-    console.warn('[hasW] Nominatim 50km failed:', e);
+  } catch {
     results = [];
   }
 
-  if (results.length < 6) {
-    viewbox = scaleViewbox(lat, lon, 1.0);
+  if (results.length < MAX_CITIES) {
+    viewbox = scaleViewbox(lat, lon, NOMINATIM_WIDE_RADIUS);
     url = `${NOMINATIM}?q=city&format=jsonv2&viewbox=${viewbox}&bounded=1&limit=30&addressdetails=1`;
-    console.log('[hasW] Nominatim URL (100km):', url);
     try {
       const resp = await fetch(url);
       if (resp.ok) {
         const extra = await resp.json();
         const existing = new Set(results.map(r => r.place_id));
         extra.forEach(r => { if (!existing.has(r.place_id)) { results.push(r); existing.add(r.place_id); } });
-        console.log('[hasW] Nominatim results (100km):', results.length);
       }
-    } catch (e) {
-      console.warn('[hasW] Nominatim 100km failed:', e);
+    } catch {
+      // silently ignore
     }
   }
 
   if (results.length === 0) {
-    console.log('[hasW] Nominatim returned empty, showing prompt');
     showLocationPrompt();
     return [];
   }
@@ -1327,25 +1346,20 @@ async function findNearbyCities(lat, lon) {
 
 // ===== LOCATION =====
 async function getLocation() {
-  console.log('[hasW] getLocation() called');
   try {
     const pos = await new Promise((resolve, reject) => {
-      navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 8000 });
+      navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: GEOLOCATION_TIMEOUT_MS });
     });
     const { latitude, longitude } = pos.coords;
-    console.log('[hasW] Browser geolocation success:', latitude, longitude);
     return { lat: latitude, lon: longitude };
-  } catch (e) {
-    console.log('[hasW] Browser geolocation failed:', e);
+  } catch {
     try {
       const res = await fetch(IP_API);
       const data = await res.json();
       const lat = parseFloat(data.loc?.split(',')[0] ?? data.lat);
       const lon = parseFloat(data.loc?.split(',')[1] ?? data.lon);
-      console.log('[hasW] IP fallback result:', lat, lon);
       return { lat, lon };
-    } catch (e2) {
-      console.log('[hasW] IP fallback failed:', e2);
+    } catch {
       showLocationPrompt();
       return { lat: 43.41947, lon: -83.95081 };
     }
@@ -1354,18 +1368,12 @@ async function getLocation() {
 
 // ===== FETCH WEATHER =====
 async function fetchWeatherForCities(cities) {
-  console.log('[hasW] fetchWeatherForCities(%d cities):', cities.length);
-  cities.forEach((c, i) => console.log(`  ${i}: ${c.name} (${c.latitude}, ${c.longitude})`));
-
   try {
-    const weatherUrl = `${WEATHER_API}?latitude=${cities.map(c => c.latitude).join(',')}&longitude=${cities.map(c => c.longitude).join(',')}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m,surface_pressure,uv_index,visibility&hourly=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,uv_index_max,precipitation_sum,wind_speed_10m_max&forecast_days=8&temperature_unit=celsius&wind_speed_unit=kmh&precipitation_unit=mm&timezone=auto`;
-    console.log('[hasW] Weather API URL:', weatherUrl);
+    const weatherUrl = `${WEATHER_API}?latitude=${cities.map(c => c.latitude).join(',')}&longitude=${cities.map(c => c.longitude).join(',')}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m,surface_pressure,uv_index,visibility&hourly=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,uv_index_max,precipitation_sum,wind_speed_10m_max&forecast_days=${FORECAST_DAYS}&temperature_unit=celsius&wind_speed_unit=kmh&precipitation_unit=mm&timezone=auto`;
 
     const weatherRes = await fetch(weatherUrl);
-    console.log('[hasW] Weather API response status:', weatherRes.status);
 
     if (!weatherRes.ok) {
-      console.error('[hasW] Weather API error:', weatherRes.status, weatherRes.statusText);
       return cities.map(c => ({ ...c, weather: null, aqi: {} }));
     }
 
@@ -1442,8 +1450,7 @@ async function fetchWeatherForCities(cities) {
     });
 
     return result;
-  } catch (e) {
-    console.error('[hasW] fetchWeatherForCities() caught error:', e);
+  } catch {
     return cities.map(c => ({ ...c, weather: null, aqi: {} }));
   }
 }
@@ -1499,7 +1506,6 @@ function renderCityCard(data) {
   const aqiData = aqiLabel(a.us_aqi);
 
   const curTemp = current?.temperature_2m != null ? convertTemp(current.temperature_2m) : '—';
-  const feelsLike = current?.apparent_temperature != null ? convertTemp(current.apparent_temperature) : '—';
   const curWeatherCode = current?.weather_code ?? 0;
   const humidity = current?.relative_humidity_2m ?? '—';
   const windSpeed = current?.wind_speed_10m ?? '—';
@@ -1607,7 +1613,6 @@ function renderCityCard(data) {
     avg: Math.round(data.reduce((a, b) => a + b, 0) / data.length),
   } : { min: '—', max: '—', avg: '—' };
 
-  const tempStats = chartStats(temps);
   const humStats = chartStats(hum);
   const windStats = chartStats(wind);
   const rainStats = chartStats(rain);
@@ -1617,14 +1622,14 @@ function renderCityCard(data) {
     <div style="position:relative;z-index:2;">
     <div class="city-header">
       <div class="city-name-wrap">
-        <span class="city-name">${data.name}</span>
-        <span class="city-state">${data.state}</span>
+        <span class="city-name">${escapeHTML(data.name)}</span>
+        <span class="city-state">${escapeHTML(data.state)}</span>
       </div>
       <span class="current-temp-inline">${Math.round(curTemp)}°</span>
       <div class="current-weather-icon-inline">${curIconLarge}</div>
     </div>
     <div class="city-compass-row" style="display:flex;align-items:center;gap:0.4rem;margin-top:0.1rem;">
-      <span class="compass-heading">${bearingToCompass(data.bearing)}</span>
+      <span class="compass-heading">${escapeHTML(bearingToCompass(data.bearing))}</span>
       <span class="compass-heading">${Math.round(data.distance)} mi</span>
     </div>
     <div class="info-row">
@@ -1688,6 +1693,7 @@ function renderCityCard(data) {
     <div class="daily-section">
       <div class="daily-title">7-Day Forecast</div>
       ${dailyHTML}
+    </div>
     </div>`;
 }
 
@@ -1820,170 +1826,6 @@ function drawMergedChart(canvasId, cityData, dayHigh, dayLow) {
 
 }
 
-// ===== HUMIDITY CHART =====
-function drawHumidityChart(canvasId, cityData) {
-  const canvas = document.getElementById(canvasId);
-  if (!canvas) return;
-  const ctx = canvas.getContext('2d');
-  const dpr = window.devicePixelRatio || 1;
-  const rect = canvas.getBoundingClientRect();
-  canvas.width = rect.width * dpr;
-  canvas.height = rect.height * dpr;
-  ctx.scale(dpr, dpr);
-  const w = rect.width;
-  const h = rect.height;
-  const pad = { top: 10, right: 10, bottom: 10, left: 10 };
-  const plotW = w - pad.left - pad.right;
-  const plotH = h - pad.top - pad.bottom;
-
-  ctx.clearRect(0, 0, w, h);
-
-  const hourly = cityData.hourly || {};
-  // Slice to 24 hours (current day only)
-  const hum = (hourly.relative_humidity_2m || []).slice(0, 24);
-  if (hum.length === 0) return;
-
-  const n = hum.length;
-  const stepX = plotW / (n - 1 || 1);
-  const rainMax = Math.max(...((hourly.precipitation || []).slice(0, 24)), 0.5);
-
-  // Humidity gradient
-  const humGrad = ctx.createLinearGradient(0, pad.top, 0, pad.top + plotH);
-  humGrad.addColorStop(0, 'rgba(77,166,255,0.05)');
-  humGrad.addColorStop(1, 'rgba(77,166,255,0.35)');
-
-  // Rain bars (bottom)
-  const rainH = plotH * 0.2;
-  const rainY = pad.top + plotH - rainH;
-  const barW = Math.max(2, stepX * 0.5);
-  const rain = (hourly.precipitation || []).slice(0, 24);
-  rain.forEach((v, i) => {
-    const x = pad.left + i * stepX + (stepX - barW) / 2;
-    const barH = (v / rainMax) * rainH;
-    ctx.fillStyle = `rgba(77,166,255,${0.15 + (v / rainMax) * 0.35})`;
-    ctx.fillRect(x, rainY + rainH - barH, barW, barH);
-  });
-
-  // Humidity fill
-  ctx.beginPath();
-  hum.forEach((v, i) => {
-    const x = pad.left + i * stepX;
-    const y = pad.top + plotH - (v / 100) * plotH;
-    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-  });
-  ctx.lineTo(pad.left + (n - 1) * stepX, pad.top + plotH);
-  ctx.lineTo(pad.left, pad.top + plotH);
-  ctx.closePath();
-  ctx.fillStyle = humGrad;
-  ctx.fill();
-
-  // Humidity line
-  ctx.beginPath();
-  hum.forEach((v, i) => {
-    const x = pad.left + i * stepX;
-    const y = pad.top + plotH - (v / 100) * plotH;
-    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-  });
-  ctx.strokeStyle = 'rgba(77,166,255,0.8)';
-  ctx.lineWidth = 1.5;
-  ctx.lineJoin = 'round';
-  ctx.lineCap = 'round';
-  ctx.stroke();
-
-  // Dots
-  hum.forEach((v, i) => {
-    const x = pad.left + i * stepX;
-    const y = pad.top + plotH - (v / 100) * plotH;
-    ctx.beginPath();
-    ctx.arc(x, y, 2, 0, Math.PI * 2);
-    ctx.fillStyle = '#4da6ff';
-    ctx.fill();
-  });
-
-  // Labels
-  ctx.fillStyle = 'rgba(255,255,255,0.3)';
-  ctx.font = '9px -apple-system, sans-serif';
-  ctx.textAlign = 'left';
-  ctx.fillText('100%', pad.left + 2, pad.top + 4);
-  ctx.fillText('0%', pad.left + 2, pad.top + plotH);
-}
-
-// ===== WIND CHART =====
-function drawWindChart(canvasId, cityData) {
-  const canvas = document.getElementById(canvasId);
-  if (!canvas) return;
-  const ctx = canvas.getContext('2d');
-  const dpr = window.devicePixelRatio || 1;
-  const rect = canvas.getBoundingClientRect();
-  canvas.width = rect.width * dpr;
-  canvas.height = rect.height * dpr;
-  ctx.scale(dpr, dpr);
-  const w = rect.width;
-  const h = rect.height;
-  const pad = { top: 10, right: 10, bottom: 10, left: 10 };
-  const plotW = w - pad.left - pad.right;
-  const plotH = h - pad.top - pad.bottom;
-
-  ctx.clearRect(0, 0, w, h);
-
-  const hourly = cityData.hourly || {};
-  // Slice to 24 hours (current day only)
-  const wind = (hourly.wind_speed_10m || []).slice(0, 24);
-  if (wind.length === 0) return;
-
-  const n = wind.length;
-  const stepX = plotW / (n - 1 || 1);
-  const windMax = Math.max(...wind, 1);
-
-  // Wind gradient
-  const windGrad = ctx.createLinearGradient(0, pad.top, 0, pad.top + plotH);
-  windGrad.addColorStop(0, 'rgba(125,217,160,0.3)');
-  windGrad.addColorStop(1, 'rgba(125,217,160,0.05)');
-
-  // Wind fill
-  ctx.beginPath();
-  wind.forEach((v, i) => {
-    const x = pad.left + i * stepX;
-    const y = pad.top + plotH - (v / windMax) * plotH;
-    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-  });
-  ctx.lineTo(pad.left + (n - 1) * stepX, pad.top + plotH);
-  ctx.lineTo(pad.left, pad.top + plotH);
-  ctx.closePath();
-  ctx.fillStyle = windGrad;
-  ctx.fill();
-
-  // Wind line
-  ctx.beginPath();
-  wind.forEach((v, i) => {
-    const x = pad.left + i * stepX;
-    const y = pad.top + plotH - (v / windMax) * plotH;
-    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-  });
-  ctx.strokeStyle = 'rgba(125,217,160,0.8)';
-  ctx.lineWidth = 1.5;
-  ctx.lineJoin = 'round';
-  ctx.lineCap = 'round';
-  ctx.stroke();
-
-  // Dots
-  wind.forEach((v, i) => {
-    const x = pad.left + i * stepX;
-    const y = pad.top + plotH - (v / windMax) * plotH;
-    ctx.beginPath();
-    ctx.arc(x, y, 2, 0, Math.PI * 2);
-    ctx.fillStyle = '#7dd9a0';
-    ctx.fill();
-  });
-
-  // Labels
-  ctx.fillStyle = 'rgba(255,255,255,0.3)';
-  ctx.font = '9px -apple-system, sans-serif';
-  ctx.textAlign = 'left';
-  ctx.fillText(Math.round(windMax) + ' km/h', pad.left + 2, pad.top + 4);
-  ctx.fillText('0', pad.left + 2, pad.top + plotH);
-}
-
 // ===== COMBINED CHART =====
 function drawCombinedChart(canvasId, cityData) {
   const canvas = document.getElementById(canvasId);
@@ -2089,22 +1931,11 @@ function drawCombinedChart(canvasId, cityData) {
 
 // ===== CANVAS CHARTS =====
 function drawAllCharts() {
-  console.log('[hasW] drawAllCharts() called, weatherData.length =', weatherData.length);
-  weatherData.forEach((data, idx) => {
-    if (!data.weather) {
-      console.log(`[hasW] drawAllCharts() skipping ${data.name} (no weather)`);
-      return;
-    }
-    const w = data.weather;
-    const hourly = w.hourly || {};
+  weatherData.forEach((data) => {
+    if (!data.weather) return;
+    const hourly = data.weather.hourly || {};
     const safeName = sanitizeId(data.name);
-
-    if (Object.keys(hourly).length === 0) {
-      console.log(`[hasW] drawAllCharts() skipping ${data.name} (empty hourly)`);
-      return;
-    }
-
-    console.log(`[hasW] drawAllCharts() drawing charts for ${data.name} (hourly keys: ${Object.keys(hourly).join(', ')})`);
+    if (Object.keys(hourly).length === 0) return;
     drawMergedChart(`chart-merged-${safeName}`, data.weather, data.highTemp, data.lowTemp);
     drawCombinedChart(`chart-combined-${safeName}`, data.weather);
   });
@@ -2125,7 +1956,7 @@ function initParticles() {
   resize();
   window.addEventListener('resize', resize);
 
-  for (let i = 0; i < 30; i++) {
+  for (let i = 0; i < PARTICLE_COUNT; i++) {
     particles.push({
       x: Math.random() * canvas.width,
       y: Math.random() * canvas.height,
@@ -2173,20 +2004,24 @@ async function handleCitySearch() {
     const data = await res.json();
     if (data?.length > 0) {
       userLocation = { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
-      document.getElementById('user-location').textContent = `📍 ${userLocation.lat.toFixed(2)}°N, ${Math.abs(userLocation.lon).toFixed(2)}°W`;
+      document.getElementById('user-location').textContent = `\u{1F4CD} ${userLocation.lat.toFixed(2)}\u00B0N, ${Math.abs(userLocation.lon).toFixed(2)}\u00B0W`;
       await run();
     }
-  } catch (e) {
-    console.error('City search failed:', e);
+  } catch {
+    // silently ignore search failures
   }
 }
 
 // ===== REFRESH & UNIT TOGGLE =====
 function toggleUnit() {
-  unit = unit === 'F' ? 'C' : 'F';
-  const btn = document.getElementById('unit-toggle');
-  if (btn) btn.textContent = `°${unit}`;
-  renderAll();
+  if (_toggleDebounceTimer) return;
+  _toggleDebounceTimer = setTimeout(() => {
+    _toggleDebounceTimer = null;
+    unit = unit === 'F' ? 'C' : 'F';
+    const btn = document.getElementById('unit-toggle');
+    if (btn) btn.textContent = `°${unit}`;
+    renderAll();
+  }, TOGGLE_DEBOUNCE_MS);
 }
 
 async function refresh() {
@@ -2205,44 +2040,28 @@ async function refresh() {
 
 // ===== MAIN RUN =====
 async function run() {
-  console.log('[hasW] === run() called ===');
-
   if (!userLocation) {
-    console.log('[hasW] No userLocation, calling getLocation()...');
     userLocation = await getLocation();
-    console.log('[hasW] getLocation() returned:', userLocation);
   }
 
   const locEl = document.getElementById('user-location');
-  if (locEl) locEl.textContent = `📍 ${userLocation.lat.toFixed(2)}°N, ${Math.abs(userLocation.lon).toFixed(2)}°W`;
+  if (locEl) locEl.textContent = `\u{1F4CD} ${userLocation.lat.toFixed(2)}\u00B0N, ${Math.abs(userLocation.lon).toFixed(2)}\u00B0W`;
 
   _nearbyCache = null;
   _nearbyCacheTime = 0;
 
-  console.log('[hasW] Calling findNearbyCities(lat=%s, lon=%s)...', userLocation.lat, userLocation.lon);
   const cities = await findNearbyCities(userLocation.lat, userLocation.lon);
-  console.log('[hasW] findNearbyCities() returned %d cities:', cities.length, cities);
 
   if (cities.length === 0) {
-    console.log('[hasW] No cities found!');
     return;
   }
 
-  console.log('[hasW] Calling fetchWeatherForCities(%d cities)...', cities.length);
   weatherData = await fetchWeatherForCities(cities);
-  console.log('[hasW] fetchWeatherForCities() returned %d weather entries:', weatherData.length);
-  weatherData.forEach((wd, i) => {
-    console.log(`[hasW]   City ${i}: ${wd.name} - weather=${wd.weather ? 'OK' : 'null'}, aqi=${wd.aqi ? JSON.stringify(wd.aqi) : 'null'}`);
-  });
-
-  console.log('[hasW] Calling renderAll()...');
   renderAll();
-  console.log('[hasW] === run() done ===');
 }
 
 // ===== INIT =====
 document.addEventListener('DOMContentLoaded', () => {
-  console.log('[hasW] DOMContentLoaded fired');
   initParticles();
 
   const unitBtn = document.getElementById('unit-toggle');
@@ -2250,26 +2069,21 @@ document.addEventListener('DOMContentLoaded', () => {
   const searchBtn = document.getElementById('search-btn');
   const cityInput = document.getElementById('city-input');
 
-  if (unitBtn) {
-    unitBtn.addEventListener('click', toggleUnit);
-    console.log('[hasW] unit-toggle button attached');
-  }
-  if (refreshBtn) {
-    refreshBtn.addEventListener('click', refresh);
-    console.log('[hasW] refresh-btn button attached');
-  }
-  if (searchBtn) {
-    searchBtn.addEventListener('click', handleCitySearch);
-    console.log('[hasW] search-btn button attached');
-  }
+  if (unitBtn) unitBtn.addEventListener('click', toggleUnit);
+  if (refreshBtn) refreshBtn.addEventListener('click', refresh);
+  if (searchBtn) searchBtn.addEventListener('click', handleCitySearch);
   if (cityInput) {
     cityInput.addEventListener('keydown', e => {
       if (e.key === 'Enter') handleCitySearch();
     });
-    console.log('[hasW] city-input attached');
   }
 
-  console.log('[hasW] Calling run() from DOMContentLoaded');
+  // Chart redraw on resize
+  window.addEventListener('resize', () => {
+    clearTimeout(_chartResizeTimer);
+    _chartResizeTimer = setTimeout(() => drawAllCharts(), CHART_RESIZE_DEBOUNCE_MS);
+  });
+
   run();
 });
 </script>
