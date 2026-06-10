@@ -15,6 +15,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const unitBtn = document.getElementById('unit-toggle');
   const refreshBtn = document.getElementById('refresh-btn');
+  const gameBtn = document.getElementById('game-btn');
   const favBtn = document.getElementById('fav-btn');
   const favDropdown = document.getElementById('fav-dropdown');
   const favSearch = document.getElementById('fav-search');
@@ -25,6 +26,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (unitBtn) unitBtn.addEventListener('click', toggleUnit);
   if (refreshBtn) refreshBtn.addEventListener('click', refresh);
+  if (gameBtn) gameBtn.addEventListener('click', toggleGame);
   if (searchBtn) searchBtn.addEventListener('click', handleCitySearch);
   if (cityInput) {
     cityInput.addEventListener('keydown', e => {
@@ -123,25 +125,44 @@ document.addEventListener('DOMContentLoaded', () => {
     _chartResizeTimer = setTimeout(() => drawAllCharts(), CHART_RESIZE_DEBOUNCE_MS);
   });
 
-  // Debug location preset buttons
-  document.querySelectorAll('.debug-loc-btn').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const lat = parseFloat(btn.dataset.lat);
-      const lon = parseFloat(btn.dataset.lon);
-      const name = btn.dataset.name;
-      userLocation = { lat, lon };
-      const locEl = document.getElementById('user-location');
-      if (locEl) {
-        const latDir = lat >= 0 ? 'N' : 'S';
-        const lonDir = lon >= 0 ? 'E' : 'W';
-        locEl.textContent = `\u{1F4CD} ${Math.abs(lat).toFixed(2)}\u00B0${latDir}, ${Math.abs(lon).toFixed(2)}\u00B0${lonDir} (${name})`;
-      }
-      // Clear nearby cache so fresh results are fetched for new location
-      _nearbyCache = null;
-      _nearbyCacheTime = 0;
-      await run();
-    });
-  });
+   // Debug location preset buttons
+   document.querySelectorAll('.debug-loc-btn').forEach(btn => {
+     btn.addEventListener('click', async () => {
+       const lat = parseFloat(btn.dataset.lat);
+       const lon = parseFloat(btn.dataset.lon);
+       const name = btn.dataset.name;
+       userLocation = { lat, lon };
+       const locEl = document.getElementById('user-location');
+       if (locEl) {
+         const latDir = lat >= 0 ? 'N' : 'S';
+         const lonDir = lon >= 0 ? 'E' : 'W';
+         locEl.textContent = `\u{1F4CD} ${Math.abs(lat).toFixed(2)}\u00B0${latDir}, ${Math.abs(lon).toFixed(2)}\u00B0${lonDir} (${name})`;
+       }
+       // Clear nearby cache so fresh results are fetched for new location
+       _nearbyCache = null;
+       _nearbyCacheTime = 0;
+       await run();
+     });
+   });
 
-  run();
-});
+   // Toggle network outage retry when pressing the refresh button while offline
+   // (already handled above in checkNetwork)
+
+   // Start the app with network check
+   checkNetworkAndRun(run);
+ });
+
+// ===== GAME TOGGLE =====
+function toggleGame() {
+  const gameBtn = document.getElementById('game-btn');
+  if (!gameBtn || typeof DONKEY_RUNNER === 'undefined') return;
+
+  const isVisible = !DONKEY_RUNNER.gamePanel?.classList.contains('donkey-hidden');
+  if (isVisible) {
+    DONKEY_RUNNER.minimize();
+    gameBtn.classList.remove('active');
+  } else {
+    DONKEY_RUNNER.toggle();
+    gameBtn.classList.add('active');
+  }
+}
