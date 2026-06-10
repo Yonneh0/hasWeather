@@ -90,33 +90,72 @@ function removeOutagePanel() {
 
 function showOutagePanel() {
   const panel = createOutagePanel();
+  _outageVisible = true;
+
+  // Set position BEFORE the slide-in animation begins, so the panel animates
+  // from the bottom of the screen to the correct target position.
+  adjustOutagePositionImmediate();
+
   panel.classList.remove('outage-hidden');
   panel.classList.add('outage-visible');
-  _outageVisible = true;
   cycleOutageMessage();
-  // Adjust position if donkey game is open
-  adjustOutagePosition();
 }
 
+// Immediately-set the outage panel position (no delay).
+// Used when the panel first appears, before its slide-in animation begins.
+function adjustOutagePositionImmediate() {
+  const panel = document.getElementById('outage-panel');
+  if (!panel) return;
+
+  const donkeyVisible = DONKEY_RUNNER && DONKEY_RUNNER.gamePanel &&
+    !DONKEY_RUNNER.gamePanel.classList.contains('donkey-hidden');
+
+  if (donkeyVisible) {
+    const donkeyRect = DONKEY_RUNNER.gamePanel.getBoundingClientRect();
+    panel.style.top = (donkeyRect.bottom + 20) + 'px';
+    panel.style.bottom = 'auto';
+  } else {
+    panel.style.top = '64px';
+    panel.style.bottom = 'auto';
+  }
+}
+
+// Delayed position adjustment (used when donkey game is toggled).
+// Waits for the donkey panel's 400ms CSS transition to complete before measuring.
 function adjustOutagePosition() {
   const panel = document.getElementById('outage-panel');
   if (!panel) return;
 
   const donkeyVisible = DONKEY_RUNNER && DONKEY_RUNNER.gamePanel &&
-    !DONKEY_RUNNER.gamePanel.classList.contains('donkey-hidden') &&
-    !DONKEY_RUNNER.gamePanel.classList.contains('donkey-minimized');
+    !DONKEY_RUNNER.gamePanel.classList.contains('donkey-hidden');
 
-  if (donkeyVisible) {
-    // Measure the donkey game panel's actual bounding rect
-    const donkeyRect = DONKEY_RUNNER.gamePanel.getBoundingClientRect();
-    // Position below donkey game with a 20px gap
-    panel.style.top = (donkeyRect.bottom + 20) + 'px';
-    panel.style.bottom = 'auto';
-  } else {
-    // Position at bottom of screen
-    panel.style.bottom = '20px';
-    panel.style.top = 'auto';
+  // The donkey panel has a 0.4s CSS transition on `top`. We must wait for it
+  // to finish animating before calling getBoundingClientRect(), otherwise we
+  // measure a mid-transition (incorrect) position.  450ms ≈ transition duration
+  // plus a small safety margin.
+  const transitionDelay = 450;
+
+  // Also cancel any previously-scheduled adjustment so rapid toggles don't
+  // leave stale timeouts firing and overwriting the correct position.
+  if (adjustOutagePosition._timer) {
+    clearTimeout(adjustOutagePosition._timer);
+    adjustOutagePosition._timer = null;
   }
+
+  adjustOutagePosition._timer = setTimeout(() => {
+    adjustOutagePosition._timer = null;
+    if (!document.getElementById('outage-panel')) return;
+    const p = document.getElementById('outage-panel');
+
+    if (donkeyVisible) {
+      const donkeyRect = DONKEY_RUNNER.gamePanel.getBoundingClientRect();
+      p.style.top = (donkeyRect.bottom + 20) + 'px';
+      p.style.bottom = 'auto';
+    } else {
+      p.style.top = '64px';
+      p.style.bottom = 'auto';
+    }
+  }, transitionDelay);
 }
 
 function cycleOutageMessage() {

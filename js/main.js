@@ -159,7 +159,7 @@ function toggleGame() {
 
   const isVisible = !DONKEY_RUNNER.gamePanel?.classList.contains('donkey-hidden');
   if (isVisible) {
-    DONKEY_RUNNER.minimize();
+    DONKEY_RUNNER.close();
     gameBtn.classList.remove('active');
   } else {
     DONKEY_RUNNER.toggle();
