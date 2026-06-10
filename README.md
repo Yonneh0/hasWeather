@@ -1,4 +1,4 @@
-# hasW Weather
+# hasW Weather (Under Development: Proceed with caution)
 
 single file weather app, by Half-Assed Solutions.
 completely self-contained single file weather app, that uses public sources, with proper local caching, to provide reliable comprehensive weather information, with 0 ads. Brought to you by `Carls' Jr`.
