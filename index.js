@@ -1,0 +1,2139 @@
+
+// ===== API ENDPOINTS =====
+const WEATHER_API = 'https://api.open-meteo.com/v1/forecast';
+const AIR_QUALITY_API = 'https://air-quality-api.open-meteo.com/v1/air-quality';
+const OPEN_METEO_GEOCODING = 'https://geocoding-api.open-meteo.com/v1/search';
+const IP_API = 'https://ipinfo.io/json';
+const NOMINATIM = 'https://nominatim.openstreetmap.org/search';
+
+// ===== CONSTANTS =====
+const EARTH_RADIUS_MI = 3958.8;
+const GEOLOCATION_TIMEOUT_MS = 8000;
+const NEARBY_CACHE_TTL_MS = 600000;
+const NOMINATIM_CLOSE_RADIUS = 0.45;
+const NOMINATIM_WIDE_RADIUS = 1.0;
+const MAX_CITIES = 6;
+const MIN_CITY_DISTANCE_MI = 8;
+const FORECAST_DAYS = 8;
+const HOURLY_FORECAST_SLOTS = 12;
+const DAILY_FORECAST_DAYS = 7;
+const CHART_DRAW_DELAY_MS = 400;
+const CHART_RESIZE_DEBOUNCE_MS = 250;
+const TOGGLE_DEBOUNCE_MS = 300;
+const PARTICLE_COUNT = 30;
+const TEMP_GLOBAL_MIN = -40;
+const TEMP_GLOBAL_MAX = 80;
+
+// ===== WMO WEATHER CODES =====
+const WMO_CODES = {
+  0: { icon: 'sun', label: 'Clear Sky' },
+  1: { icon: 'sun', label: 'Mainly Clear' },
+  2: { icon: 'cloud-sun', label: 'Partly Cloudy' },
+  3: { icon: 'cloud', label: 'Overcast' },
+  45: { icon: 'fog', label: 'Foggy' },
+  48: { icon: 'fog', label: 'Rime Fog' },
+  51: { icon: 'drizzle', label: 'Light Drizzle' },
+  53: { icon: 'drizzle', label: 'Moderate Drizzle' },
+  55: { icon: 'drizzle', label: 'Dense Drizzle' },
+  56: { icon: 'freezing-rain', label: 'Freezing Drizzle' },
+  57: { icon: 'freezing-rain', label: 'Heavy Freezing Drizzle' },
+  61: { icon: 'rain', label: 'Light Rain' },
+  63: { icon: 'rain', label: 'Moderate Rain' },
+  65: { icon: 'rain', label: 'Heavy Rain' },
+  66: { icon: 'freezing-rain', label: 'Freezing Rain' },
+  67: { icon: 'freezing-rain', label: 'Heavy Freezing Rain' },
+  71: { icon: 'snow', label: 'Light Snow' },
+  73: { icon: 'snow', label: 'Moderate Snow' },
+  75: { icon: 'snow', label: 'Heavy Snow' },
+  77: { icon: 'snow-grains', label: 'Snow Grains' },
+  80: { icon: 'showers', label: 'Light Showers' },
+  81: { icon: 'showers', label: 'Moderate Showers' },
+  82: { icon: 'showers', label: 'Violent Showers' },
+  85: { icon: 'snow-showers', label: 'Snow Showers' },
+  86: { icon: 'snow-showers', label: 'Heavy Snow Showers' },
+  95: { icon: 'thunderstorm', label: 'Thunderstorm' },
+  96: { icon: 'thunderstorm', label: 'Thunderstorm + Hail' },
+  99: { icon: 'thunderstorm', label: 'Heavy Thunderstorm + Hail' },
+};
+
+// ===== WMO GRADIENTS =====
+const WMO_GRADIENTS = {
+  0: 'linear-gradient(180deg, rgba(30,60,120,0.5) 0%, rgba(10,20,40,0.3) 100%)',
+  1: 'linear-gradient(180deg, rgba(30,60,120,0.5) 0%, rgba(10,20,40,0.3) 100%)',
+  2: 'linear-gradient(180deg, rgba(60,80,110,0.5) 0%, rgba(20,30,50,0.3) 100%)',
+  3: 'linear-gradient(180deg, rgba(70,70,80,0.5) 0%, rgba(30,30,35,0.3) 100%)',
+  45: 'linear-gradient(180deg, rgba(80,90,100,0.5) 0%, rgba(40,45,50,0.3) 100%)',
+  48: 'linear-gradient(180deg, rgba(80,90,100,0.5) 0%, rgba(40,45,50,0.3) 100%)',
+  51: 'linear-gradient(180deg, rgba(25,45,75,0.5) 0%, rgba(15,25,40,0.3) 100%)',
+  53: 'linear-gradient(180deg, rgba(25,45,75,0.5) 0%, rgba(15,25,40,0.3) 100%)',
+  55: 'linear-gradient(180deg, rgba(20,40,70,0.5) 0%, rgba(10,20,35,0.3) 100%)',
+  61: 'linear-gradient(180deg, rgba(25,45,75,0.5) 0%, rgba(15,25,40,0.3) 100%)',
+  63: 'linear-gradient(180deg, rgba(20,40,70,0.5) 0%, rgba(10,20,35,0.3) 100%)',
+  65: 'linear-gradient(180deg, rgba(15,35,65,0.5) 0%, rgba(10,15,30,0.3) 100%)',
+  71: 'linear-gradient(180deg, rgba(60,90,130,0.5) 0%, rgba(30,45,65,0.3) 100%)',
+  73: 'linear-gradient(180deg, rgba(55,85,125,0.5) 0%, rgba(25,40,60,0.3) 100%)',
+  75: 'linear-gradient(180deg, rgba(50,80,120,0.5) 0%, rgba(20,35,55,0.3) 100%)',
+  80: 'linear-gradient(180deg, rgba(35,55,75,0.5) 0%, rgba(20,30,45,0.3) 100%)',
+  95: 'linear-gradient(180deg, rgba(45,25,75,0.5) 0%, rgba(25,15,45,0.3) 100%)',
+  96: 'linear-gradient(180deg, rgba(45,25,75,0.5) 0%, rgba(25,15,45,0.3) 100%)',
+  99: 'linear-gradient(180deg, rgba(45,25,75,0.5) 0%, rgba(25,15,45,0.3) 100%)',
+};
+
+// ===== DATA CACHE =====
+// Unified cache for ALL API calls with configurable TTL per type
+const DataCache = {
+  // TTLs in milliseconds
+  TTL: {
+    weather: 15 * 60 * 1000,      // 15 minutes
+    airQuality: 15 * 60 * 1000,   // 15 minutes
+    geocode: 24 * 60 * 60 * 1000, // 24 hours
+    nearby: 10 * 60 * 1000,       // 10 minutes
+    ipLocation: 24 * 60 * 60 * 1000 // 24 hours
+  },
+
+  // Round coordinates to 2 decimal places (~1km accuracy) for cache key grouping
+  _roundCoord(coord) {
+    return Math.round(coord * 100) / 100;
+  },
+
+  // Check if a cache entry exists and is not expired
+  has(key) {
+    try {
+      const raw = localStorage.getItem(`hasw_cache_${key}`);
+      if (!raw) {
+        console.log(`[DataCache] MISS (not found): ${key}`);
+        return false;
+      }
+      const entry = JSON.parse(raw);
+      const expired = !entry || (Date.now() - entry.timestamp > this.TTL[entry.type]);
+      if (expired) {
+        console.log(`[DataCache] MISS (expired): ${key} (type: ${entry.type})`);
+        return false;
+      }
+      console.log(`[DataCache] HIT: ${key} (type: ${entry.type})`);
+      return true;
+    } catch (e) {
+      console.log(`[DataCache] MISS (error): ${key}`);
+      return false;
+    }
+  },
+
+  // Get cached data (returns null if expired/missing)
+  get(key, type) {
+    try {
+      const raw = localStorage.getItem(`hasw_cache_${key}`);
+      if (!raw) {
+        console.log(`[DataCache] MISS (not found): ${key}`);
+        return null;
+      }
+      const entry = JSON.parse(raw);
+      // Validate type and expiration
+      if (entry.type !== type) {
+        console.log(`[DataCache] MISS (type mismatch): ${key} (expected: ${type}, got: ${entry.type})`);
+        return null;
+      }
+      if (Date.now() - entry.timestamp > this.TTL[entry.type]) {
+        console.log(`[DataCache] MISS (expired): ${key} (type: ${type}, age: ${Math.round((Date.now() - entry.timestamp) / 1000)}s, ttl: ${this.TTL[type] / 1000}s)`);
+        localStorage.removeItem(`hasw_cache_${key}`);
+        return null;
+      }
+      console.log(`[DataCache] HIT: ${key} (type: ${type}, age: ${Math.round((Date.now() - entry.timestamp) / 1000)}s)`);
+      return entry.data;
+    } catch (e) {
+      console.log(`[DataCache] MISS (parse error): ${key}`, e);
+      return null;
+    }
+  },
+
+  // Store data with timestamp and type
+  set(key, data, type) {
+    try {
+      const size = new Blob([JSON.stringify({ timestamp: Date.now(), type: type, data: data })]).size;
+      console.log(`[DataCache] SET: ${key} (type: ${type}, size: ${Math.round(size / 100)} / 100B)`);
+      localStorage.setItem(`hasw_cache_${key}`, JSON.stringify({
+        timestamp: Date.now(),
+        type: type,
+        data: data
+      }));
+    } catch (e) {
+      console.log(`[DataCache] SET FAILED: ${key} - ${e.message}`);
+    }
+  },
+
+  // Invalidate a specific cache key
+  invalidate(key) {
+    console.log(`[DataCache] INVALIDATE: ${key}`);
+    localStorage.removeItem(`hasw_cache_${key}`);
+  },
+
+  // Clear all cache entries
+  clearAll() {
+    const keysToRemove = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('hasw_cache_')) {
+        keysToRemove.push(key);
+      }
+    }
+    keysToRemove.forEach(k => localStorage.removeItem(k));
+    console.log(`[DataCache] CLEARED ALL: ${keysToRemove.length} entries`);
+  },
+
+  // Get total cache size in KB
+  getSize() {
+    let total = 0;
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('hasw_cache_')) {
+        total += localStorage.key(i).length + localStorage.getItem(key).length;
+      }
+    }
+    return Math.round(total / 1024 * 100) / 100;
+  }
+};
+
+// ===== STATE =====
+let userLocation = null;
+let unit = 'F';
+let weatherData = [];
+let isLoading = false;
+let _nearbyCache = null;
+let _nearbyCacheTime = 0;
+let _toggleDebounceTimer = null;
+let _chartResizeTimer = null;
+let _maxCities = parseInt(localStorage.getItem('hasW_maxCities') ?? '6', 10);
+
+// ===== FAVORITES MANAGER (place_id-based) =====
+const FavoritesManager = {
+  _idsKey: 'hasW_favorites',
+  _detailsKey: 'hasW_favDetails',
+
+  // Get array of favorited place_id strings
+  getIds() {
+    try { return JSON.parse(localStorage.getItem(this._idsKey) || '[]'); }
+    catch { return []; }
+  },
+
+  // Get details map { place_id -> {name, state, lat, lon} }
+  getDetails() {
+    try { return JSON.parse(localStorage.getItem(this._detailsKey) || '{}'); }
+    catch { return {}; }
+  },
+
+  has(placeId) {
+    return this.getIds().includes(String(placeId));
+  },
+
+  add(placeId, name, state, lat, lon) {
+    const ids = this.getIds();
+    const details = this.getDetails();
+    if (!ids.includes(String(placeId))) {
+      ids.push(String(placeId));
+      details[String(placeId)] = { name, state, latitude: lat, longitude: lon };
+      localStorage.setItem(this._idsKey, JSON.stringify(ids));
+      localStorage.setItem(this._detailsKey, JSON.stringify(details));
+    }
+  },
+
+  remove(placeId) {
+    const ids = this.getIds().filter(id => id !== String(placeId));
+    const details = this.getDetails();
+    delete details[String(placeId)];
+    localStorage.setItem(this._idsKey, JSON.stringify(ids));
+    localStorage.setItem(this._detailsKey, JSON.stringify(details));
+  },
+
+  // Get all favorite city objects (includes place_id)
+  getAll() {
+    const ids = this.getIds();
+    const details = this.getDetails();
+    return ids.map(id => {
+      const d = details[id];
+      return d ? { ...d, place_id: id } : null;
+    }).filter(Boolean);
+  },
+};
+
+// ===== UTILITY FUNCTIONS =====
+function toF(c) { return c * 9 / 5 + 32; }
+function toC(f) { return (f - 32) * 5 / 9; }
+function convertTemp(celsius) {
+  if (celsius == null || celsius !== celsius) return NaN;
+  return unit === 'F' ? toF(celsius) : toC(celsius);
+}
+function tempUnit() { return unit === 'F' ? '°F' : '°C'; }
+
+function escapeHTML(str) {
+  if (typeof str !== 'string') return str;
+  return str
+    .replace(/&/g, '\u0026amp;')
+    .replace(/</g, '\u0026lt;')
+    .replace(/>/g, '\u0026gt;')
+    .replace(/"/g, '\u0026quot;')
+    .replace(/'/g, '\u0026#039;');
+}
+
+function haversine(lat1, lon1, lat2, lon2) {
+  const R = EARTH_RADIUS_MI;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function bearing(lat1, lon1, lat2, lon2) {
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const y = Math.sin(dLon) * Math.cos(lat2 * Math.PI / 180);
+  const x = Math.cos(lat1 * Math.PI / 180) * Math.sin(lat2 * Math.PI / 180) -
+            Math.sin(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.cos(dLon);
+  let b = Math.atan2(y, x) * 180 / Math.PI;
+  return (b + 360) % 360;
+}
+
+function bearingToCompass(deg) {
+  const dirs = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+  return dirs[Math.round(deg / 22.5) % 16];
+}
+
+function aqiLabel(aqi) {
+  if (!aqi && aqi !== 0) return { label: '—', cls: '' };
+  if (aqi <= 50) return { label: 'Good', cls: 'aqi-good' };
+  if (aqi <= 100) return { label: 'Moderate', cls: 'aqi-moderate' };
+  return { label: 'Unhealthy', cls: 'aqi-unhealthy' };
+}
+
+function sanitizeId(str) {
+  return str.replace(/[^a-zA-Z0-9]/g, '_');
+}
+
+// ===== SVG WEATHER ICONS - LOUD & ANIMATED =====
+function getWeatherIcon(code, size = 64) {
+  const w = WMO_CODES[code] || WMO_CODES[0];
+  return loudWeatherIcon(w.icon, size);
+}
+
+function getMoonIcon(code, size = 64) {
+  return loudWeatherIcon('moon', size);
+}
+
+function loudWeatherIcon(type, size) {
+  const icons = {
+    sun: `<svg class="weather-svg weather-icon-animated weather-icon-sun" width="${size}" height="${size}" viewBox="0 0 64 64">
+      <g class="icon-glow">
+        <circle cx="32" cy="32" r="18" fill="rgba(255,213,79,0.15)">
+          <animate attributeName="r" values="16;22;16" dur="3s" repeatCount="indefinite"/>
+          <animate attributeName="opacity" values="0.1;0.25;0.1" dur="3s" repeatCount="indefinite"/>
+        </circle>
+      </g>
+      <circle cx="32" cy="32" r="12" class="sun" stroke-width="2.5">
+        <animate attributeName="r" values="11;13;11" dur="4s" repeatCount="indefinite"/>
+      </circle>
+      <g class="icon-rotate">
+        <line x1="32" y1="8" x2="32" y2="16" class="sun" stroke-width="2.5"/>
+        <line x1="32" y1="48" x2="32" y2="56" class="sun" stroke-width="2.5"/>
+        <line x1="8" y1="32" x2="16" y2="32" class="sun" stroke-width="2.5"/>
+        <line x1="48" y1="32" x2="56" y2="32" class="sun" stroke-width="2.5"/>
+        <line x1="15" y1="15" x2="21" y2="21" class="sun" stroke-width="2.5"/>
+        <line x1="43" y1="43" x2="49" y2="49" class="sun" stroke-width="2.5"/>
+        <line x1="49" y1="15" x2="43" y2="21" class="sun" stroke-width="2.5"/>
+        <line x1="15" y1="49" x2="21" y2="43" class="sun" stroke-width="2.5"/>
+      </g>
+    </svg>`,
+    moon: `<svg class="weather-svg weather-icon-animated weather-icon-moon" width="${size}" height="${size}" viewBox="0 0 64 64">
+      <g class="icon-bob">
+        <circle cx="48" cy="16" r="1.5" fill="#e0e0e0">
+          <animate attributeName="opacity" values="0.3;1;0.3" dur="2s" repeatCount="indefinite"/>
+        </circle>
+        <circle cx="54" cy="30" r="1" fill="#e0e0e0">
+          <animate attributeName="opacity" values="0.2;0.8;0.2" dur="3s" repeatCount="indefinite"/>
+        </circle>
+        <circle cx="44" cy="48" r="1.2" fill="#e0e0e0">
+          <animate attributeName="opacity" values="0.4;1;0.4" dur="2.5s" repeatCount="indefinite"/>
+        </circle>
+        <circle cx="56" cy="42" r="0.8" fill="#e0e0e0">
+          <animate attributeName="opacity" values="0.3;0.9;0.3" dur="3.5s" repeatCount="indefinite"/>
+        </circle>
+      </g>
+      <path d="M36 10 A22 22 0 1 0 36 46 A18 18 0 1 1 36 10 Z" class="moon" fill="#e0e0e0" stroke="none" stroke-width="1">
+        <animateTransform attributeName="transform" type="rotate" values="-5 32 32;5 32 32;-5 32 32" dur="6s" repeatCount="indefinite"/>
+      </path>
+    </svg>`,
+    'cloud-sun': `<svg class="weather-svg weather-icon-animated weather-icon-cloud-sun" width="${size}" height="${size}" viewBox="0 0 64 64">
+      <g class="icon-rotate">
+        <circle cx="22" cy="24" r="10" fill="#ffd54f" stroke="none">
+          <animate attributeName="r" values="9;12;9" dur="4s" repeatCount="indefinite"/>
+        </circle>
+        <g>
+          <line x1="22" y1="8" x2="22" y2="14" stroke="#ffd54f" stroke-width="2.5"/>
+          <line x1="22" y1="34" x2="22" y2="40" stroke="#ffd54f" stroke-width="2.5"/>
+          <line x1="6" y1="24" x2="12" y2="24" stroke="#ffd54f" stroke-width="2.5"/>
+          <line x1="32" y1="24" x2="38" y2="24" stroke="#ffd54f" stroke-width="2.5"/>
+          <line x1="11" y1="13" x2="15" y2="17" stroke="#ffd54f" stroke-width="2.5"/>
+          <line x1="29" y1="31" x2="33" y2="35" stroke="#ffd54f" stroke-width="2.5"/>
+          <line x1="33" y1="13" x2="29" y2="17" stroke="#ffd54f" stroke-width="2.5"/>
+          <line x1="11" y1="35" x2="15" y2="31" stroke="#ffd54f" stroke-width="2.5"/>
+        </g>
+      </g>
+      <g class="icon-drift">
+        <path d="M18 50 Q18 38 28 38 Q30 26 42 28 Q54 28 54 38 Q54 50 44 50 Z" class="cloud" stroke-width="2"/>
+      </g>
+    </svg>`,
+    cloud: `<svg class="weather-svg weather-icon-animated weather-icon-cloud" width="${size}" height="${size}" viewBox="0 0 64 64">
+      <g class="icon-drift">
+        <path d="M16 46 Q16 34 26 34 Q28 22 42 24 Q54 24 54 36 Q54 46 44 46 Z" class="cloud" stroke-width="2">
+          <animateTransform attributeName="transform" type="translate" values="-1,0;1,0;-1,0" dur="4s" repeatCount="indefinite"/>
+        </path>
+      </g>
+    </svg>`,
+    fog: `<svg class="weather-svg weather-icon-animated weather-icon-fog" width="${size}" height="${size}" viewBox="0 0 64 64">
+      <g>
+        <line x1="8" y1="18" x2="56" y2="18" stroke="#b0bec5" stroke-width="2.5" opacity="0.6">
+          <animate attributeName="x1" values="8;12;8" dur="4s" repeatCount="indefinite"/>
+          <animate attributeName="x2" values="56;60;56" dur="4s" repeatCount="indefinite"/>
+        </line>
+        <line x1="10" y1="28" x2="54" y2="28" stroke="#b0bec5" stroke-width="2.5" opacity="0.5">
+          <animate attributeName="x1" values="10;14;10" dur="5s" repeatCount="indefinite"/>
+          <animate attributeName="x2" values="54;58;54" dur="5s" repeatCount="indefinite"/>
+        </line>
+        <line x1="8" y1="38" x2="56" y2="38" stroke="#b0bec5" stroke-width="2.5" opacity="0.6">
+          <animate attributeName="x1" values="8;12;8" dur="4.5s" repeatCount="indefinite"/>
+          <animate attributeName="x2" values="56;60;56" dur="4.5s" repeatCount="indefinite"/>
+        </line>
+        <line x1="10" y1="48" x2="54" y2="48" stroke="#b0bec5" stroke-width="2.5" opacity="0.5">
+          <animate attributeName="x1" values="10;14;10" dur="5.5s" repeatCount="indefinite"/>
+          <animate attributeName="x2" values="54;58;54" dur="5.5s" repeatCount="indefinite"/>
+        </line>
+      </g>
+    </svg>`,
+    drizzle: `<svg class="weather-svg weather-icon-animated weather-icon-rain" width="${size}" height="${size}" viewBox="0 0 64 64">
+      <g class="icon-drift">
+        <path d="M16 34 Q16 22 26 22 Q28 12 42 14 Q54 14 54 26 Q54 34 44 34 Z" class="cloud" stroke-width="2"/>
+      </g>
+      <g>
+        <line x1="20" y1="38" x2="18" y2="46" class="rain" stroke-width="2">
+          <animate attributeName="y1" values="38;42;38" dur="1s" repeatCount="indefinite"/>
+          <animate attributeName="y2" values="46;50;46" dur="1s" repeatCount="indefinite"/>
+          <animate attributeName="opacity" values="1;0.5;1" dur="1s" repeatCount="indefinite"/>
+        </line>
+        <line x1="32" y1="38" x2="30" y2="48" class="rain" stroke-width="2">
+          <animate attributeName="y1" values="38;42;38" dur="1.2s" repeatCount="indefinite"/>
+          <animate attributeName="y2" values="48;52;48" dur="1.2s" repeatCount="indefinite"/>
+          <animate attributeName="opacity" values="0.5;1;0.5" dur="1.2s" repeatCount="indefinite"/>
+        </line>
+        <line x1="44" y1="38" x2="42" y2="46" class="rain" stroke-width="2">
+          <animate attributeName="y1" values="38;42;38" dur="0.9s" repeatCount="indefinite"/>
+          <animate attributeName="y2" values="46;50;46" dur="0.9s" repeatCount="indefinite"/>
+          <animate attributeName="opacity" values="1;0.5;1" dur="0.9s" repeatCount="indefinite"/>
+        </line>
+      </g>
+    </svg>`,
+    rain: `<svg class="weather-svg weather-icon-animated weather-icon-rain" width="${size}" height="${size}" viewBox="0 0 64 64">
+      <g class="icon-drift">
+        <path d="M14 32 Q14 20 26 20 Q28 10 44 12 Q56 12 56 26 Q56 34 44 34 Z" class="cloud" stroke-width="2"/>
+      </g>
+      <g>
+        <line x1="18" y1="36" x2="14" y2="48" class="rain" stroke-width="2.5">
+          <animate attributeName="y1" values="36;42;36" dur="0.8s" repeatCount="indefinite"/>
+          <animate attributeName="y2" values="48;54;48" dur="0.8s" repeatCount="indefinite"/>
+          <animate attributeName="opacity" values="1;0.4;1" dur="0.8s" repeatCount="indefinite"/>
+        </line>
+        <line x1="28" y1="36" x2="24" y2="50" class="rain" stroke-width="2.5">
+          <animate attributeName="y1" values="36;42;36" dur="0.9s" repeatCount="indefinite"/>
+          <animate attributeName="y2" values="50;54;50" dur="0.9s" repeatCount="indefinite"/>
+          <animate attributeName="opacity" values="0.4;1;0.4" dur="0.9s" repeatCount="indefinite"/>
+        </line>
+        <line x1="38" y1="36" x2="34" y2="48" class="rain" stroke-width="2.5">
+          <animate attributeName="y1" values="36;42;36" dur="0.7s" repeatCount="indefinite"/>
+          <animate attributeName="y2" values="48;54;48" dur="0.7s" repeatCount="indefinite"/>
+          <animate attributeName="opacity" values="1;0.4;1" dur="0.7s" repeatCount="indefinite"/>
+        </line>
+        <line x1="48" y1="36" x2="44" y2="50" class="rain" stroke-width="2.5">
+          <animate attributeName="y1" values="36;42;36" dur="1s" repeatCount="indefinite"/>
+          <animate attributeName="y2" values="50;54;50" dur="1s" repeatCount="indefinite"/>
+          <animate attributeName="opacity" values="0.4;1;0.4" dur="1s" repeatCount="indefinite"/>
+        </line>
+      </g>
+    </svg>`,
+    snow: `<svg class="weather-svg weather-icon-animated weather-icon-snow" width="${size}" height="${size}" viewBox="0 0 64 64">
+      <g class="icon-drift">
+        <path d="M16 34 Q16 22 26 22 Q28 12 42 14 Q54 14 54 26 Q54 34 44 34 Z" class="cloud" stroke-width="2"/>
+      </g>
+      <g>
+        <circle cx="20" cy="40" r="2.5" fill="#e0e0e0">
+          <animate attributeName="cy" values="40;54" dur="2s" repeatCount="indefinite"/>
+          <animate attributeName="opacity" values="1;0" dur="2s" repeatCount="indefinite"/>
+        </circle>
+        <circle cx="32" cy="38" r="2.5" fill="#e0e0e0">
+          <animate attributeName="cy" values="38;52" dur="2.2s" repeatCount="indefinite"/>
+          <animate attributeName="opacity" values="1;0" dur="2.2s" repeatCount="indefinite"/>
+        </circle>
+        <circle cx="44" cy="40" r="2.5" fill="#e0e0e0">
+          <animate attributeName="cy" values="40;54" dur="1.8s" repeatCount="indefinite"/>
+          <animate attributeName="opacity" values="1;0" dur="1.8s" repeatCount="indefinite"/>
+        </circle>
+        <circle cx="26" cy="48" r="2.5" fill="#e0e0e0">
+          <animate attributeName="cy" values="48;56" dur="2.5s" repeatCount="indefinite"/>
+          <animate attributeName="opacity" values="1;0" dur="2.5s" repeatCount="indefinite"/>
+        </circle>
+        <circle cx="38" cy="46" r="2.5" fill="#e0e0e0">
+          <animate attributeName="cy" values="46;56" dur="2.1s" repeatCount="indefinite"/>
+          <animate attributeName="opacity" values="1;0" dur="2.1s" repeatCount="indefinite"/>
+        </circle>
+      </g>
+    </svg>`,
+    showers: `<svg class="weather-svg weather-icon-animated weather-icon-rain" width="${size}" height="${size}" viewBox="0 0 64 64">
+      <g class="icon-drift">
+        <path d="M12 30 Q12 18 26 18 Q28 8 44 10 Q56 10 56 24 Q56 34 44 34 Z" class="cloud" stroke-width="2"/>
+      </g>
+      <g>
+        <line x1="16" y1="34" x2="12" y2="48" class="rain" stroke-width="3">
+          <animate attributeName="y1" values="34;42;34" dur="0.6s" repeatCount="indefinite"/>
+          <animate attributeName="y2" values="48;56;48" dur="0.6s" repeatCount="indefinite"/>
+          <animate attributeName="opacity" values="1;0.3;1" dur="0.6s" repeatCount="indefinite"/>
+        </line>
+        <line x1="28" y1="34" x2="24" y2="54" class="rain" stroke-width="3">
+          <animate attributeName="y1" values="34;42;34" dur="0.7s" repeatCount="indefinite"/>
+          <animate attributeName="y2" values="54;56;54" dur="0.7s" repeatCount="indefinite"/>
+          <animate attributeName="opacity" values="0.3;1;0.3" dur="0.7s" repeatCount="indefinite"/>
+        </line>
+        <line x1="40" y1="34" x2="36" y2="48" class="rain" stroke-width="3">
+          <animate attributeName="y1" values="34;42;34" dur="0.5s" repeatCount="indefinite"/>
+          <animate attributeName="y2" values="48;56;48" dur="0.5s" repeatCount="indefinite"/>
+          <animate attributeName="opacity" values="1;0.3;1" dur="0.5s" repeatCount="indefinite"/>
+        </line>
+        <line x1="52" y1="34" x2="48" y2="54" class="rain" stroke-width="3">
+          <animate attributeName="y1" values="34;42;34" dur="0.8s" repeatCount="indefinite"/>
+          <animate attributeName="y2" values="54;56;54" dur="0.8s" repeatCount="indefinite"/>
+          <animate attributeName="opacity" values="0.3;1;0.3" dur="0.8s" repeatCount="indefinite"/>
+        </line>
+      </g>
+    </svg>`,
+    'freezing-rain': `<svg class="weather-svg weather-icon-animated weather-icon-rain" width="${size}" height="${size}" viewBox="0 0 64 64">
+      <g class="icon-drift">
+        <path d="M16 34 Q16 22 26 22 Q28 12 42 14 Q54 14 54 26 Q54 34 44 34 Z" class="cloud" stroke-width="2"/>
+      </g>
+      <g>
+        <line x1="20" y1="38" x2="18" y2="44" class="rain" stroke-width="2">
+          <animate attributeName="y1" values="38;42;38" dur="0.8s" repeatCount="indefinite"/>
+          <animate attributeName="y2" values="44;48;44" dur="0.8s" repeatCount="indefinite"/>
+        </line>
+        <line x1="32" y1="38" x2="30" y2="46" class="rain" stroke-width="2">
+          <animate attributeName="y1" values="38;42;38" dur="0.9s" repeatCount="indefinite"/>
+          <animate attributeName="y2" values="46;50;46" dur="0.9s" repeatCount="indefinite"/>
+        </line>
+        <line x1="44" y1="38" x2="42" y2="44" class="rain" stroke-width="2">
+          <animate attributeName="y1" values="38;42;38" dur="0.7s" repeatCount="indefinite"/>
+          <animate attributeName="y2" values="44;48;44" dur="0.7s" repeatCount="indefinite"/>
+        </line>
+        <line x1="20" y1="46" x2="20" y2="50" class="snow" stroke-width="1.5">
+          <animate attributeName="y1" values="46;48;46" dur="1.5s" repeatCount="indefinite"/>
+          <animate attributeName="y2" values="50;52;50" dur="1.5s" repeatCount="indefinite"/>
+        </line>
+        <line x1="32" y1="46" x2="32" y2="50" class="snow" stroke-width="1.5">
+          <animate attributeName="y1" values="46;48;46" dur="1.7s" repeatCount="indefinite"/>
+          <animate attributeName="y2" values="50;52;50" dur="1.7s" repeatCount="indefinite"/>
+        </line>
+        <line x1="44" y1="46" x2="44" y2="50" class="snow" stroke-width="1.5">
+          <animate attributeName="y1" values="46;48;46" dur="1.3s" repeatCount="indefinite"/>
+          <animate attributeName="y2" values="50;52;50" dur="1.3s" repeatCount="indefinite"/>
+        </line>
+      </g>
+    </svg>`,
+    'snow-showers': `<svg class="weather-svg weather-icon-animated weather-icon-snow" width="${size}" height="${size}" viewBox="0 0 64 64">
+      <g class="icon-drift">
+        <path d="M12 30 Q12 18 26 18 Q28 8 44 10 Q56 10 56 24 Q56 34 44 34 Z" class="cloud" stroke-width="2"/>
+      </g>
+      <g>
+        <circle cx="16" cy="38" r="3" fill="#e0e0e0">
+          <animate attributeName="cy" values="38;54" dur="2s" repeatCount="indefinite"/>
+          <animate attributeName="opacity" values="1;0" dur="2s" repeatCount="indefinite"/>
+        </circle>
+        <circle cx="28" cy="40" r="3" fill="#e0e0e0">
+          <animate attributeName="cy" values="40;54" dur="2.3s" repeatCount="indefinite"/>
+          <animate attributeName="opacity" values="1;0" dur="2.3s" repeatCount="indefinite"/>
+        </circle>
+        <circle cx="40" cy="38" r="3" fill="#e0e0e0">
+          <animate attributeName="cy" values="38;54" dur="1.9s" repeatCount="indefinite"/>
+          <animate attributeName="opacity" values="1;0" dur="1.9s" repeatCount="indefinite"/>
+        </circle>
+        <circle cx="52" cy="40" r="3" fill="#e0e0e0">
+          <animate attributeName="cy" values="40;54" dur="2.1s" repeatCount="indefinite"/>
+          <animate attributeName="opacity" values="1;0" dur="2.1s" repeatCount="indefinite"/>
+        </circle>
+      </g>
+    </svg>`,
+    'snow-grains': `<svg class="weather-svg weather-icon-animated weather-icon-snow" width="${size}" height="${size}" viewBox="0 0 64 64">
+      <g class="icon-drift">
+        <path d="M16 34 Q16 22 26 22 Q28 12 42 14 Q54 14 54 26 Q54 34 44 34 Z" class="cloud" stroke-width="2"/>
+      </g>
+      <g>
+        <line x1="20" y1="38" x2="20" y2="44" class="snow" stroke-width="2">
+          <animate attributeName="y1" values="38;42;38" dur="1s" repeatCount="indefinite"/>
+          <animate attributeName="y2" values="44;48;44" dur="1s" repeatCount="indefinite"/>
+        </line>
+        <line x1="32" y1="38" x2="32" y2="44" class="snow" stroke-width="2">
+          <animate attributeName="y1" values="38;42;38" dur="1.1s" repeatCount="indefinite"/>
+          <animate attributeName="y2" values="44;48;44" dur="1.1s" repeatCount="indefinite"/>
+        </line>
+        <line x1="44" y1="38" x2="44" y2="44" class="snow" stroke-width="2">
+          <animate attributeName="y1" values="38;42;38" dur="0.9s" repeatCount="indefinite"/>
+          <animate attributeName="y2" values="44;48;44" dur="0.9s" repeatCount="indefinite"/>
+        </line>
+      </g>
+    </svg>`,
+    thunderstorm: `<svg class="weather-svg weather-icon-animated weather-icon-thunder" width="${size}" height="${size}" viewBox="0 0 64 64">
+      <g class="icon-shake">
+        <path d="M12 28 Q12 16 26 16 Q28 6 44 8 Q56 8 56 22 Q56 32 44 32 Z" class="cloud" stroke-width="2"/>
+      </g>
+      <g>
+        <polygon points="32,32 26,44 34,44 30,56 42,42 34,42 38,32" fill="#ffd54f" stroke="#e6a817" stroke-width="1">
+          <animate attributeName="opacity" values="1;0.3;1;1;0.5;1" dur="2s" repeatCount="indefinite"/>
+        </polygon>
+      </g>
+    </svg>`,
+  };
+  return icons[type] || icons.sun;
+}
+
+// ===== WIND COMPASS =====
+function getWindCompass(deg) {
+  const arrow = ['⬆', '↗', '➡', '↘', '⬇', '↙', '⬅', '↖'][Math.round(deg / 45) % 8];
+  return `<span class="wind-compass"><span class="compass-dial">${arrow}</span> ${bearingToCompass(deg)} ${deg}°</span>`;
+}
+
+// ===== DAY/NIGHT CHECK =====
+function isDaytime(hour, sunrise, sunset) {
+  return hour >= sunrise && hour < sunset;
+}
+
+// ===== FIND NEARBY CITIES =====
+function scaleViewbox(lat, lon, radiusDeg) {
+  const south = (lat - radiusDeg).toFixed(4);
+  const north = (lat + radiusDeg).toFixed(4);
+  const west = (lon - radiusDeg).toFixed(4);
+  const east = (lon + radiusDeg).toFixed(4);
+  return `${west},${north},${east},${south}`;
+}
+
+async function findNearbyCities(lat, lon) {
+  // Handle _maxCities === 0
+  if (_maxCities === 0) return [];
+
+  // Check in-memory cache first
+  if (_nearbyCache && Date.now() - _nearbyCacheTime < NEARBY_CACHE_TTL_MS) {
+    return _nearbyCache;
+  }
+
+  // Check localStorage cache
+  const cacheKey = `nearby_${DataCache._roundCoord(lat)}_${DataCache._roundCoord(lon)}`;
+  const cached = DataCache.get(cacheKey, 'nearby');
+  if (cached) {
+    _nearbyCache = cached;
+    _nearbyCacheTime = Date.now();
+    return cached;
+  }
+
+  // Fetch a larger set first so we can filter and still have enough
+  let viewbox = scaleViewbox(lat, lon, NOMINATIM_CLOSE_RADIUS);
+  let url = `${NOMINATIM}?q=city&format=jsonv2&viewbox=${viewbox}&bounded=1&limit=30&addressdetails=1`;
+
+  let results;
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`Nominatim ${resp.status}`);
+    results = await resp.json();
+  } catch {
+    results = [];
+  }
+
+  // Filter: keep only towns/cities/villages/hamlets/localities, reject boundary/fuel/street/country
+  if (results.length > 0) {
+    const acceptableTypes = ['city','town','village','hamlet','suburb','quarter','neighbourhood','locality','isolated_dwelling','farmhouse','county','administrative'];
+    results = results.filter(r => {
+      const type = (r.type || '').toLowerCase();
+      const cls = (r.class || '').toLowerCase();
+      // Reject known non-city types
+      if (cls === 'boundary' && r.place_rank >= 4) return false;
+      if (type === 'country' || type === 'state' || type === 'administrative') return false;
+      if (type === 'fuel' || type === 'street' || type === 'residential') return false;
+      // Accept if rank 10-16 (typical city/town/village)
+      if (r.place_rank >= 10 && r.place_rank <= 16) return true;
+      // Accept if type looks like a populated place
+      return acceptableTypes.includes(type);
+    });
+  }
+
+  if (results.length < _maxCities) {
+    viewbox = scaleViewbox(lat, lon, NOMINATIM_WIDE_RADIUS);
+    url = `${NOMINATIM}?q=city&format=jsonv2&viewbox=${viewbox}&bounded=1&limit=50&addressdetails=1`;
+    try {
+      const resp = await fetch(url);
+      if (resp.ok) {
+        const extra = await resp.json();
+        const existingIds = new Set(results.map(r => r.place_id));
+        const existingNames = new Set(results.map(r => (r.name || '').toLowerCase().trim()));
+        extra.forEach(r => {
+          // Skip if same place_id OR same name at same coordinates (dedup by name+coords)
+          if (existingIds.has(r.place_id)) return;
+          const latMatch = Math.abs(parseFloat(r.lat) - parseFloat(results[0]?.lat || 0)) < 0.01;
+          const sameName = existingNames.has((r.name || '').toLowerCase().trim()) && latMatch;
+          if (sameName) return;
+          const type = (r.type || '').toLowerCase();
+          const cls = (r.class || '').toLowerCase();
+          if (cls === 'boundary' && r.place_rank >= 4) return;
+          if (type === 'country' || type === 'state' || type === 'administrative') return;
+          if (type === 'fuel' || type === 'street' || type === 'residential') return;
+          if (r.place_rank >= 10 && r.place_rank <= 16) {
+            results.push(r);
+            existingIds.add(r.place_id);
+            existingNames.add((r.name || '').toLowerCase().trim());
+          }
+        });
+      }
+    } catch {
+      // silently ignore
+    }
+  }
+
+  if (results.length === 0) {
+    if (_maxCities > 0) showLocationPrompt();
+    return [];
+  }
+
+  const cities = results.map(item => {
+    const address = item.address || {};
+    let name = item.name || address.city || '';
+    // International region fallback chain
+    let state = address.state || address.state_district || address.region || address.county || '';
+    let country = address.country || '';
+    name = name.replace(/^City of\s+/i, '');
+
+    return {
+      place_id: String(item.place_id),
+      name,
+      latitude: parseFloat(item.lat),
+      longitude: parseFloat(item.lon),
+      state,
+      country,
+      distance: haversine(lat, lon, parseFloat(item.lat), parseFloat(item.lon)),
+      bearing: bearing(lat, lon, parseFloat(item.lat), parseFloat(item.lon)),
+    };
+  });
+
+  // Deduplicate by place_id AND by name+coordinate proximity
+  const seen = new Set();
+  const deduped = cities.filter(c => {
+    if (seen.has(c.place_id)) return false;
+    // Also check by name + coordinates (within 0.01° ≈ 1km)
+    const nameKey = c.name.toLowerCase().trim();
+    const coordKey = `${DataCache._roundCoord(c.latitude)},${DataCache._roundCoord(c.longitude)}`;
+    for (const existing of seen) {
+      if (existing.name === nameKey && existing.coordKey === coordKey) {
+        return false;
+      }
+    }
+    seen.add({ name: nameKey, coordKey, place_id: c.place_id });
+    return true;
+  });
+
+  deduped.sort((a, b) => a.distance - b.distance);
+
+  // Select cities with bearing diversity and min distance
+  const selected = [deduped[0]];
+  const used = new Set([0]);
+  const remaining = deduped.filter((_, i) => !used.has(i));
+  remaining.sort((a, b) => {
+    const aMinDiff = Math.min(...selected.map(s => {
+      let diff = Math.abs(a.bearing - s.bearing);
+      return diff > 180 ? 360 - diff : diff;
+    }));
+    const bMinDiff = Math.min(...selected.map(s => {
+      let diff = Math.abs(b.bearing - s.bearing);
+      return diff > 180 ? 360 - diff : diff;
+    }));
+    return bMinDiff - aMinDiff;
+  });
+
+  for (const city of remaining) {
+    if (selected.length >= _maxCities) break;
+    let tooClose = false;
+    for (const sel of selected) {
+      const dist = haversine(city.latitude, city.longitude, sel.latitude, sel.longitude);
+      if (dist < MIN_CITY_DISTANCE_MI) { tooClose = true; break; }
+    }
+    if (!tooClose) {
+      selected.push(city);
+      used.add(deduped.indexOf(city));
+    }
+  }
+
+  // Fill remaining slots if we still need more
+  for (let i = 0; i < deduped.length && selected.length < _maxCities; i++) {
+    if (!used.has(i)) selected.push(deduped[i]);
+  }
+
+  _nearbyCache = selected;
+  _nearbyCacheTime = Date.now();
+
+  // Store in localStorage cache
+  DataCache.set(cacheKey, selected, 'nearby');
+
+  return selected;
+}
+
+// ===== LOCATION =====
+async function getLocation() {
+  // Check in-memory cache
+  if (userLocation) return userLocation;
+
+  // Check localStorage cache for IP geolocation
+  const cachedIP = DataCache.get('ip_location', 'ipLocation');
+  if (cachedIP) {
+    return cachedIP;
+  }
+
+  try {
+    const pos = await new Promise((resolve, reject) => {
+      navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: GEOLOCATION_TIMEOUT_MS });
+    });
+    const { latitude, longitude } = pos.coords;
+    const loc = { lat: latitude, lon: longitude };
+    // Cache browser geolocation briefly (it's not reliable to cache long-term)
+    return loc;
+  } catch {
+    try {
+      const res = await fetch(IP_API);
+      const data = await res.json();
+      const lat = parseFloat(data.loc?.split(',')[0] ?? data.lat);
+      const lon = parseFloat(data.loc?.split(',')[1] ?? data.lon);
+      const loc = { lat, lon };
+      // Cache IP location for 24 hours
+      DataCache.set('ip_location', loc, 'ipLocation');
+      return loc;
+    } catch {
+      showLocationPrompt();
+      return { lat: 43.41947, lon: -83.95081 };
+    }
+  }
+}
+
+// ===== FETCH WEATHER =====
+// Helper to build a unique cache key for weather+AQI per city
+function weatherCacheKey(lat, lon) {
+  return `weather_${DataCache._roundCoord(lat)}_${DataCache._roundCoord(lon)}`;
+}
+
+async function fetchWeatherForCities(cities) {
+  // Check cache for each city individually
+  const cachedResults = [];
+  const uncachedCities = [];
+  const cityCacheMap = []; // map city index to its position in uncachedCities
+
+  for (let i = 0; i < cities.length; i++) {
+    const ck = weatherCacheKey(cities[i].latitude, cities[i].longitude);
+    const cached = DataCache.get(ck, 'weather');
+    if (cached) {
+      cachedResults.push({ ...cities[i], weather: cached.weather, aqi: cached.aqi });
+    } else {
+      cityCacheMap.push(i);
+      uncachedCities.push(cities[i]);
+    }
+  }
+
+  // If all cached, return immediately
+  if (uncachedCities.length === 0) {
+    return cachedResults;
+  }
+
+  // Build combined weather + AQI URL for uncached cities only
+  try {
+    const weatherUrl = `${WEATHER_API}?latitude=${uncachedCities.map(c => c.latitude).join(',')}&longitude=${uncachedCities.map(c => c.longitude).join(',')}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m,surface_pressure,uv_index,visibility&hourly=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,uv_index_max,precipitation_sum,wind_speed_10m_max&forecast_days=${FORECAST_DAYS}&temperature_unit=celsius&wind_speed_unit=kmh&precipitation_unit=mm&timezone=auto`;
+
+    const weatherRes = await fetch(weatherUrl);
+
+    if (!weatherRes.ok) {
+      // Fill uncached with null data
+      for (const idx of cityCacheMap) {
+        cachedResults[idx] = { ...cities[idx], weather: null, aqi: {} };
+      }
+      return cachedResults;
+    }
+
+    const weatherAll = await weatherRes.json();
+
+    const aqiUrl = `${AIR_QUALITY_API}?latitude=${uncachedCities.map(c => c.latitude).join(',')}&longitude=${uncachedCities.map(c => c.longitude).join(',')}&current=us_aqi,pm2_5,european_aqi&timezone=auto`;
+    const aqiRes = await fetch(aqiUrl);
+    const aqiData = await aqiRes.json();
+
+    const result = new Array(cities.length);
+
+    // First fill cached results
+    for (let i = 0; i < cities.length; i++) {
+      const ck = weatherCacheKey(cities[i].latitude, cities[i].longitude);
+      if (DataCache.has(ck, 'weather')) {
+        const entry = DataCache.get(ck, 'weather');
+        result[i] = { ...cities[i], weather: entry.weather, aqi: entry.aqi };
+      }
+    }
+
+    // Parse weather response — Open-Meteo returns a flat object when single lat/lon,
+    // or an object with 'results' array when multiple lat/lon values are provided.
+    const hasResultsArray = weatherAll && Array.isArray(weatherAll.results);
+
+    // Parse AQI response — same pattern: flat for single, 'results' array for multiple
+    const hasAqiResultsArray = aqiData && Array.isArray(aqiData.results);
+
+    let wIdx = 0; // index into weatherAll.results / aqiData.results
+    for (let i = 0; i < cities.length; i++) {
+      // Skip already-cached
+      if (result[i]) continue;
+
+      const city = cities[i];
+      let cityWeather;
+      let aqiResult;
+
+      if (hasResultsArray) {
+        const raw = weatherAll.results[wIdx] || {};
+        const rawHourlyKeys = Object.keys(raw).filter(k => k !== 'latitude' && k !== 'longitude' && k !== 'elevation' && k !== 'generationtime_ms' && k !== 'utc_offset_seconds' && k !== 'timezone' && k !== 'timezone_abbreviation' && k !== 'current' && k !== 'daily');
+        const mergedHourly = raw.hourly ? { ...raw.hourly } : { time: [] };
+        rawHourlyKeys.forEach(k => {
+          const val = raw[k];
+          if (Array.isArray(val) && val.length > 0 && typeof val[0] !== 'object') {
+            mergedHourly[k] = val;
+          }
+        });
+        cityWeather = {
+          current: raw.current || {},
+          hourly: mergedHourly,
+          daily: raw.daily || {},
+        };
+
+        // AQI from results array
+        if (hasAqiResultsArray) {
+          const aqiRaw = aqiData.results[wIdx] || {};
+          aqiResult = {
+            us_aqi: aqiRaw.current?.us_aqi ?? aqiRaw.us_aqi ?? null,
+            pm2_5: aqiRaw.current?.pm2_5 ?? aqiRaw.pm2_5 ?? null,
+            european_aqi: aqiRaw.current?.european_aqi ?? aqiRaw.european_aqi ?? null,
+          };
+        } else {
+          aqiResult = { us_aqi: null, pm2_5: null, european_aqi: null };
+        }
+
+        wIdx++;
+      } else if (Array.isArray(weatherAll)) {
+        // Fallback: weatherAll is an array of individual results
+        const raw = weatherAll[i] || {};
+        cityWeather = {
+          current: raw.current || {},
+          hourly: raw.hourly || { time: [] },
+          daily: raw.daily || {},
+        };
+        if (Array.isArray(aqiData)) {
+          const aqiRaw = aqiData[i] || {};
+          aqiResult = {
+            us_aqi: aqiRaw.current?.us_aqi ?? aqiRaw.us_aqi ?? null,
+            pm2_5: aqiRaw.current?.pm2_5 ?? aqiRaw.pm2_5 ?? null,
+            european_aqi: aqiRaw.current?.european_aqi ?? aqiRaw.european_aqi ?? null,
+          };
+        } else {
+          aqiResult = { us_aqi: null, pm2_5: null, european_aqi: null };
+        }
+      } else {
+        // Single result (no results array)
+        const raw = weatherAll;
+        cityWeather = {
+          current: raw.current || {},
+          hourly: raw.hourly || { time: [] },
+          daily: raw.daily || {},
+        };
+        if (aqiData && !hasAqiResultsArray) {
+          aqiResult = {
+            us_aqi: aqiData.current?.us_aqi ?? aqiData.us_aqi ?? null,
+            pm2_5: aqiData.current?.pm2_5 ?? aqiData.pm2_5 ?? null,
+            european_aqi: aqiData.current?.european_aqi ?? aqiData.european_aqi ?? null,
+          };
+        } else {
+          aqiResult = { us_aqi: null, pm2_5: null, european_aqi: null };
+        }
+      }
+
+      // Store in cache
+      const ck = weatherCacheKey(city.latitude, city.longitude);
+      DataCache.set(ck, { weather: cityWeather, aqi: aqiResult }, 'weather');
+
+      result[i] = { ...city, weather: cityWeather, aqi: aqiResult };
+    }
+
+    return result;
+  } catch {
+    // Fill uncached with null data
+    const result = new Array(cities.length);
+    for (let i = 0; i < cities.length; i++) {
+      const ck = weatherCacheKey(cities[i].latitude, cities[i].longitude);
+      if (DataCache.has(ck, 'weather')) {
+        const entry = DataCache.get(ck, 'weather');
+        result[i] = { ...cities[i], weather: entry.weather, aqi: entry.aqi };
+      } else {
+        result[i] = { ...cities[i], weather: null, aqi: {} };
+      }
+    }
+    return result;
+  }
+}
+
+// ===== RENDER =====
+function renderAll() {
+  const grid = document.getElementById('city-grid');
+  if (!grid) return;
+
+  grid.innerHTML = '';
+
+  weatherData.forEach((data, i) => {
+    const card = document.createElement('div');
+    card.className = 'city-card';
+    card.dataset.cityName = data.name;
+    card.style.animationDelay = `${i * 120}ms`;
+    card.style.animationFillMode = 'forwards';
+    card.style.overflow = 'visible';
+    card.innerHTML = renderCityCard(data);
+    grid.appendChild(card);
+  });
+
+  applyBackgrounds();
+  setTimeout(() => drawAllCharts(), 400);
+}
+
+function applyBackgrounds() {
+  let style = document.getElementById('dynamic-bg');
+  if (!style) {
+    style = document.createElement('style');
+    style.id = 'dynamic-bg';
+    document.head.appendChild(style);
+  }
+  style.textContent = '';
+  document.querySelectorAll('.city-card').forEach((card, i) => {
+    if (weatherData[i]?.weather) {
+      const code = weatherData[i].weather.current?.weather_code;
+      const bg = WMO_GRADIENTS[code] || WMO_GRADIENTS[0];
+      card.style.background = `linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.04)), ${bg}`;
+    }
+  });
+}
+
+function renderCityCard(data) {
+  const w = data.weather;
+  const a = data.aqi;
+  if (!w || !w.current) {
+    return `<div style="padding:2rem;text-align:center;">Error loading data</div>`;
+  }
+
+  const current = w.current || {};
+  const hourly = w.hourly || {};
+  const daily = w.daily || {};
+  const aqiData = aqiLabel(a.us_aqi);
+
+  const curTemp = current?.temperature_2m != null ? convertTemp(current.temperature_2m) : '—';
+  const curWeatherCode = current?.weather_code ?? 0;
+  const humidity = current?.relative_humidity_2m ?? '—';
+  const windSpeed = current?.wind_speed_10m ?? '—';
+  const windDir = current?.wind_direction_10m ?? 0;
+  const pressure = current?.surface_pressure ?? '—';
+  const uv = current?.uv_index ?? '—';
+  const vis = current?.visibility ? (current.visibility / 1609.34).toFixed(1) : '—';
+  const pm25 = a.pm2_5 !== undefined && a.pm2_5 !== null ? a.pm2_5 : '—';
+
+  const highTemp = daily?.temperature_2m_max?.[0] != null ? convertTemp(daily.temperature_2m_max[0]) : '—';
+  const lowTemp = daily?.temperature_2m_min?.[0] != null ? convertTemp(daily.temperature_2m_min[0]) : '—';
+
+  // Store high/low on data object so drawMergedChart can use them
+  data.highTemp = highTemp;
+  data.lowTemp = lowTemp;
+
+  const sunrise = daily?.sunrise?.[0]?.split('T')[1]?.split('+')[0];
+  const sunset = daily?.sunset?.[0]?.split('T')[1]?.split('+')[0];
+
+  const now = new Date();
+  const currentHour = now.getHours();
+
+  // Parse as decimal hours so minutes are accounted for (e.g., 18:45 → 18.75)
+  function parseDecimalTime(timeStr, fallback) {
+    if (!timeStr) return fallback;
+    const [h, m] = timeStr.split(':').map(Number);
+    return h + (m / 60);
+  }
+  const sunriseTime = parseDecimalTime(sunrise, 6);
+  const sunsetTime = parseDecimalTime(sunset, 19);
+  const isDay = isDaytime(currentHour, sunriseTime, sunsetTime);
+
+  const curIcon = isDay ? getWeatherIcon(curWeatherCode) : getMoonIcon(curWeatherCode);
+  const curIconLarge = isDay ? getWeatherIcon(curWeatherCode, 80) : getMoonIcon(curWeatherCode, 80);
+
+  const timeArr = hourly?.time || [];
+  const currentDay = now.toISOString().split('T')[0];
+  const currentIdx = timeArr.findIndex(t => {
+    const [datePart, timePart] = t.split('T');
+    return datePart === currentDay && timePart.startsWith(`T${String(currentHour).padStart(2, '0')}`);
+  });
+
+  let hourlyHTML = '';
+  for (let i = 0; i < 12; i++) {
+    const hIdx = currentIdx >= 0 ? currentIdx + i : currentHour + i;
+    if (hIdx < 0 || hIdx >= timeArr.length) break;
+    const hTime = timeArr[hIdx]?.split('T')[1]?.split('+')[0]?.slice(0, 5);
+    const hTemp = hourly?.temperature_2m?.[hIdx] != null ? convertTemp(hourly.temperature_2m[hIdx]) : 0;
+    const precipMM = hourly?.precipitation?.[hIdx] || 0;
+    const hPrecip = precipMM > 0.1 ? `${Math.round(precipMM)}mm` : '';
+    const hCode = hourly?.weather_code?.[hIdx] ?? 0;
+    const isCurrent = i === 0;
+    const hHourDecimal = parseDecimalTime(hTime, 12);
+    const hIsDay = isDaytime(hHourDecimal, sunriseTime, sunsetTime);
+    const hWind = hourly?.wind_speed_10m?.[hIdx] != null ? `${Math.round(hourly.wind_speed_10m[hIdx])} km/h` : '';
+    hourlyHTML += `<div class="hour-slot${isCurrent ? ' current' : ''}">
+      <div class="hour-time">${hTime}</div>
+      <div class="hour-icon">${isCurrent ? curIcon : (hIsDay ? getWeatherIcon(hCode) : getMoonIcon(hCode))}</div>
+      <div class="hour-temp">${Math.round(hTemp)}°</div>
+      ${hWind ? `<div class="hour-wind">${hWind}</div>` : ''}
+      ${hPrecip ? `<div class="hour-precip">${hPrecip}</div>` : ''}
+    </div>`;
+  }
+
+  let dailyHTML = '';
+  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const globalMin = -40, globalMax = 80;
+  const dailyArr = daily?.time || [];
+  const todayIdx = dailyArr.findIndex(d => d && d.split('T')[0] === currentDay);
+  const startIdx = todayIdx >= 0 ? todayIdx : 0;
+
+  for (let i = 0; i < 7; i++) {
+    const idx = startIdx + i;
+    if (idx >= dailyArr.length) break;
+    const d = dailyArr[idx];
+    const day = d ? dayNames[new Date(d).getDay()] : '';
+    const dCode = daily?.weather_code?.[idx] ?? 0;
+    const dHigh = daily?.temperature_2m_max?.[idx] != null ? convertTemp(daily.temperature_2m_max[idx]) : 0;
+    const dLow = daily?.temperature_2m_min?.[idx] != null ? convertTemp(daily.temperature_2m_min[idx]) : 0;
+    const dPrecip = daily?.precipitation_sum?.[idx] ? `${Math.round(daily.precipitation_sum[idx])}mm` : '';
+    const dWind = daily?.wind_speed_10m_max?.[idx] != null ? `${Math.round(daily.wind_speed_10m_max[idx])} km/h` : '';
+    const barLeft = ((dLow - globalMin) / (globalMax - globalMin)) * 100;
+    const barWidth = Math.max(10, ((dHigh - dLow) / (globalMax - globalMin)) * 100);
+    dailyHTML += `<div class="daily-row">
+      <span class="daily-day">${day}</span>
+      <span class="daily-icon">${getWeatherIcon(dCode)}</span>
+      <span class="daily-low-val">${Math.round(dLow)}°</span>
+      <span class="daily-bar"><span class="daily-bar-fill" style="width:${barWidth}%;left:${barLeft}%;"></span></span>
+      <span class="daily-high-val">${Math.round(dHigh)}°</span>
+      <span class="daily-precip">${dPrecip}</span>
+      <span class="daily-wind">${dWind}</span>
+    </div>`;
+  }
+
+  const safeName = sanitizeId(data.name);
+
+  // Slice to 24 hours (current day only) for chart display
+  const temps = (hourly?.temperature_2m || []).slice(0, 24);
+  const rain = (hourly?.precipitation || []).slice(0, 24);
+  const hum = (hourly?.relative_humidity_2m || []).slice(0, 24);
+  const wind = (hourly?.wind_speed_10m || []).slice(0, 24);
+  const chartStats = (data) => data.length ? {
+    min: Math.round(Math.min(...data)),
+    max: Math.round(Math.max(...data)),
+    avg: Math.round(data.reduce((a, b) => a + b, 0) / data.length),
+  } : { min: '—', max: '—', avg: '—' };
+
+  const humStats = chartStats(hum);
+  const windStats = chartStats(wind);
+  const rainStats = chartStats(rain);
+
+  return `
+    <canvas class="chart-canvas chart-merged" id="chart-merged-${safeName}" style="position:absolute;top:0;left:0;right:0;bottom:0;z-index:0;pointer-events:none;"></canvas>
+    <div style="position:relative;z-index:2;">
+    <div class="city-header">
+      <div class="city-name-wrap">
+        <span class="city-name">${escapeHTML(data.name)}${FavoritesManager.has(data.place_id) ? '<span class="fav-star">★</span>' : ''}</span>
+        <span class="city-state">${escapeHTML(data.state)}</span>
+      </div>
+      <span class="current-temp-inline">${Math.round(curTemp)}°</span>
+      <div class="current-weather-icon-inline">${curIconLarge}</div>
+    </div>
+    <div class="city-compass-row" style="display:flex;align-items:center;gap:0.4rem;margin-top:0.1rem;">
+      <span class="compass-heading">${escapeHTML(bearingToCompass(data.bearing))}</span>
+      <span class="compass-heading">${Math.round(data.distance)} mi</span>
+    </div>
+    <div class="info-row">
+      <div class="info-item">
+        <span class="info-label">HIGH</span>
+        <span class="info-val hot">${Math.round(highTemp)}°</span>
+      </div>
+      <div class="info-item">
+        <span class="info-label">LOW</span>
+        <span class="info-val cool">${Math.round(lowTemp)}°</span>
+      </div>
+      <div class="info-item">
+        <span class="info-label">☀️</span>
+        <span class="info-val">${sunrise || '—'}</span>
+      </div>
+      <div class="info-item">
+        <span class="info-label">🌙</span>
+        <span class="info-val">${sunset || '—'}</span>
+      </div>
+    </div>
+    <div class="combined-chart-row">
+      <canvas class="combined-chart-canvas" id="chart-combined-${safeName}"></canvas>
+      <div class="combined-chart-stats">
+        <div class="stat-group">
+          <div class="stat-group-title">Humidity</div>
+          <div class="stat"><span class="stat-label">CUR</span><span class="stat-val">${humidity}%</span></div>
+          <div class="stat"><span class="stat-label">MIN</span><span class="stat-val">${humStats.min}%</span></div>
+          <div class="stat"><span class="stat-label">MAX</span><span class="stat-val">${humStats.max}%</span></div>
+          <div class="stat"><span class="stat-label">AVG</span><span class="stat-val">${humStats.avg}%</span></div>
+        </div>
+        <div class="divider"></div>
+        <div class="stat-group">
+          <div class="stat-group-title">Wind</div>
+          <div class="stat"><span class="stat-label">CUR</span><span class="stat-val">${windSpeed}</span></div>
+          <div class="stat"><span class="stat-label">MIN</span><span class="stat-val">${windStats.min}</span></div>
+          <div class="stat"><span class="stat-label">MAX</span><span class="stat-val">${windStats.max}</span></div>
+          <div class="stat"><span class="stat-label">AVG</span><span class="stat-val">${windStats.avg}</span></div>
+        </div>
+        <div class="divider"></div>
+        <div class="stat-group">
+          <div class="stat-group-title">Precip</div>
+          <div class="stat"><span class="stat-label">CUR</span><span class="stat-val">${rain[0] ?? 0}mm</span></div>
+          <div class="stat"><span class="stat-label">MIN</span><span class="stat-val">${rainStats.min}mm</span></div>
+          <div class="stat"><span class="stat-label">MAX</span><span class="stat-val">${rainStats.max}mm</span></div>
+          <div class="stat"><span class="stat-label">AVG</span><span class="stat-val">${rainStats.avg}mm</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="details-grid">
+      <div class="detail-cell"><span class="detail-label">Humidity</span><span class="detail-value">${humidity}%</span></div>
+      <div class="detail-cell"><span class="detail-label">Wind</span><span class="detail-value">${windDir !== 0 ? getWindCompass(windDir) + ' ' + windSpeed : '—'}</span></div>
+      <div class="detail-cell"><span class="detail-label">Pressure</span><span class="detail-value">${pressure} hPa</span></div>
+      <div class="detail-cell"><span class="detail-label">UV Index</span><span class="detail-value">${uv}</span></div>
+      <div class="detail-cell"><span class="detail-label">Visibility</span><span class="detail-value">${vis} mi</span></div>
+      <div class="detail-cell"><span class="detail-label">AQI (PM2.5)</span><span class="detail-value"><span class="aqi-badge ${aqiData.cls}">${aqiData.label}</span> ${pm25}</span></div>
+    </div>
+    <div class="hourly-section">
+      <div class="hourly-title">12-Hour Forecast</div>
+      <div class="hourly-row">${hourlyHTML}</div>
+    </div>
+    <div class="daily-section">
+      <div class="daily-title">7-Day Forecast</div>
+      ${dailyHTML}
+    </div>
+    </div>`;
+}
+
+// ===== CLEAN CANVAS CHART =====
+function drawMergedChart(canvasId, cityData, dayHigh, dayLow) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  ctx.scale(dpr, dpr);
+  const w = rect.width;
+  const h = rect.height;
+  const pad = { top: 6, right: 0, bottom: 6, left: 0 };
+  const plotW = w - pad.left - pad.right;
+  const plotH = h - pad.top - pad.bottom;
+
+  ctx.clearRect(0, 0, w, h);
+
+  const hourly = cityData.hourly || {};
+  // Slice to 24 hours (current day only), convert temps to current unit
+  const temps = (hourly.temperature_2m || []).slice(0, 24).map(v => convertTemp(v));
+  const rain = (hourly.precipitation || []).slice(0, 24);
+  const wind = (hourly.wind_speed_10m || []).slice(0, 24);
+
+  if (temps.length === 0) return;
+
+  const n = temps.length;
+  const stepX = plotW / (n - 1 || 1);
+
+  // Temp range - use day high/low when available
+  const tempMin = (dayLow != null ? dayLow : Math.min(...temps)) - 2;
+  const tempMax = (dayHigh != null ? dayHigh : Math.max(...temps)) + 2;
+  const tempRange = tempMax - tempMin || 1;
+
+  // Rain max
+  const rainMax = Math.max(...rain, 0.5);
+
+  // Wind max
+  const windMax = Math.max(...wind, 1);
+
+  // Draw grid lines
+  ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+  ctx.lineWidth = 0.5;
+  for (let i = 0; i <= 3; i++) {
+    const y = pad.top + (plotH / 3) * i;
+    ctx.beginPath();
+    ctx.moveTo(pad.left, y);
+    ctx.lineTo(pad.left + plotW, y);
+    ctx.stroke();
+  }
+
+  // Temperature area fill
+  const tempFillGrad = ctx.createLinearGradient(0, pad.top, 0, pad.top + plotH);
+  tempFillGrad.addColorStop(0, 'rgba(255,140,66,0.25)');
+  tempFillGrad.addColorStop(1, 'rgba(255,140,66,0.02)');
+
+  ctx.beginPath();
+  temps.forEach((v, i) => {
+    const x = pad.left + i * stepX;
+    const y = pad.top + (1 - (v - tempMin) / tempRange) * plotH;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.lineTo(pad.left + (n - 1) * stepX, pad.top + plotH);
+  ctx.lineTo(pad.left, pad.top + plotH);
+  ctx.closePath();
+  ctx.fillStyle = tempFillGrad;
+  ctx.fill();
+
+  // Temperature line
+  ctx.beginPath();
+  temps.forEach((v, i) => {
+    const x = pad.left + i * stepX;
+    const y = pad.top + (1 - (v - tempMin) / tempRange) * plotH;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.strokeStyle = '#ff8c42';
+  ctx.lineWidth = 2;
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  ctx.stroke();
+
+  // Temperature dots
+  temps.forEach((v, i) => {
+    const x = pad.left + i * stepX;
+    const y = pad.top + (1 - (v - tempMin) / tempRange) * plotH;
+    ctx.beginPath();
+    ctx.arc(x, y, 2.5, 0, Math.PI * 2);
+    ctx.fillStyle = '#ff8c42';
+    ctx.fill();
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  });
+
+  // Rain bars (bottom)
+  const rainH = plotH * 0.25;
+  const rainY = pad.top + plotH - rainH;
+  const barW = Math.max(2, stepX * 0.5);
+  rain.forEach((v, i) => {
+    const x = pad.left + i * stepX + (stepX - barW) / 2;
+    const barH = (v / rainMax) * rainH;
+    ctx.fillStyle = `rgba(77,166,255,${0.15 + (v / rainMax) * 0.35})`;
+    ctx.fillRect(x, rainY + rainH - barH, barW, barH);
+  });
+
+  // Wind line (subtle)
+  ctx.beginPath();
+  wind.forEach((v, i) => {
+    const x = pad.left + i * stepX;
+    const y = pad.top + plotH - (v / windMax) * (plotH * 0.15);
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.strokeStyle = 'rgba(125,217,160,0.3)';
+  ctx.lineWidth = 1;
+  ctx.lineJoin = 'round';
+  ctx.stroke();
+
+  // Temp labels on left
+  ctx.fillStyle = 'rgba(255,255,255,0.5)';
+  ctx.font = '9px -apple-system, sans-serif';
+  ctx.textAlign = 'right';
+  for (let i = 0; i <= 3; i++) {
+    const val = tempMax - (tempRange / 3) * i;
+    const y = pad.top + (plotH / 3) * i;
+    ctx.fillText(Math.round(val) + '°', pad.left + 17, y + 3);
+  }
+
+}
+
+// ===== COMBINED CHART =====
+function drawCombinedChart(canvasId, cityData) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  ctx.scale(dpr, dpr);
+  const w = rect.width;
+  const h = rect.height;
+  const pad = { top: 10, right: 10, bottom: 10, left: 10 };
+  const plotW = w - pad.left - pad.right;
+  const plotH = h - pad.top - pad.bottom;
+
+  ctx.clearRect(0, 0, w, h);
+
+  const hourly = cityData.hourly || {};
+  // Slice to 24 hours (current day only)
+  const hum = (hourly.relative_humidity_2m || []).slice(0, 24);
+  const wind = (hourly.wind_speed_10m || []).slice(0, 24);
+  const rain = (hourly.precipitation || []).slice(0, 24);
+
+  if (hum.length === 0) return;
+
+  const n = hum.length;
+  const stepX = plotW / (n - 1 || 1);
+  const windMax = Math.max(...wind, 1);
+  const rainMax = Math.max(...rain, 0.5);
+
+  // Humidity gradient fill
+  const humGrad = ctx.createLinearGradient(0, pad.top, 0, pad.top + plotH);
+  humGrad.addColorStop(0, 'rgba(77,166,255,0.05)');
+  humGrad.addColorStop(1, 'rgba(77,166,255,0.3)');
+  ctx.beginPath();
+  hum.forEach((v, i) => {
+    const x = pad.left + i * stepX;
+    const y = pad.top + plotH - (v / 100) * plotH;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.lineTo(pad.left + (n - 1) * stepX, pad.top + plotH);
+  ctx.lineTo(pad.left, pad.top + plotH);
+  ctx.closePath();
+  ctx.fillStyle = humGrad;
+  ctx.fill();
+
+  // Humidity line
+  ctx.beginPath();
+  hum.forEach((v, i) => {
+    const x = pad.left + i * stepX;
+    const y = pad.top + plotH - (v / 100) * plotH;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.strokeStyle = 'rgba(77,166,255,0.7)';
+  ctx.lineWidth = 1.5;
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  ctx.stroke();
+
+  // Wind line
+  ctx.beginPath();
+  wind.forEach((v, i) => {
+    const x = pad.left + i * stepX;
+    const y = pad.top + plotH - (v / windMax) * plotH;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.strokeStyle = 'rgba(125,217,160,0.6)';
+  ctx.lineWidth = 1.5;
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  ctx.stroke();
+
+  // Wind dots
+  wind.forEach((v, i) => {
+    const x = pad.left + i * stepX;
+    const y = pad.top + plotH - (v / windMax) * plotH;
+    ctx.beginPath();
+    ctx.arc(x, y, 1.5, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(125,217,160,0.8)';
+    ctx.fill();
+  });
+
+  // Rain bars (bottom)
+  const rainH = plotH * 0.2;
+  const rainY = pad.top + plotH - rainH;
+  const barW = Math.max(2, stepX * 0.5);
+  rain.forEach((v, i) => {
+    const x = pad.left + i * stepX + (stepX - barW) / 2;
+    const barH = (v / rainMax) * rainH;
+    ctx.fillStyle = `rgba(77,166,255,${0.15 + (v / rainMax) * 0.35})`;
+    ctx.fillRect(x, rainY + rainH - barH, barW, barH);
+  });
+
+  // Labels
+  ctx.fillStyle = 'rgba(255,255,255,0.3)';
+  ctx.font = '9px -apple-system, sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText('100%', pad.left + 2, pad.top + 4);
+  ctx.fillText('0%', pad.left + 2, pad.top + plotH);
+  ctx.fillText(Math.round(windMax) + ' km/h', pad.left + 2, pad.top + plotH - 2);
+}
+
+// ===== CANVAS CHARTS =====
+function drawAllCharts() {
+  weatherData.forEach((data) => {
+    if (!data.weather) return;
+    const hourly = data.weather.hourly || {};
+    const safeName = sanitizeId(data.name);
+    if (Object.keys(hourly).length === 0) return;
+    drawMergedChart(`chart-merged-${safeName}`, data.weather, data.highTemp, data.lowTemp);
+    drawCombinedChart(`chart-combined-${safeName}`, data.weather);
+  });
+}
+
+// ===== PARTICLE CANVAS =====
+function initParticles() {
+  const canvas = document.getElementById('particle-canvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  let particles = [];
+
+  function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  for (let i = 0; i < PARTICLE_COUNT; i++) {
+    particles.push({
+      x: Math.random() * canvas.width,
+      y: Math.random() * canvas.height,
+      r: Math.random() * 1.5 + 0.5,
+      speed: Math.random() * 0.3 + 0.1,
+      opacity: Math.random() * 0.1 + 0.05,
+    });
+  }
+
+  function animate() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    particles.forEach(p => {
+      p.y -= p.speed;
+      if (p.y < -10) { p.y = canvas.height + 10; p.x = Math.random() * canvas.width; }
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255,255,255,${p.opacity})`;
+      ctx.fill();
+    });
+    requestAnimationFrame(animate);
+  }
+  animate();
+}
+
+// ===== LOCATION PROMPT =====
+function showLocationPrompt() {
+  document.getElementById('location-prompt').classList.remove('hidden');
+}
+
+function hideLocationPrompt() {
+  document.getElementById('location-prompt').classList.add('hidden');
+}
+
+async function handleCitySearch() {
+  const input = document.getElementById('city-input');
+  const city = input.value.trim();
+  if (!city) return;
+
+  hideLocationPrompt();
+  input.value = '';
+
+  try {
+    const url = `${NOMINATIM}?q=${encodeURIComponent(city)}&format=jsonv2&limit=1`;
+    const res = await fetch(url);
+    const data = await res.json();
+    if (data?.length > 0) {
+      userLocation = { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
+      document.getElementById('user-location').textContent = `\u{1F4CD} ${userLocation.lat.toFixed(2)}\u00B0N, ${Math.abs(userLocation.lon).toFixed(2)}\u00B0W`;
+      await run();
+    }
+  } catch {
+    // silently ignore search failures
+  }
+}
+
+// ===== REFRESH & UNIT TOGGLE =====
+function toggleUnit() {
+  if (_toggleDebounceTimer) return;
+  _toggleDebounceTimer = setTimeout(() => {
+    _toggleDebounceTimer = null;
+    unit = unit === 'F' ? 'C' : 'F';
+    const btn = document.getElementById('unit-toggle');
+    if (btn) btn.textContent = `°${unit}`;
+    renderAll();
+  }, TOGGLE_DEBOUNCE_MS);
+}
+
+async function refresh() {
+  if (isLoading) return;
+  isLoading = true;
+  const btn = document.getElementById('refresh-btn');
+  btn.classList.add('spinning');
+  btn.disabled = true;
+
+  // Clear weather, nearby, and ip caches on refresh
+  DataCache.invalidate('ip_location');
+  _nearbyCache = null;
+  _nearbyCacheTime = 0;
+  _allNearbyCities = [];
+  // Also invalidate nearby DataCache entry
+  if (userLocation) {
+    const nearbyKey = `nearby_${DataCache._roundCoord(userLocation.lat)}_${DataCache._roundCoord(userLocation.lon)}`;
+    DataCache.invalidate(nearbyKey);
+  }
+
+  await run();
+
+  btn.classList.remove('spinning');
+  btn.disabled = false;
+  isLoading = false;
+}
+
+// ===== MAIN RUN =====
+async function run() {
+  if (!userLocation) {
+    userLocation = await getLocation();
+  }
+
+  const locEl = document.getElementById('user-location');
+  if (locEl) locEl.textContent = `\u{1F4CD} ${userLocation.lat.toFixed(2)}\u00B0N, ${Math.abs(userLocation.lon).toFixed(2)}\u00B0W`;
+
+  _nearbyCache = null;
+  _nearbyCacheTime = 0;
+
+  // Load nearby cities + favorites, then render both
+  const nearby = await findNearbyCities(userLocation.lat, userLocation.lon);
+  const favAll = FavoritesManager.getAll();
+
+  // Combine: nearby cities first, then favorites that aren't already in nearby
+  const allCities = [...nearby];
+  const seenIds = new Set(nearby.map(c => c.place_id));
+  for (const fav of favAll) {
+    if (!seenIds.has(fav.place_id)) {
+      allCities.push({
+        place_id: fav.place_id,
+        name: fav.name,
+        state: fav.state,
+        latitude: fav.latitude,
+        longitude: fav.longitude,
+        distance: haversine(userLocation.lat, userLocation.lon, fav.latitude, fav.longitude),
+        bearing: bearing(userLocation.lat, userLocation.lon, fav.latitude, fav.longitude),
+      });
+      seenIds.add(fav.place_id);
+    }
+  }
+
+  // Sort all cities by distance from user (closest first)
+  allCities.sort((a, b) => a.distance - b.distance);
+
+  if (allCities.length === 0) {
+    return;
+  }
+
+  weatherData = await fetchWeatherForCities(allCities);
+  renderAll();
+}
+
+// ===== FAVORITES DROPDOWN =====
+let _allNearbyCities = []; // 20 nearest cities for dropdown (with place_id)
+
+async function renderFavDropdown(searchQuery) {
+  const content = document.getElementById('fav-dropdown-content');
+  if (!content) return;
+
+  // Ensure we have nearby cities
+  if (_allNearbyCities.length === 0 && userLocation) {
+    _allNearbyCities = await fetchAllNearby(20);
+  }
+
+  let html = '';
+
+  // Search results (if searching)
+  if (searchQuery) {
+    try {
+      const url = `${NOMINATIM}?q=${encodeURIComponent(searchQuery)}&format=jsonv2&limit=5&addressdetails=1`;
+      const res = await fetch(url);
+      const data = await res.json();
+      if (data?.length > 0) {
+        html += '<div class="fav-section-title">Search Results</div>';
+        for (const item of data) {
+          const addr = item.address || {};
+          const name = (item.name || addr.city || '').replace(/^City of\s+/i, '');
+          const state = addr.state || addr.state_district || addr.region || addr.county || '';
+          const lat = parseFloat(item.lat);
+          const lon = parseFloat(item.lon);
+          const placeId = String(item.place_id);
+          const isFav = FavoritesManager.has(placeId);
+          html += renderFavCityItem(placeId, name, state, lat, lon, isFav, false);
+        }
+      } else {
+        html += '<div style="padding:0.5rem;font-size:0.7rem;color:rgba(255,255,255,0.3);text-align:center;">No results</div>';
+      }
+    } catch {
+      html += '<div style="padding:0.5rem;font-size:0.7rem;color:rgba(255,255,255,0.3);text-align:center;">Search failed</div>';
+    }
+  } else {
+    // Categorize cities by type
+    const nearestCities = _allNearbyCities.filter(c => c.category === 'nearest_city').slice(0, 3);
+    const regionalCapitals = _allNearbyCities.filter(c => c.category === 'regional_capital');
+    const stateCapitals = _allNearbyCities.filter(c => c.category === 'state_capital');
+
+    // Show Nearest Cities (exactly 3, non-capital)
+    if (nearestCities.length > 0) {
+      html += '<div class="fav-section-title">Nearest Cities</div>';
+      for (const city of nearestCities) {
+        const isFav = FavoritesManager.has(city.place_id);
+        html += renderFavCityItem(city.place_id, city.name, city.state || '', city.latitude, city.longitude, isFav, true);
+      }
+    }
+
+    // Show Regional Capitals
+    if (regionalCapitals.length > 0) {
+      html += '<div class="fav-section-title">Regional Capitals</div>';
+      for (const city of regionalCapitals) {
+        const isFav = FavoritesManager.has(city.place_id);
+        html += renderFavCityItem(city.place_id, city.name, city.state || '', city.latitude, city.longitude, isFav, true);
+      }
+    }
+
+    // Show State Capitals
+    if (stateCapitals.length > 0) {
+      html += '<div class="fav-section-title">State Capitals</div>';
+      for (const city of stateCapitals) {
+        const isFav = FavoritesManager.has(city.place_id);
+        html += renderFavCityItem(city.place_id, city.name, city.state || '', city.latitude, city.longitude, isFav, true);
+      }
+    }
+  }
+
+  // Favorites section (always shown)
+  const favAll = FavoritesManager.getAll();
+  if (favAll.length > 0) {
+    html += '<div class="fav-section-title">My Favorites</div>';
+    for (const fav of favAll) {
+      html += renderFavCityItem(fav.place_id, fav.name, fav.state || '', fav.latitude, fav.longitude, true, false, true);
+    }
+  }
+
+  content.innerHTML = html;
+  bindFavDropdownEvents();
+}
+
+function renderFavCityItem(placeId, name, state, lat, lon, isFav, isNearby, showRemove) {
+  const star = isFav ? '<span class="fav-city-star">★</span>' : '';
+  const removeBtn = showRemove ? `<button class="fav-city-remove" data-placeid="${placeId}" title="Remove">✕</button>` : '';
+  const region = state || '';
+  return `<div class="fav-city-item" data-placeid="${placeId}" data-name="${name}" data-lat="${lat}" data-lon="${lon}" data-state="${state}">
+    <div class="fav-city-top">
+      <span class="fav-city-name">${name}</span>
+      ${star}
+    </div>
+    <div class="fav-city-bottom">
+      ${region ? `<span class="fav-city-region">${region}</span>` : '<span></span>'}
+      ${removeBtn}
+    </div>
+  </div>`;
+}
+
+function bindFavDropdownEvents() {
+  document.querySelectorAll('.fav-city-item').forEach(item => {
+    item.addEventListener('click', async (e) => {
+      if (e.target.classList.contains('fav-city-remove')) return;
+      const placeId = item.dataset.placeid;
+      const name = item.dataset.name;
+      const lat = parseFloat(item.dataset.lat);
+      const lon = parseFloat(item.dataset.lon);
+      const state = item.dataset.state;
+      const isFav = FavoritesManager.has(placeId);
+
+      if (isFav) {
+        FavoritesManager.remove(placeId);
+        removeCardByName(name);
+      } else {
+        FavoritesManager.add(placeId, name, state, lat, lon);
+        await addFavoriteCard({ place_id: placeId, name, state, latitude: lat, longitude: lon });
+      }
+      // Clear search box and re-render all
+      const favSearchEl = document.getElementById('fav-search');
+      if (favSearchEl) favSearchEl.value = '';
+      renderFavDropdown(null);
+    });
+  });
+
+  document.querySelectorAll('.fav-city-remove').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const placeId = btn.dataset.placeid;
+      const name = btn.closest('.fav-city-item').dataset.name;
+      FavoritesManager.remove(placeId);
+      removeCardByName(name);
+      // Clear search box and re-render all
+      const favSearchEl = document.getElementById('fav-search');
+      if (favSearchEl) favSearchEl.value = '';
+      renderFavDropdown(null);
+    });
+  });
+}
+
+// Feature codes for categorization (from Open-Meteo Geocoding API)
+const FEATURE_CODE_MAP = {
+  PPLC: 'state_capital',    // Capital of political entity
+  PPLA: 'state_capital',    // Administrative seat
+  PPLA2: 'regional_capital', // Second-order admin seat
+  PPLX: 'regional_capital', // Seat of admin division
+  PPL: 'nearest_city',      // Populated place
+  TMHN: 'nearest_city',     // Hamlet
+  INTL: 'nearest_city',     // International
+};
+
+// Fetch feature_codes from Open-Meteo Geocoding API for a list of cities
+async function fetchFeatureCodes(cityList) {
+  if (!cityList || cityList.length === 0) return {};
+
+  // Extract unique names for geocoding
+  const uniqueNames = new Map();
+  for (const city of cityList) {
+    const nameKey = (city.name || '').toLowerCase().trim();
+    if (!uniqueNames.has(nameKey)) {
+      uniqueNames.set(nameKey, city);
+    }
+  }
+
+  // Batch query Open-Meteo Geocoding API (up to 20 names per request)
+  const featureCodes = {};
+  const nameArray = Array.from(uniqueNames.values()).map(c => c.name);
+
+  // Open-Meteo Geocoding API accepts multiple names as query parameter
+  // We query each city individually for accuracy
+  const batchSize = 10;
+  for (let i = 0; i < nameArray.length; i += batchSize) {
+    const batch = nameArray.slice(i, i + batchSize);
+    const queries = batch.map(n => encodeURIComponent(n)).join(',');
+
+    try {
+      const url = `${OPEN_METEO_GEOCODING}?name=${queries}&count=${batch.length}&language=en&format=json`;
+      const resp = await fetch(url);
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data?.results) {
+          for (const result of data.results) {
+            // Match by name and coordinates
+            const nameMatch = cityList.find(c =>
+              (c.name || '').toLowerCase().trim() === (result.name || '').toLowerCase().trim() &&
+              Math.abs(c.latitude - result.latitude) < 0.5 &&
+              Math.abs(c.longitude - result.longitude) < 0.5
+            );
+            if (nameMatch) {
+              const code = result.feature_code || '';
+              if (code) {
+                featureCodes[nameMatch.place_id] = code;
+              }
+            }
+          }
+        }
+      }
+    } catch {
+      // silently ignore geocoding failures
+    }
+
+    // Small delay between batches to avoid rate limiting
+    if (i + batchSize < nameArray.length) {
+      await new Promise(resolve => setTimeout(resolve, 200));
+    }
+  }
+
+  return featureCodes;
+}
+
+async function fetchAllNearby(count) {
+  if (!userLocation) return [];
+
+  // First: search close area for nearest cities
+  let viewbox = scaleViewbox(userLocation.lat, userLocation.lon, NOMINATIM_CLOSE_RADIUS);
+  let url = `${NOMINATIM}?q=city&format=jsonv2&viewbox=${viewbox}&bounded=1&limit=20&addressdetails=1`;
+  let results = [];
+  try {
+    const resp = await fetch(url);
+    if (resp.ok) {
+      const data = await resp.json();
+      results = results.concat(data || []);
+    }
+  } catch { /* ignore */ }
+
+  // Second: search wider area without bounded to find capitals/regional cities
+  viewbox = scaleViewbox(userLocation.lat, userLocation.lon, NOMINATIM_WIDE_RADIUS);
+  url = `${NOMINATIM}?q=city&format=jsonv2&viewbox=${viewbox}&limit=100&addressdetails=1`;
+  try {
+    const resp = await fetch(url);
+    if (resp.ok) {
+      const data = await resp.json();
+      const existingIds = new Set(results.map(r => r.place_id));
+      results = results.concat(data.filter(r => r && !existingIds.has(r.place_id)) || []);
+    }
+  } catch { /* ignore */ }
+
+  // Filter: keep only towns/cities/villages/hamlets/localities, reject boundary/country/fuel/street
+  if (results.length > 0) {
+    results = results.filter(r => {
+      const type = (r.type || '').toLowerCase();
+      const cls = (r.class || '').toLowerCase();
+      if (cls === 'boundary' && r.place_rank >= 4) return false;
+      if (type === 'country' || type === 'state' || type === 'administrative') return false;
+      if (type === 'fuel' || type === 'street' || type === 'residential') return false;
+      if (r.place_rank >= 10 && r.place_rank <= 16) return true;
+      return false;
+    });
+  }
+
+  // Deduplicate by name+coordinate proximity
+  const cities = [];
+  const seen = new Set();
+  for (const item of results) {
+    const addr = item.address || {};
+    const name = (item.name || addr.city || '').replace(/^City of\s+/i, '');
+    const key = name.toLowerCase().trim();
+    const lat = parseFloat(item.lat);
+    const lon = parseFloat(item.lon);
+    const coordKey = `${DataCache._roundCoord(lat)},${DataCache._roundCoord(lon)}`;
+
+    // Skip duplicates (same name within 0.01° ≈ 1km)
+    const nameKey = key;
+    for (const existing of seen) {
+      if (existing.nameKey === nameKey && existing.coordKey === coordKey) {
+        continue; // skip
+      }
+    }
+    seen.add({ nameKey, coordKey });
+
+    // Skip if no name
+    if (!name) continue;
+
+    const distance = haversine(userLocation.lat, userLocation.lon, lat, lon);
+
+    // Only include cities within reasonable range (200 miles)
+    if (distance < 200) {
+      cities.push({
+        place_id: String(item.place_id),
+        name,
+        state: addr.state || addr.state_district || addr.region || addr.county || '',
+        latitude: lat,
+        longitude: lon,
+        distance,
+        category: 'nearest_city', // default, will be updated via Open-Meteo
+      });
+    }
+  }
+
+  // Now fetch feature_codes from Open-Meteo Geocoding API for categorization
+  if (cities.length > 0) {
+    const featureCodes = await fetchFeatureCodes(cities);
+    for (const city of cities) {
+      const code = featureCodes[city.place_id];
+      if (code) {
+        const mappedCategory = FEATURE_CODE_MAP[code];
+        if (mappedCategory) {
+          city.category = mappedCategory;
+        }
+      }
+    }
+  }
+
+  // Fallback: for any uncategorized cities, use Nominatim address fields to determine category
+  // This catches smaller/lesser-known cities that Open-Meteo geocoding may not have feature_code for
+  for (const city of cities) {
+    if (city.category === 'nearest_city') {
+      // Check if the city IS a state or state_district from the Nominatim address
+      // We already have this info from the initial fetch, check the original results
+      const stateDistrict = city.state;
+      // If state matches a known state_district name, this city might be a regional capital
+      // But without additional API call, we can't be sure. Skip for now.
+    }
+  }
+
+  cities.sort((a, b) => a.distance - b.distance);
+  return cities;
+}
+
+async function addFavoriteCard(city) {
+  // Compute distance and bearing from user location
+  const distance = haversine(userLocation.lat, userLocation.lon, city.latitude, city.longitude);
+  const bearingVal = bearing(userLocation.lat, userLocation.lon, city.latitude, city.longitude);
+
+  // Pass full city object with distance/bearing to weather fetch
+  const cityWithGeo = {
+    place_id: city.place_id,
+    name: city.name,
+    state: city.state,
+    latitude: city.latitude,
+    longitude: city.longitude,
+    distance: distance,
+    bearing: bearingVal,
+  };
+
+  const weatherResult = await fetchWeatherForCities([cityWithGeo]);
+  if (!weatherResult?.[0]?.weather) return;
+  const data = weatherResult[0];
+
+  const grid = document.getElementById('city-grid');
+  if (!grid) return;
+
+  const card = document.createElement('div');
+  card.className = 'city-card';
+  card.dataset.cityName = data.name;
+  card.style.overflow = 'visible';
+  card.innerHTML = renderCityCard(data);
+  grid.appendChild(card);
+
+  // Update weatherData
+  weatherData.push(data);
+
+  // Apply background
+  const code = data.weather.current?.weather_code;
+  const bg = WMO_GRADIENTS[code] || WMO_GRADIENTS[0];
+  card.style.background = `linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.04)), ${bg}`;
+
+  // Draw charts for this card
+  const safeName = sanitizeId(data.name);
+  setTimeout(() => {
+    drawMergedChart(`chart-merged-${safeName}`, data.weather, data.highTemp, data.lowTemp);
+    drawCombinedChart(`chart-combined-${safeName}`, data.weather);
+  }, 50);
+}
+
+function removeCardByName(name) {
+  const grid = document.getElementById('city-grid');
+  if (!grid) return;
+  const card = grid.querySelector(`.city-card[data-city-name="${CSS.escape(name)}"]`);
+  if (card) {
+    card.style.transition = 'opacity 0.3s, transform 0.3s';
+    card.style.opacity = '0';
+    card.style.transform = 'scale(0.95)';
+    setTimeout(() => card.remove(), 300);
+  }
+  weatherData = weatherData.filter(d => d.name !== name);
+}
+
+// ===== INIT =====
+document.addEventListener('DOMContentLoaded', () => {
+  initParticles();
+
+  const unitBtn = document.getElementById('unit-toggle');
+  const refreshBtn = document.getElementById('refresh-btn');
+  const favBtn = document.getElementById('fav-btn');
+  const favDropdown = document.getElementById('fav-dropdown');
+  const favSearch = document.getElementById('fav-search');
+  const favMaxCities = document.getElementById('fav-max-cities');
+  const favMaxVal = document.getElementById('fav-max-val');
+  const searchBtn = document.getElementById('search-btn');
+  const cityInput = document.getElementById('city-input');
+
+  if (unitBtn) unitBtn.addEventListener('click', toggleUnit);
+  if (refreshBtn) refreshBtn.addEventListener('click', refresh);
+  if (searchBtn) searchBtn.addEventListener('click', handleCitySearch);
+  if (cityInput) {
+    cityInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') handleCitySearch();
+    });
+  }
+
+  // Favorites button toggle
+  if (favBtn && favDropdown) {
+    favBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isOpen = favDropdown.classList.toggle('open');
+      if (isOpen) {
+        // Refresh dropdown data on open
+        _allNearbyCities = [];
+        favSearch.value = '';
+        favSearch.focus();
+        renderFavDropdown(null);
+        // Position dropdown to stay on screen
+        requestAnimationFrame(() => {
+          const rect = favDropdown.getBoundingClientRect();
+          const btnRect = favBtn.getBoundingClientRect();
+          // Reset any previous positioning
+          favDropdown.style.left = '0';
+          favDropdown.style.right = 'auto';
+          favDropdown.style.top = '';
+          favDropdown.style.bottom = '';
+          // Check right edge overflow
+          if (rect.right > window.innerWidth) {
+            favDropdown.style.left = 'auto';
+            favDropdown.style.right = '0';
+          }
+          // Check bottom edge overflow
+          if (rect.bottom > window.innerHeight) {
+            favDropdown.style.top = 'auto';
+            favDropdown.style.bottom = `calc(100% + 0.5rem)`;
+          }
+        });
+      }
+    });
+
+    // Close dropdown on outside click
+    document.addEventListener('click', (e) => {
+      if (!favDropdown.contains(e.target) && e.target !== favBtn) {
+        favDropdown.classList.remove('open');
+      }
+    });
+
+    // Prevent dropdown clicks from closing
+    favDropdown.addEventListener('click', (e) => e.stopPropagation());
+  }
+
+  // Favorites search with debounce
+  let _searchDebounce = null;
+  if (favSearch) {
+    favSearch.addEventListener('input', () => {
+      clearTimeout(_searchDebounce);
+      _searchDebounce = setTimeout(() => {
+        const q = favSearch.value.trim();
+        renderFavDropdown(q || null);
+      }, 350);
+    });
+  }
+
+  // Max cities setting — realtime apply
+  if (favMaxCities) {
+    favMaxCities.value = _maxCities;
+    if (favMaxVal) favMaxVal.textContent = _maxCities;
+    favMaxCities.addEventListener('input', async () => {
+      _maxCities = parseInt(favMaxCities.value, 10);
+      localStorage.setItem('hasW_maxCities', _maxCities);
+      if (favMaxVal) favMaxVal.textContent = _maxCities;
+      // Re-fetch nearby cities and re-render
+      _nearbyCache = null;
+      _nearbyCacheTime = 0;
+      _allNearbyCities = [];
+      // Clear DataCache for nearby cities so fresh fetch happens
+      if (userLocation) {
+        const nearbyKey = `nearby_${DataCache._roundCoord(userLocation.lat)}_${DataCache._roundCoord(userLocation.lon)}`;
+        DataCache.invalidate(nearbyKey);
+      }
+      if (!isLoading) {
+        isLoading = true;
+        const btn = document.getElementById('refresh-btn');
+        if (btn) { btn.classList.add('spinning'); btn.disabled = true; }
+        await run();
+        if (btn) { btn.classList.remove('spinning'); btn.disabled = false; }
+        isLoading = false;
+      }
+    });
+  }
+
+  // Chart redraw on resize
+  window.addEventListener('resize', () => {
+    clearTimeout(_chartResizeTimer);
+    _chartResizeTimer = setTimeout(() => drawAllCharts(), CHART_RESIZE_DEBOUNCE_MS);
+  });
+
+  // Debug location preset buttons
+  document.querySelectorAll('.debug-loc-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const lat = parseFloat(btn.dataset.lat);
+      const lon = parseFloat(btn.dataset.lon);
+      const name = btn.dataset.name;
+      userLocation = { lat, lon };
+      const locEl = document.getElementById('user-location');
+      if (locEl) {
+        const latDir = lat >= 0 ? 'N' : 'S';
+        const lonDir = lon >= 0 ? 'E' : 'W';
+        locEl.textContent = `\u{1F4CD} ${Math.abs(lat).toFixed(2)}\u00B0${latDir}, ${Math.abs(lon).toFixed(2)}\u00B0${lonDir} (${name})`;
+      }
+      // Clear nearby cache so fresh results are fetched for new location
+      _nearbyCache = null;
+      _nearbyCacheTime = 0;
+      await run();
+    });
+  });
+
+  run();
+});
