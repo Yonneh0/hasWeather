@@ -1,0 +1,50 @@
+/* ===== HEADER ===== */
+.header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 2rem;
+  position: relative;
+  z-index: 10;
+}
+
+.logo {
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #fff;
+}
+
+.btn {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.12);
+  color: #fff;
+  padding: 0.4rem 0.8rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background 0.2s, transform 0.1s;
+}
+.btn:hover { background: rgba(255,255,255,0.15); }
+.btn:active { transform: scale(0.96); }
+.btn-small { padding: 0.3rem 0.6rem; font-size: 0.85rem; }
+.btn-primary {
+  background: rgba(70,130,255,0.3);
+  border-color: rgba(70,130,255,0.5);
+  font-size: 1rem;
+  padding: 0.6rem 1.2rem;
+}
+
+.location-display {
+  margin-left: auto;
+  font-size: 0.85rem;
+  color: rgba(255,255,255,0.6);
+}
+
+#refresh-btn.spinning {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

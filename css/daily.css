@@ -1,0 +1,75 @@
+/* 7-Day Forecast */
+.daily-section {
+  margin-bottom: 0.8rem;
+}
+.daily-title {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: rgba(255,255,255,0.45);
+  margin-bottom: 0.4rem;
+}
+.daily-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.6rem;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  border-radius: 6px;
+}
+.daily-day {
+  font-size: 0.7rem;
+  width: 36px;
+  flex-shrink: 0;
+  color: rgba(255,255,255,0.7);
+}
+.daily-icon {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.daily-low-val {
+  font-size: 0.7rem;
+  color: rgba(255,255,255,0.5);
+  width: 32px;
+  text-align: right;
+  flex-shrink: 0;
+}
+.daily-high-val {
+  font-size: 0.7rem;
+  color: rgba(255,255,255,0.5);
+  width: 32px;
+  text-align: left;
+  flex-shrink: 0;
+}
+.daily-bar {
+  flex: 1;
+  height: 4px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 2px;
+  position: relative;
+  overflow: hidden;
+}
+.daily-bar-fill {
+  position: absolute;
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #6cb4ee, #ff8c42);
+}
+.daily-precip {
+  font-size: 0.6rem;
+  color: #6cb4ee;
+  width: 32px;
+  text-align: right;
+  flex-shrink: 0;
+}
+.daily-wind {
+  font-size: 0.6rem;
+  color: rgba(255,255,255,0.55);
+  width: 40px;
+  text-align: right;
+  flex-shrink: 0;
+}
