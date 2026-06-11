@@ -21,9 +21,37 @@ async function fetchWeatherForCities(cities) {
     }
   }
 
-  // If all cached, return immediately
+  // If all cached, apply deduplication before returning
   if (uncachedCities.length === 0) {
-    return cachedResults;
+    const seenCoords = new Map();
+    const deduped = [];
+    for (const entry of cachedResults) {
+      const lat = entry.latitude != null ? DataCache._roundCoord(entry.latitude) : null;
+      const lon = entry.longitude != null ? DataCache._roundCoord(entry.longitude) : null;
+      if (lat == null || lon == null) {
+        deduped.push(entry);
+        continue;
+      }
+      const coordKey = `${lat},${lon}`;
+      let isDup = false;
+      for (const [existingKey, existingEntry] of seenCoords) {
+        const [exLat, exLon] = existingKey.split(',').map(Number);
+        if (Math.abs(lat - exLat) < 0.01 && Math.abs(lon - exLon) < 0.01) {
+          isDup = true;
+          if (!existingEntry.place_id && entry.place_id) {
+            seenCoords.set(existingKey, entry);
+            const dupIdx = deduped.findIndex(d => d === existingEntry);
+            if (dupIdx !== -1) deduped[dupIdx] = entry;
+          }
+          break;
+        }
+      }
+      if (!isDup) {
+        seenCoords.set(coordKey, entry);
+        deduped.push(entry);
+      }
+    }
+    return deduped;
   }
 
   // Build combined weather + AQI URL for uncached cities only
@@ -37,7 +65,36 @@ async function fetchWeatherForCities(cities) {
       for (const idx of cityCacheMap) {
         cachedResults[idx] = { ...cities[idx], weather: null, aqi: {} };
       }
-      return cachedResults;
+      // Apply deduplication before returning
+      const seenCoords = new Map();
+      const deduped = [];
+      for (const entry of cachedResults) {
+        const lat = entry.latitude != null ? DataCache._roundCoord(entry.latitude) : null;
+        const lon = entry.longitude != null ? DataCache._roundCoord(entry.longitude) : null;
+        if (lat == null || lon == null) {
+          deduped.push(entry);
+          continue;
+        }
+        const coordKey = `${lat},${lon}`;
+        let isDup = false;
+        for (const [existingKey, existingEntry] of seenCoords) {
+          const [exLat, exLon] = existingKey.split(',').map(Number);
+          if (Math.abs(lat - exLat) < 0.01 && Math.abs(lon - exLon) < 0.01) {
+            isDup = true;
+            if (!existingEntry.place_id && entry.place_id) {
+              seenCoords.set(existingKey, entry);
+              const dupIdx = deduped.findIndex(d => d === existingEntry);
+              if (dupIdx !== -1) deduped[dupIdx] = entry;
+            }
+            break;
+          }
+        }
+        if (!isDup) {
+          seenCoords.set(coordKey, entry);
+          deduped.push(entry);
+        }
+      }
+      return deduped;
     }
 
     const weatherAll = await weatherRes.json();
@@ -146,7 +203,38 @@ async function fetchWeatherForCities(cities) {
       result[i] = { ...city, weather: cityWeather, aqi: aqiResult };
     }
 
-    return result;
+    // De-duplicate results by coordinates (keep first entry per coordinate pair)
+    const seenCoords = new Map();
+    const deduped = [];
+    for (const entry of result) {
+      const lat = entry.latitude != null ? DataCache._roundCoord(entry.latitude) : null;
+      const lon = entry.longitude != null ? DataCache._roundCoord(entry.longitude) : null;
+      if (lat == null || lon == null) {
+        deduped.push(entry);
+        continue;
+      }
+      const coordKey = `${lat},${lon}`;
+      // Check for existing coordinate match (0.01° tolerance)
+      let isDup = false;
+      for (const [existingKey, existingEntry] of seenCoords) {
+        const [exLat, exLon] = existingKey.split(',').map(Number);
+        if (Math.abs(lat - exLat) < 0.01 && Math.abs(lon - exLon) < 0.01) {
+          isDup = true;
+          // Prefer the entry with a non-null place_id
+          if (!existingEntry.place_id && entry.place_id) {
+            seenCoords.set(existingKey, entry);
+            const dupIdx = deduped.findIndex(d => d === existingEntry);
+            if (dupIdx !== -1) deduped[dupIdx] = entry;
+          }
+          break;
+        }
+      }
+      if (!isDup) {
+        seenCoords.set(coordKey, entry);
+        deduped.push(entry);
+      }
+    }
+    return deduped;
   } catch {
     // Fill uncached with null data
     const result = new Array(cities.length);

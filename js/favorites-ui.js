@@ -424,17 +424,61 @@ async function addFavoriteCard(city) {
 function removeCardByPlaceId(placeId) {
   const grid = document.getElementById('city-grid');
   if (!grid) return;
-  const card = grid.querySelector(`.city-card[data-placeid="${CSS.escape(String(placeId))}"]`);
-  if (card) {
-    card.style.transition = 'opacity 0.3s, transform 0.3s';
-    card.style.opacity = '0';
-    card.style.transform = 'scale(0.95)';
-    setTimeout(() => card.remove(), 300);
+
+  // Find the target coordinates: first from the card, then from weatherData
+  let targetLat = null;
+  let targetLon = null;
+
+  // Try to find the card with matching place_id
+  const targetCard = grid.querySelector(`.city-card[data-placeid="${CSS.escape(String(placeId))}"]`);
+  if (targetCard) {
+    targetLat = parseFloat(targetCard.dataset.citylat);
+    targetLon = parseFloat(targetCard.dataset.citylon);
   }
-  // Remove only the matching entry by place_id, not by name
-  const idx = weatherData.findIndex(d => d.place_id === String(placeId));
-  if (idx !== -1) {
-    weatherData.splice(idx, 1);
+
+  // If no card found, get coordinates from weatherData
+  if (targetLat == null || targetLon == null) {
+    const targetEntry = weatherData.find(d => d.place_id === String(placeId));
+    if (targetEntry) {
+      targetLat = targetEntry.latitude;
+      targetLon = targetEntry.longitude;
+    }
+  }
+
+  // If still no coordinates, nothing to remove
+  if (targetLat == null || targetLon == null) return;
+
+  // Remove ALL cards at the same coordinates (not just the one with the exact place_id)
+  const allCards = Array.from(grid.querySelectorAll('.city-card'));
+  for (const card of allCards) {
+    const cardLat = parseFloat(card.dataset.citylat);
+    const cardLon = parseFloat(card.dataset.citylon);
+    if (!isNaN(cardLat) && !isNaN(cardLon)) {
+      // Use 0.01° tolerance (≈1km), same as the dedup logic
+      if (Math.abs(cardLat - targetLat) < 0.01 && Math.abs(cardLon - targetLon) < 0.01) {
+        card.style.transition = 'opacity 0.3s, transform 0.3s';
+        card.style.opacity = '0';
+        card.style.transform = 'scale(0.95)';
+        setTimeout(() => card.remove(), 300);
+      }
+    }
+  }
+
+  // Remove all weatherData entries matching the coordinates (not just by place_id)
+  const toRemove = [];
+  for (let i = 0; i < weatherData.length; i++) {
+    const d = weatherData[i];
+    if (d.place_id === String(placeId)) {
+      toRemove.push(i);
+    } else if (d.latitude != null && d.longitude != null) {
+      if (Math.abs(d.latitude - targetLat) < 0.01 && Math.abs(d.longitude - targetLon) < 0.01) {
+        toRemove.push(i);
+      }
+    }
+  }
+  // Remove in reverse order to preserve indices
+  for (let i = toRemove.length - 1; i >= 0; i--) {
+    weatherData.splice(toRemove[i], 1);
   }
 }
 

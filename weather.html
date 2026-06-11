@@ -2483,9 +2483,37 @@ async function fetchWeatherForCities(cities) {
     }
   }
 
-  // If all cached, return immediately
+  // If all cached, apply deduplication before returning
   if (uncachedCities.length === 0) {
-    return cachedResults;
+    const seenCoords = new Map();
+    const deduped = [];
+    for (const entry of cachedResults) {
+      const lat = entry.latitude != null ? DataCache._roundCoord(entry.latitude) : null;
+      const lon = entry.longitude != null ? DataCache._roundCoord(entry.longitude) : null;
+      if (lat == null || lon == null) {
+        deduped.push(entry);
+        continue;
+      }
+      const coordKey = `${lat},${lon}`;
+      let isDup = false;
+      for (const [existingKey, existingEntry] of seenCoords) {
+        const [exLat, exLon] = existingKey.split(',').map(Number);
+        if (Math.abs(lat - exLat) < 0.01 && Math.abs(lon - exLon) < 0.01) {
+          isDup = true;
+          if (!existingEntry.place_id && entry.place_id) {
+            seenCoords.set(existingKey, entry);
+            const dupIdx = deduped.findIndex(d => d === existingEntry);
+            if (dupIdx !== -1) deduped[dupIdx] = entry;
+          }
+          break;
+        }
+      }
+      if (!isDup) {
+        seenCoords.set(coordKey, entry);
+        deduped.push(entry);
+      }
+    }
+    return deduped;
   }
 
   // Build combined weather + AQI URL for uncached cities only
@@ -2499,7 +2527,36 @@ async function fetchWeatherForCities(cities) {
       for (const idx of cityCacheMap) {
         cachedResults[idx] = { ...cities[idx], weather: null, aqi: {} };
       }
-      return cachedResults;
+      // Apply deduplication before returning
+      const seenCoords = new Map();
+      const deduped = [];
+      for (const entry of cachedResults) {
+        const lat = entry.latitude != null ? DataCache._roundCoord(entry.latitude) : null;
+        const lon = entry.longitude != null ? DataCache._roundCoord(entry.longitude) : null;
+        if (lat == null || lon == null) {
+          deduped.push(entry);
+          continue;
+        }
+        const coordKey = `${lat},${lon}`;
+        let isDup = false;
+        for (const [existingKey, existingEntry] of seenCoords) {
+          const [exLat, exLon] = existingKey.split(',').map(Number);
+          if (Math.abs(lat - exLat) < 0.01 && Math.abs(lon - exLon) < 0.01) {
+            isDup = true;
+            if (!existingEntry.place_id && entry.place_id) {
+              seenCoords.set(existingKey, entry);
+              const dupIdx = deduped.findIndex(d => d === existingEntry);
+              if (dupIdx !== -1) deduped[dupIdx] = entry;
+            }
+            break;
+          }
+        }
+        if (!isDup) {
+          seenCoords.set(coordKey, entry);
+          deduped.push(entry);
+        }
+      }
+      return deduped;
     }
 
     const weatherAll = await weatherRes.json();
@@ -2608,7 +2665,38 @@ async function fetchWeatherForCities(cities) {
       result[i] = { ...city, weather: cityWeather, aqi: aqiResult };
     }
 
-    return result;
+    // De-duplicate results by coordinates (keep first entry per coordinate pair)
+    const seenCoords = new Map();
+    const deduped = [];
+    for (const entry of result) {
+      const lat = entry.latitude != null ? DataCache._roundCoord(entry.latitude) : null;
+      const lon = entry.longitude != null ? DataCache._roundCoord(entry.longitude) : null;
+      if (lat == null || lon == null) {
+        deduped.push(entry);
+        continue;
+      }
+      const coordKey = `${lat},${lon}`;
+      // Check for existing coordinate match (0.01° tolerance)
+      let isDup = false;
+      for (const [existingKey, existingEntry] of seenCoords) {
+        const [exLat, exLon] = existingKey.split(',').map(Number);
+        if (Math.abs(lat - exLat) < 0.01 && Math.abs(lon - exLon) < 0.01) {
+          isDup = true;
+          // Prefer the entry with a non-null place_id
+          if (!existingEntry.place_id && entry.place_id) {
+            seenCoords.set(existingKey, entry);
+            const dupIdx = deduped.findIndex(d => d === existingEntry);
+            if (dupIdx !== -1) deduped[dupIdx] = entry;
+          }
+          break;
+        }
+      }
+      if (!isDup) {
+        seenCoords.set(coordKey, entry);
+        deduped.push(entry);
+      }
+    }
+    return deduped;
   } catch {
     // Fill uncached with null data
     const result = new Array(cities.length);
@@ -2640,6 +2728,38 @@ function parseDecimalTime(timeStr, fallback) {
 function renderAll() {
   const grid = document.getElementById('city-grid');
   if (!grid) return;
+
+  // De-duplicate weatherData by coordinates before rendering (keep entry with non-null place_id)
+  const seenCoords = new Map();
+  const deduped = [];
+  for (const entry of weatherData) {
+    const lat = entry.latitude != null ? DataCache._roundCoord(entry.latitude) : null;
+    const lon = entry.longitude != null ? DataCache._roundCoord(entry.longitude) : null;
+    if (lat == null || lon == null) {
+      deduped.push(entry);
+      continue;
+    }
+    const coordKey = `${lat},${lon}`;
+    let isDup = false;
+    for (const [existingKey, existingEntry] of seenCoords) {
+      const [exLat, exLon] = existingKey.split(',').map(Number);
+      if (Math.abs(lat - exLat) < 0.01 && Math.abs(lon - exLon) < 0.01) {
+        isDup = true;
+        // Prefer the entry with a non-null place_id
+        if (!existingEntry.place_id && entry.place_id) {
+          seenCoords.set(existingKey, entry);
+          const dupIdx = deduped.findIndex(d => d === existingEntry);
+          if (dupIdx !== -1) deduped[dupIdx] = entry;
+        }
+        break;
+      }
+    }
+    if (!isDup) {
+      seenCoords.set(coordKey, entry);
+      deduped.push(entry);
+    }
+  }
+  weatherData = deduped;
 
   grid.innerHTML = '';
 
@@ -5043,21 +5163,49 @@ async function run() {
   const favAll = FavoritesManager.getAll();
 
   // Combine: nearby cities first, then favorites that aren't already in nearby
+  // Use BOTH place_id AND coordinate proximity matching to prevent duplicates
   const allCities = [...nearby];
-  const seenIds = new Set(nearby.map(c => c.place_id));
+  const seenPlaceIds = new Set(nearby.map(c => String(c.place_id)));
+  const seenCoords = new Set(nearby.map(c => {
+    const lat = c.latitude != null ? DataCache._roundCoord(c.latitude) : null;
+    const lon = c.longitude != null ? DataCache._roundCoord(c.longitude) : null;
+    return lat != null && lon != null ? `${lat},${lon}` : null;
+  }).filter(Boolean));
+
   for (const fav of favAll) {
-    if (!seenIds.has(fav.place_id)) {
-      allCities.push({
-        place_id: fav.place_id,
-        name: fav.name,
-        state: fav.state,
-        latitude: fav.latitude,
-        longitude: fav.longitude,
-        distance: haversine(userLocation.lat, userLocation.lon, fav.latitude, fav.longitude),
-        bearing: bearing(userLocation.lat, userLocation.lon, fav.latitude, fav.longitude),
-      });
-      seenIds.add(fav.place_id);
+    const favPlaceId = String(fav.place_id);
+    const favLat = fav.latitude != null ? DataCache._roundCoord(fav.latitude) : null;
+    const favLon = fav.longitude != null ? DataCache._roundCoord(fav.longitude) : null;
+
+    // Skip if place_id already seen (same physical city from same source)
+    if (seenPlaceIds.has(favPlaceId)) continue;
+
+    // Skip if coordinate proximity match (same physical city from different source)
+    const favCoordKey = favLat != null && favLon != null ? `${favLat},${favLon}` : null;
+    if (favCoordKey != null) {
+      let isCoordDuplicate = false;
+      for (const existingCoord of seenCoords) {
+        const [exLat, exLon] = existingCoord.split(',').map(Number);
+        // 0.01° tolerance (≈1km)
+        if (Math.abs(favLat - exLat) < 0.01 && Math.abs(favLon - exLon) < 0.01) {
+          isCoordDuplicate = true;
+          break;
+        }
+      }
+      if (isCoordDuplicate) continue;
     }
+
+    allCities.push({
+      place_id: favPlaceId,
+      name: fav.name,
+      state: fav.state,
+      latitude: fav.latitude,
+      longitude: fav.longitude,
+      distance: haversine(userLocation.lat, userLocation.lon, fav.latitude, fav.longitude),
+      bearing: bearing(userLocation.lat, userLocation.lon, fav.latitude, fav.longitude),
+    });
+    seenPlaceIds.add(favPlaceId);
+    if (favCoordKey != null) seenCoords.add(favCoordKey);
   }
 
   // Sort all cities by distance from user (closest first)
@@ -5500,17 +5648,61 @@ async function addFavoriteCard(city) {
 function removeCardByPlaceId(placeId) {
   const grid = document.getElementById('city-grid');
   if (!grid) return;
-  const card = grid.querySelector(`.city-card[data-placeid="${CSS.escape(String(placeId))}"]`);
-  if (card) {
-    card.style.transition = 'opacity 0.3s, transform 0.3s';
-    card.style.opacity = '0';
-    card.style.transform = 'scale(0.95)';
-    setTimeout(() => card.remove(), 300);
+
+  // Find the target coordinates: first from the card, then from weatherData
+  let targetLat = null;
+  let targetLon = null;
+
+  // Try to find the card with matching place_id
+  const targetCard = grid.querySelector(`.city-card[data-placeid="${CSS.escape(String(placeId))}"]`);
+  if (targetCard) {
+    targetLat = parseFloat(targetCard.dataset.citylat);
+    targetLon = parseFloat(targetCard.dataset.citylon);
   }
-  // Remove only the matching entry by place_id, not by name
-  const idx = weatherData.findIndex(d => d.place_id === String(placeId));
-  if (idx !== -1) {
-    weatherData.splice(idx, 1);
+
+  // If no card found, get coordinates from weatherData
+  if (targetLat == null || targetLon == null) {
+    const targetEntry = weatherData.find(d => d.place_id === String(placeId));
+    if (targetEntry) {
+      targetLat = targetEntry.latitude;
+      targetLon = targetEntry.longitude;
+    }
+  }
+
+  // If still no coordinates, nothing to remove
+  if (targetLat == null || targetLon == null) return;
+
+  // Remove ALL cards at the same coordinates (not just the one with the exact place_id)
+  const allCards = Array.from(grid.querySelectorAll('.city-card'));
+  for (const card of allCards) {
+    const cardLat = parseFloat(card.dataset.citylat);
+    const cardLon = parseFloat(card.dataset.citylon);
+    if (!isNaN(cardLat) && !isNaN(cardLon)) {
+      // Use 0.01° tolerance (≈1km), same as the dedup logic
+      if (Math.abs(cardLat - targetLat) < 0.01 && Math.abs(cardLon - targetLon) < 0.01) {
+        card.style.transition = 'opacity 0.3s, transform 0.3s';
+        card.style.opacity = '0';
+        card.style.transform = 'scale(0.95)';
+        setTimeout(() => card.remove(), 300);
+      }
+    }
+  }
+
+  // Remove all weatherData entries matching the coordinates (not just by place_id)
+  const toRemove = [];
+  for (let i = 0; i < weatherData.length; i++) {
+    const d = weatherData[i];
+    if (d.place_id === String(placeId)) {
+      toRemove.push(i);
+    } else if (d.latitude != null && d.longitude != null) {
+      if (Math.abs(d.latitude - targetLat) < 0.01 && Math.abs(d.longitude - targetLon) < 0.01) {
+        toRemove.push(i);
+      }
+    }
+  }
+  // Remove in reverse order to preserve indices
+  for (let i = toRemove.length - 1; i >= 0; i--) {
+    weatherData.splice(toRemove[i], 1);
   }
 }
 
