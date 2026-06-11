@@ -98,15 +98,4 @@ const DataCache = {
     console.log(`[DataCache] CLEARED ALL: ${keysToRemove.length} entries`);
   },
 
-  // Get total cache size in KB
-  getSize() {
-    let total = 0;
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key && key.startsWith('hasw_cache_')) {
-        total += localStorage.key(i).length + localStorage.getItem(key).length;
-      }
-    }
-    return Math.round(total / 1024 * 100) / 100;
-  }
 };

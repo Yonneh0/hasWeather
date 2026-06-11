@@ -345,7 +345,9 @@ async function addFavoriteCard(city) {
   card.className = 'city-card';
   card.dataset.cityName = data.name;
   card.style.overflow = 'visible';
-  card.innerHTML = renderCityCard(data);
+  // Pass the coordinate-based suffix to renderCityCard so canvas IDs are unique
+  const coordSuffix = `${data.latitude || 0}_${data.longitude || 0}`;
+  card.innerHTML = renderCityCard(data, coordSuffix);
   grid.appendChild(card);
 
   // Update weatherData
@@ -357,7 +359,7 @@ async function addFavoriteCard(city) {
   card.style.background = `linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.04)), ${bg}`;
 
   // Draw charts for this card
-  const safeName = sanitizeId(data.name);
+  const safeName = sanitizeId(data.name, coordSuffix);
   setTimeout(() => {
     drawMergedChart(`chart-merged-${safeName}`, data.weather, data.highTemp, data.lowTemp);
     drawCombinedChart(`chart-combined-${safeName}`, data.weather);

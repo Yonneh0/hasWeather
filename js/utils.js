@@ -40,12 +40,13 @@ function bearingToCompass(deg) {
 }
 
 function aqiLabel(aqi) {
-  if (!aqi && aqi !== 0) return { label: '—', cls: '' };
+  if (aqi === null || aqi === undefined || aqi === false || aqi !== aqi) return { label: '—', cls: '' };
   if (aqi <= 50) return { label: 'Good', cls: 'aqi-good' };
   if (aqi <= 100) return { label: 'Moderate', cls: 'aqi-moderate' };
   return { label: 'Unhealthy', cls: 'aqi-unhealthy' };
 }
 
-function sanitizeId(str) {
-  return str.replace(/[^a-zA-Z0-9]/g, '_');
+function sanitizeId(str, suffix) {
+  const base = str.replace(/[^a-zA-Z0-9]/g, '_');
+  return suffix ? `${base}_${suffix}` : base;
 }

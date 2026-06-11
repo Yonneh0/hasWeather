@@ -1,4 +1,12 @@
 // ===== RENDER =====
+
+// Parse time string as decimal hours so minutes are accounted for (e.g., "18:45" → 18.75)
+function parseDecimalTime(timeStr, fallback) {
+  if (!timeStr) return fallback;
+  const [h, m] = timeStr.split(':').map(Number);
+  return h + (m / 60);
+}
+
 function renderAll() {
   const grid = document.getElementById('city-grid');
   if (!grid) return;
@@ -12,7 +20,8 @@ function renderAll() {
     card.style.animationDelay = `${i * 120}ms`;
     card.style.animationFillMode = 'forwards';
     card.style.overflow = 'visible';
-    card.innerHTML = renderCityCard(data);
+    const suffix = data.latitude != null && data.longitude != null ? `${data.latitude}_${data.longitude}` : undefined;
+    card.innerHTML = renderCityCard(data, suffix);
     grid.appendChild(card);
   });
 
@@ -37,7 +46,7 @@ function applyBackgrounds() {
   });
 }
 
-function renderCityCard(data) {
+function renderCityCard(data, suffix) {
   const w = data.weather;
   const a = data.aqi;
   if (!w || !w.current) {
@@ -72,12 +81,6 @@ function renderCityCard(data) {
   const now = new Date();
   const currentHour = now.getHours();
 
-  // Parse as decimal hours so minutes are accounted for (e.g., 18:45 → 18.75)
-  function parseDecimalTime(timeStr, fallback) {
-    if (!timeStr) return fallback;
-    const [h, m] = timeStr.split(':').map(Number);
-    return h + (m / 60);
-  }
   const sunriseTime = parseDecimalTime(sunrise, 6);
   const sunsetTime = parseDecimalTime(sunset, 19);
   const isDay = isDaytime(currentHour, sunriseTime, sunsetTime);
@@ -144,7 +147,9 @@ function renderCityCard(data) {
     </div>`;
   }
 
-  const safeName = sanitizeId(data.name);
+  const safeName = sanitizeId(data.name, suffix);
+  const mergedCanvasId = `chart-merged-${safeName}`;
+  const combinedCanvasId = `chart-combined-${safeName}`;
 
   // Slice to 24 hours (current day only) for chart display
   const temps = (hourly?.temperature_2m || []).slice(0, 24);
@@ -162,7 +167,7 @@ function renderCityCard(data) {
   const rainStats = chartStats(rain);
 
   return `
-    <canvas class="chart-canvas chart-merged" id="chart-merged-${safeName}" style="position:absolute;top:0;left:0;right:0;bottom:0;z-index:0;pointer-events:none;"></canvas>
+    <canvas class="chart-canvas chart-merged" id="${mergedCanvasId}" style="position:absolute;top:0;left:0;right:0;bottom:0;z-index:0;pointer-events:none;"></canvas>
     <div style="position:relative;z-index:2;">
     <div class="city-header">
       <div class="city-name-wrap">
@@ -195,7 +200,7 @@ function renderCityCard(data) {
       </div>
     </div>
     <div class="combined-chart-row">
-      <canvas class="combined-chart-canvas" id="chart-combined-${safeName}"></canvas>
+      <canvas class="combined-chart-canvas" id="${combinedCanvasId}"></canvas>
       <div class="combined-chart-stats">
         <div class="stat-group">
           <div class="stat-group-title">Humidity</div>

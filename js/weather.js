@@ -48,11 +48,11 @@ async function fetchWeatherForCities(cities) {
 
     const result = new Array(cities.length);
 
-    // First fill cached results
+    // First fill cached results (use get directly — it already handles expiration internally)
     for (let i = 0; i < cities.length; i++) {
       const ck = weatherCacheKey(cities[i].latitude, cities[i].longitude);
-      if (DataCache.has(ck, 'weather')) {
-        const entry = DataCache.get(ck, 'weather');
+      const entry = DataCache.get(ck, 'weather');
+      if (entry) {
         result[i] = { ...cities[i], weather: entry.weather, aqi: entry.aqi };
       }
     }
