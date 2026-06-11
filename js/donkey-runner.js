@@ -103,7 +103,7 @@ const DONKEY_RUNNER = {
   soundEnabled: false,
 
   // Near-miss tracking
-  nearMissThreshold: 15, // pixels
+  nearMissThreshold: 5, // pixels — donkey must be nearly touching the obstacle
   nearMissActive: false,
 
   // Speed lines (ground effect lines)
@@ -175,7 +175,7 @@ const DONKEY_RUNNER = {
     `;
 
     document.body.appendChild(this.gamePanel);
-    this.gamePanel.classList.add('donkey-visible');
+    this.gamePanel.classList.add('donkey-hidden');
 
     // Set up canvas
     this.canvas = document.getElementById('donkey-canvas');

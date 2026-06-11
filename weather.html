@@ -1618,7 +1618,7 @@ body {
 <canvas id="particle-canvas"></canvas>
 
 <header class="header">
-  <h1 class="logo">hasW</h1>
+  <h1 class="logo">hasWeather</h1>
   <button id="unit-toggle" class="btn btn-small" title="Toggle °F/°C">°F</button>
    <button id="refresh-btn" class="btn btn-small" title="Refresh data">⟳</button>
    <button id="game-btn" class="btn btn-small" title="Donkey Runner Minigame">🫏</button>
@@ -1760,7 +1760,7 @@ const DataCache = {
   },
 
   // Check if a cache entry exists and is not expired
-  has(key) {
+  has(key, type) {
     try {
       const raw = localStorage.getItem(`hasw_cache_${key}`);
       if (!raw) {
@@ -1768,6 +1768,11 @@ const DataCache = {
         return false;
       }
       const entry = JSON.parse(raw);
+      // Validate type matches
+      if (type && entry.type !== type) {
+        console.log(`[DataCache] MISS (type mismatch): ${key} (expected: ${type}, got: ${entry.type})`);
+        return false;
+      }
       const expired = !entry || (Date.now() - entry.timestamp > this.TTL[entry.type]);
       if (expired) {
         console.log(`[DataCache] MISS (expired): ${key} (type: ${entry.type})`);
@@ -1827,19 +1832,6 @@ const DataCache = {
   invalidate(key) {
     console.log(`[DataCache] INVALIDATE: ${key}`);
     localStorage.removeItem(`hasw_cache_${key}`);
-  },
-
-  // Clear all cache entries
-  clearAll() {
-    const keysToRemove = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key && key.startsWith('hasw_cache_')) {
-        keysToRemove.push(key);
-      }
-    }
-    keysToRemove.forEach(k => localStorage.removeItem(k));
-    console.log(`[DataCache] CLEARED ALL: ${keysToRemove.length} entries`);
   },
 
 };
@@ -1947,10 +1939,6 @@ function aqiLabel(aqi) {
   return { label: 'Unhealthy', cls: 'aqi-unhealthy' };
 }
 
-function sanitizeId(str, suffix) {
-  const base = str.replace(/[^a-zA-Z0-9]/g, '_');
-  return suffix ? `${base}_${suffix}` : base;
-}
 
 </script>
 <script>
@@ -2659,6 +2647,10 @@ function renderAll() {
     const card = document.createElement('div');
     card.className = 'city-card';
     card.dataset.cityName = data.name;
+    card.dataset.placeid = data.place_id || '';
+    card.dataset.citydist = data.distance != null ? data.distance : '';
+    card.dataset.citylat = data.latitude != null ? data.latitude : '';
+    card.dataset.citylon = data.longitude != null ? data.longitude : '';
     card.style.animationDelay = `${i * 120}ms`;
     card.style.animationFillMode = 'forwards';
     card.style.overflow = 'visible';
@@ -2789,7 +2781,7 @@ function renderCityCard(data, suffix) {
     </div>`;
   }
 
-  const safeName = sanitizeId(data.name, suffix);
+  const safeName = data.place_id || suffix;
   const mergedCanvasId = `chart-merged-${safeName}`;
   const combinedCanvasId = `chart-combined-${safeName}`;
 
@@ -3128,7 +3120,7 @@ function drawAllCharts() {
   weatherData.forEach((data) => {
     if (!data.weather) return;
     const hourly = data.weather.hourly || {};
-    const safeName = sanitizeId(data.name, `${data.latitude || 0}_${data.longitude || 0}`);
+    const safeName = data.place_id || `${data.latitude || 0}_${data.longitude || 0}`;
     if (Object.keys(hourly).length === 0) return;
     drawMergedChart(`chart-merged-${safeName}`, data.weather, data.highTemp, data.lowTemp);
     drawCombinedChart(`chart-combined-${safeName}`, data.weather);
@@ -3276,6 +3268,7 @@ let _outagePanel = null;
 let _retryInterval = null;
 let _outageVisible = false;
 let _pendingRunFn = null;
+let _donkeyAutoOpened = false;
 
 // ===== PANEL =====
 function createOutagePanel() {
@@ -3338,6 +3331,11 @@ function removeOutagePanel() {
       }
       _outagePanel = null;
       _outageVisible = false;
+      // Close auto-opened donkey panel
+      if (_donkeyAutoOpened && typeof DONKEY_RUNNER !== 'undefined' && DONKEY_RUNNER.gamePanel) {
+        DONKEY_RUNNER.close();
+        _donkeyAutoOpened = false;
+      }
       // Reset position for next time
       const panel = document.getElementById('outage-panel');
       if (panel) { panel.style.top = ''; panel.style.bottom = ''; }
@@ -3348,6 +3346,14 @@ function removeOutagePanel() {
 function showOutagePanel() {
   const panel = createOutagePanel();
   _outageVisible = true;
+
+  // Auto-open donkey panel if it's not already visible
+  if (typeof DONKEY_RUNNER !== 'undefined' && DONKEY_RUNNER.gamePanel) {
+    if (DONKEY_RUNNER.gamePanel.classList.contains('donkey-hidden')) {
+      DONKEY_RUNNER.toggle();
+      _donkeyAutoOpened = true;
+    }
+  }
 
   // Set position BEFORE the slide-in animation begins, so the panel animates
   // from the bottom of the screen to the correct target position.
@@ -3680,7 +3686,7 @@ const DONKEY_RUNNER = {
   soundEnabled: false,
 
   // Near-miss tracking
-  nearMissThreshold: 15, // pixels
+  nearMissThreshold: 5, // pixels — donkey must be nearly touching the obstacle
   nearMissActive: false,
 
   // Speed lines (ground effect lines)
@@ -3752,7 +3758,7 @@ const DONKEY_RUNNER = {
     `;
 
     document.body.appendChild(this.gamePanel);
-    this.gamePanel.classList.add('donkey-visible');
+    this.gamePanel.classList.add('donkey-hidden');
 
     // Set up canvas
     this.canvas = document.getElementById('donkey-canvas');
@@ -5182,7 +5188,7 @@ function bindFavDropdownEvents() {
 
       if (isFav) {
         FavoritesManager.remove(placeId);
-        removeCardByName(name);
+        removeCardByPlaceId(placeId);
       } else {
         FavoritesManager.add(placeId, name, state, lat, lon);
         await addFavoriteCard({ place_id: placeId, name, state, latitude: lat, longitude: lon });
@@ -5200,7 +5206,7 @@ function bindFavDropdownEvents() {
       const placeId = btn.dataset.placeid;
       const name = btn.closest('.fav-city-item').dataset.name;
       FavoritesManager.remove(placeId);
-      removeCardByName(name);
+      removeCardByPlaceId(placeId);
       // Clear search box and re-render all
       const favSearchEl = document.getElementById('fav-search');
       if (favSearchEl) favSearchEl.value = '';
@@ -5389,6 +5395,43 @@ async function fetchAllNearby(count) {
 }
 
 async function addFavoriteCard(city) {
+  // Check for duplicate card before adding — use BOTH place_id AND coordinate proximity matching
+  const existingGrid = document.getElementById('city-grid');
+  if (existingGrid) {
+    // Check by place_id first
+    const existingCardById = existingGrid.querySelector(`.city-card[data-placeid="${CSS.escape(String(city.place_id))}"]`);
+    if (existingCardById) {
+      // Card already exists (same place_id), don't add a duplicate
+      return;
+    }
+    // Check by coordinates with tolerance (same city from different API source may have different place_id or slightly different coords)
+    const allCards = Array.from(existingGrid.querySelectorAll('.city-card'));
+    for (const existingCard of allCards) {
+      const existingLat = parseFloat(existingCard.dataset.citylat);
+      const existingLon = parseFloat(existingCard.dataset.citylon);
+      if (!isNaN(existingLat) && !isNaN(existingLon)) {
+        // Use 0.01° tolerance (≈1km), same as the dedup logic in fetchAllNearby
+        const latDiff = Math.abs(city.latitude - existingLat);
+        const lonDiff = Math.abs(city.longitude - existingLon);
+        if (latDiff < 0.01 && lonDiff < 0.01) {
+          // Same coordinates within tolerance, don't add a duplicate
+          return;
+        }
+      }
+    }
+  }
+  // Check for duplicate weather data before adding — use BOTH place_id AND coordinate proximity matching
+  const existingDataIdx = weatherData.findIndex(d =>
+    d.place_id === String(city.place_id) ||
+    (d.latitude != null && d.longitude != null &&
+     Math.abs(city.latitude - d.latitude) < 0.01 &&
+     Math.abs(city.longitude - d.longitude) < 0.01)
+  );
+  if (existingDataIdx !== -1) {
+    // Data already exists, don't add a duplicate
+    return;
+  }
+
   // Compute distance and bearing from user location
   const distance = haversine(userLocation.lat, userLocation.lon, city.latitude, city.longitude);
   const bearingVal = bearing(userLocation.lat, userLocation.lon, city.latitude, city.longitude);
@@ -5414,11 +5457,29 @@ async function addFavoriteCard(city) {
   const card = document.createElement('div');
   card.className = 'city-card';
   card.dataset.cityName = data.name;
+  card.dataset.placeid = data.place_id;
+  card.dataset.citylat = data.latitude;
+  card.dataset.citylon = data.longitude;
+  card.dataset.citydist = data.distance;
   card.style.overflow = 'visible';
   // Pass the coordinate-based suffix to renderCityCard so canvas IDs are unique
   const coordSuffix = `${data.latitude || 0}_${data.longitude || 0}`;
   card.innerHTML = renderCityCard(data, coordSuffix);
-  grid.appendChild(card);
+
+  // Insert card at the correct position based on distance (sorted by distance, closest first)
+  const allCards = Array.from(grid.querySelectorAll('.city-card'));
+  let inserted = false;
+  for (const existingCard of allCards) {
+    const existingDist = parseFloat(existingCard.dataset.citydist);
+    if (!isNaN(existingDist) && distance < existingDist) {
+      grid.insertBefore(card, existingCard);
+      inserted = true;
+      break;
+    }
+  }
+  if (!inserted) {
+    grid.appendChild(card);
+  }
 
   // Update weatherData
   weatherData.push(data);
@@ -5429,24 +5490,28 @@ async function addFavoriteCard(city) {
   card.style.background = `linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.04)), ${bg}`;
 
   // Draw charts for this card
-  const safeName = sanitizeId(data.name, coordSuffix);
+  const safeName = data.place_id || coordSuffix;
   setTimeout(() => {
     drawMergedChart(`chart-merged-${safeName}`, data.weather, data.highTemp, data.lowTemp);
     drawCombinedChart(`chart-combined-${safeName}`, data.weather);
   }, 50);
 }
 
-function removeCardByName(name) {
+function removeCardByPlaceId(placeId) {
   const grid = document.getElementById('city-grid');
   if (!grid) return;
-  const card = grid.querySelector(`.city-card[data-city-name="${CSS.escape(name)}"]`);
+  const card = grid.querySelector(`.city-card[data-placeid="${CSS.escape(String(placeId))}"]`);
   if (card) {
     card.style.transition = 'opacity 0.3s, transform 0.3s';
     card.style.opacity = '0';
     card.style.transform = 'scale(0.95)';
     setTimeout(() => card.remove(), 300);
   }
-  weatherData = weatherData.filter(d => d.name !== name);
+  // Remove only the matching entry by place_id, not by name
+  const idx = weatherData.findIndex(d => d.place_id === String(placeId));
+  if (idx !== -1) {
+    weatherData.splice(idx, 1);
+  }
 }
 
 

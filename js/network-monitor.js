@@ -19,6 +19,7 @@ let _outagePanel = null;
 let _retryInterval = null;
 let _outageVisible = false;
 let _pendingRunFn = null;
+let _donkeyAutoOpened = false;
 
 // ===== PANEL =====
 function createOutagePanel() {
@@ -81,6 +82,11 @@ function removeOutagePanel() {
       }
       _outagePanel = null;
       _outageVisible = false;
+      // Close auto-opened donkey panel
+      if (_donkeyAutoOpened && typeof DONKEY_RUNNER !== 'undefined' && DONKEY_RUNNER.gamePanel) {
+        DONKEY_RUNNER.close();
+        _donkeyAutoOpened = false;
+      }
       // Reset position for next time
       const panel = document.getElementById('outage-panel');
       if (panel) { panel.style.top = ''; panel.style.bottom = ''; }
@@ -91,6 +97,14 @@ function removeOutagePanel() {
 function showOutagePanel() {
   const panel = createOutagePanel();
   _outageVisible = true;
+
+  // Auto-open donkey panel if it's not already visible
+  if (typeof DONKEY_RUNNER !== 'undefined' && DONKEY_RUNNER.gamePanel) {
+    if (DONKEY_RUNNER.gamePanel.classList.contains('donkey-hidden')) {
+      DONKEY_RUNNER.toggle();
+      _donkeyAutoOpened = true;
+    }
+  }
 
   // Set position BEFORE the slide-in animation begins, so the panel animates
   // from the bottom of the screen to the correct target position.
