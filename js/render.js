@@ -17,6 +17,10 @@ function renderAll() {
     const card = document.createElement('div');
     card.className = 'city-card';
     card.dataset.cityName = data.name;
+    card.dataset.placeid = data.place_id || '';
+    card.dataset.citydist = data.distance != null ? data.distance : '';
+    card.dataset.citylat = data.latitude != null ? data.latitude : '';
+    card.dataset.citylon = data.longitude != null ? data.longitude : '';
     card.style.animationDelay = `${i * 120}ms`;
     card.style.animationFillMode = 'forwards';
     card.style.overflow = 'visible';
@@ -147,7 +151,7 @@ function renderCityCard(data, suffix) {
     </div>`;
   }
 
-  const safeName = sanitizeId(data.name, suffix);
+  const safeName = data.place_id || suffix;
   const mergedCanvasId = `chart-merged-${safeName}`;
   const combinedCanvasId = `chart-combined-${safeName}`;
 

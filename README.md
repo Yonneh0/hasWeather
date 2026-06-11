@@ -1,4 +1,4 @@
-# hasW Weather (Under Development: Proceed with caution)
+# hasWeather (Under Development: Proceed with caution)
 
 single file weather app, by Half-Assed Solutions.
 completely self-contained single file weather app, that uses public sources, with proper local caching, to provide reliable comprehensive weather information, with 0 ads. Brought to you by `Carls' Jr`.
@@ -130,6 +130,12 @@ MIT. (google it yourself <3)
 - `rag-docs/air-quality-api.md` — current information about the air-quality-api
 - `rag-docs/geocoding-api.md` — current information about the geocoding-api
 - `rag-docs/weather-forecast-api.md` — current information about the weather-forecast-api
+
+
+## Aboot
+
+`Half-Assed Solutions`™ is a project, ran by Yonneh, to release some "actually kinda useful" things that are developed during random hobby development. Yonneh wears most of the hats in this organization- in fact, he wears all of them; but that's only because he is the sole member. If literally ANYONE more competent was around- he'd be fired.
+This project, and any others tagged with `Half-Assed Solutions` are completely open-source, and MIT Licensed.
 
 ---
 

@@ -112,7 +112,7 @@ function bindFavDropdownEvents() {
 
       if (isFav) {
         FavoritesManager.remove(placeId);
-        removeCardByName(name);
+        removeCardByPlaceId(placeId);
       } else {
         FavoritesManager.add(placeId, name, state, lat, lon);
         await addFavoriteCard({ place_id: placeId, name, state, latitude: lat, longitude: lon });
@@ -130,7 +130,7 @@ function bindFavDropdownEvents() {
       const placeId = btn.dataset.placeid;
       const name = btn.closest('.fav-city-item').dataset.name;
       FavoritesManager.remove(placeId);
-      removeCardByName(name);
+      removeCardByPlaceId(placeId);
       // Clear search box and re-render all
       const favSearchEl = document.getElementById('fav-search');
       if (favSearchEl) favSearchEl.value = '';
@@ -319,6 +319,43 @@ async function fetchAllNearby(count) {
 }
 
 async function addFavoriteCard(city) {
+  // Check for duplicate card before adding — use BOTH place_id AND coordinate proximity matching
+  const existingGrid = document.getElementById('city-grid');
+  if (existingGrid) {
+    // Check by place_id first
+    const existingCardById = existingGrid.querySelector(`.city-card[data-placeid="${CSS.escape(String(city.place_id))}"]`);
+    if (existingCardById) {
+      // Card already exists (same place_id), don't add a duplicate
+      return;
+    }
+    // Check by coordinates with tolerance (same city from different API source may have different place_id or slightly different coords)
+    const allCards = Array.from(existingGrid.querySelectorAll('.city-card'));
+    for (const existingCard of allCards) {
+      const existingLat = parseFloat(existingCard.dataset.citylat);
+      const existingLon = parseFloat(existingCard.dataset.citylon);
+      if (!isNaN(existingLat) && !isNaN(existingLon)) {
+        // Use 0.01° tolerance (≈1km), same as the dedup logic in fetchAllNearby
+        const latDiff = Math.abs(city.latitude - existingLat);
+        const lonDiff = Math.abs(city.longitude - existingLon);
+        if (latDiff < 0.01 && lonDiff < 0.01) {
+          // Same coordinates within tolerance, don't add a duplicate
+          return;
+        }
+      }
+    }
+  }
+  // Check for duplicate weather data before adding — use BOTH place_id AND coordinate proximity matching
+  const existingDataIdx = weatherData.findIndex(d =>
+    d.place_id === String(city.place_id) ||
+    (d.latitude != null && d.longitude != null &&
+     Math.abs(city.latitude - d.latitude) < 0.01 &&
+     Math.abs(city.longitude - d.longitude) < 0.01)
+  );
+  if (existingDataIdx !== -1) {
+    // Data already exists, don't add a duplicate
+    return;
+  }
+
   // Compute distance and bearing from user location
   const distance = haversine(userLocation.lat, userLocation.lon, city.latitude, city.longitude);
   const bearingVal = bearing(userLocation.lat, userLocation.lon, city.latitude, city.longitude);
@@ -344,11 +381,29 @@ async function addFavoriteCard(city) {
   const card = document.createElement('div');
   card.className = 'city-card';
   card.dataset.cityName = data.name;
+  card.dataset.placeid = data.place_id;
+  card.dataset.citylat = data.latitude;
+  card.dataset.citylon = data.longitude;
+  card.dataset.citydist = data.distance;
   card.style.overflow = 'visible';
   // Pass the coordinate-based suffix to renderCityCard so canvas IDs are unique
   const coordSuffix = `${data.latitude || 0}_${data.longitude || 0}`;
   card.innerHTML = renderCityCard(data, coordSuffix);
-  grid.appendChild(card);
+
+  // Insert card at the correct position based on distance (sorted by distance, closest first)
+  const allCards = Array.from(grid.querySelectorAll('.city-card'));
+  let inserted = false;
+  for (const existingCard of allCards) {
+    const existingDist = parseFloat(existingCard.dataset.citydist);
+    if (!isNaN(existingDist) && distance < existingDist) {
+      grid.insertBefore(card, existingCard);
+      inserted = true;
+      break;
+    }
+  }
+  if (!inserted) {
+    grid.appendChild(card);
+  }
 
   // Update weatherData
   weatherData.push(data);
@@ -359,23 +414,27 @@ async function addFavoriteCard(city) {
   card.style.background = `linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.04)), ${bg}`;
 
   // Draw charts for this card
-  const safeName = sanitizeId(data.name, coordSuffix);
+  const safeName = data.place_id || coordSuffix;
   setTimeout(() => {
     drawMergedChart(`chart-merged-${safeName}`, data.weather, data.highTemp, data.lowTemp);
     drawCombinedChart(`chart-combined-${safeName}`, data.weather);
   }, 50);
 }
 
-function removeCardByName(name) {
+function removeCardByPlaceId(placeId) {
   const grid = document.getElementById('city-grid');
   if (!grid) return;
-  const card = grid.querySelector(`.city-card[data-city-name="${CSS.escape(name)}"]`);
+  const card = grid.querySelector(`.city-card[data-placeid="${CSS.escape(String(placeId))}"]`);
   if (card) {
     card.style.transition = 'opacity 0.3s, transform 0.3s';
     card.style.opacity = '0';
     card.style.transform = 'scale(0.95)';
     setTimeout(() => card.remove(), 300);
   }
-  weatherData = weatherData.filter(d => d.name !== name);
+  // Remove only the matching entry by place_id, not by name
+  const idx = weatherData.findIndex(d => d.place_id === String(placeId));
+  if (idx !== -1) {
+    weatherData.splice(idx, 1);
+  }
 }
 

@@ -16,7 +16,7 @@ const DataCache = {
   },
 
   // Check if a cache entry exists and is not expired
-  has(key) {
+  has(key, type) {
     try {
       const raw = localStorage.getItem(`hasw_cache_${key}`);
       if (!raw) {
@@ -24,6 +24,11 @@ const DataCache = {
         return false;
       }
       const entry = JSON.parse(raw);
+      // Validate type matches
+      if (type && entry.type !== type) {
+        console.log(`[DataCache] MISS (type mismatch): ${key} (expected: ${type}, got: ${entry.type})`);
+        return false;
+      }
       const expired = !entry || (Date.now() - entry.timestamp > this.TTL[entry.type]);
       if (expired) {
         console.log(`[DataCache] MISS (expired): ${key} (type: ${entry.type})`);
@@ -83,19 +88,6 @@ const DataCache = {
   invalidate(key) {
     console.log(`[DataCache] INVALIDATE: ${key}`);
     localStorage.removeItem(`hasw_cache_${key}`);
-  },
-
-  // Clear all cache entries
-  clearAll() {
-    const keysToRemove = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key && key.startsWith('hasw_cache_')) {
-        keysToRemove.push(key);
-      }
-    }
-    keysToRemove.forEach(k => localStorage.removeItem(k));
-    console.log(`[DataCache] CLEARED ALL: ${keysToRemove.length} entries`);
   },
 
 };

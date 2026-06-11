@@ -235,7 +235,7 @@ function drawAllCharts() {
   weatherData.forEach((data) => {
     if (!data.weather) return;
     const hourly = data.weather.hourly || {};
-    const safeName = sanitizeId(data.name, `${data.latitude || 0}_${data.longitude || 0}`);
+    const safeName = data.place_id || `${data.latitude || 0}_${data.longitude || 0}`;
     if (Object.keys(hourly).length === 0) return;
     drawMergedChart(`chart-merged-${safeName}`, data.weather, data.highTemp, data.lowTemp);
     drawCombinedChart(`chart-combined-${safeName}`, data.weather);

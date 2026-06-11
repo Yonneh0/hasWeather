@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>hasW Weather</title>
+<title>hasWeather</title>
 <style>
 /* ===== main.css - Entry Point ===== */
 /* This file imports all modular CSS components */
@@ -1842,17 +1842,6 @@ const DataCache = {
     console.log(`[DataCache] CLEARED ALL: ${keysToRemove.length} entries`);
   },
 
-  // Get total cache size in KB
-  getSize() {
-    let total = 0;
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key && key.startsWith('hasw_cache_')) {
-        total += localStorage.key(i).length + localStorage.getItem(key).length;
-      }
-    }
-    return Math.round(total / 1024 * 100) / 100;
-  }
 };
 
 </script>
@@ -1952,14 +1941,15 @@ function bearingToCompass(deg) {
 }
 
 function aqiLabel(aqi) {
-  if (!aqi && aqi !== 0) return { label: '—', cls: '' };
+  if (aqi === null || aqi === undefined || aqi === false || aqi !== aqi) return { label: '—', cls: '' };
   if (aqi <= 50) return { label: 'Good', cls: 'aqi-good' };
   if (aqi <= 100) return { label: 'Moderate', cls: 'aqi-moderate' };
   return { label: 'Unhealthy', cls: 'aqi-unhealthy' };
 }
 
-function sanitizeId(str) {
-  return str.replace(/[^a-zA-Z0-9]/g, '_');
+function sanitizeId(str, suffix) {
+  const base = str.replace(/[^a-zA-Z0-9]/g, '_');
+  return suffix ? `${base}_${suffix}` : base;
 }
 
 </script>
@@ -2532,11 +2522,11 @@ async function fetchWeatherForCities(cities) {
 
     const result = new Array(cities.length);
 
-    // First fill cached results
+    // First fill cached results (use get directly — it already handles expiration internally)
     for (let i = 0; i < cities.length; i++) {
       const ck = weatherCacheKey(cities[i].latitude, cities[i].longitude);
-      if (DataCache.has(ck, 'weather')) {
-        const entry = DataCache.get(ck, 'weather');
+      const entry = DataCache.get(ck, 'weather');
+      if (entry) {
         result[i] = { ...cities[i], weather: entry.weather, aqi: entry.aqi };
       }
     }
@@ -2651,6 +2641,14 @@ async function fetchWeatherForCities(cities) {
 </script>
 <script>
 // ===== RENDER =====
+
+// Parse time string as decimal hours so minutes are accounted for (e.g., "18:45" → 18.75)
+function parseDecimalTime(timeStr, fallback) {
+  if (!timeStr) return fallback;
+  const [h, m] = timeStr.split(':').map(Number);
+  return h + (m / 60);
+}
+
 function renderAll() {
   const grid = document.getElementById('city-grid');
   if (!grid) return;
@@ -2664,7 +2662,8 @@ function renderAll() {
     card.style.animationDelay = `${i * 120}ms`;
     card.style.animationFillMode = 'forwards';
     card.style.overflow = 'visible';
-    card.innerHTML = renderCityCard(data);
+    const suffix = data.latitude != null && data.longitude != null ? `${data.latitude}_${data.longitude}` : undefined;
+    card.innerHTML = renderCityCard(data, suffix);
     grid.appendChild(card);
   });
 
@@ -2689,7 +2688,7 @@ function applyBackgrounds() {
   });
 }
 
-function renderCityCard(data) {
+function renderCityCard(data, suffix) {
   const w = data.weather;
   const a = data.aqi;
   if (!w || !w.current) {
@@ -2724,12 +2723,6 @@ function renderCityCard(data) {
   const now = new Date();
   const currentHour = now.getHours();
 
-  // Parse as decimal hours so minutes are accounted for (e.g., 18:45 → 18.75)
-  function parseDecimalTime(timeStr, fallback) {
-    if (!timeStr) return fallback;
-    const [h, m] = timeStr.split(':').map(Number);
-    return h + (m / 60);
-  }
   const sunriseTime = parseDecimalTime(sunrise, 6);
   const sunsetTime = parseDecimalTime(sunset, 19);
   const isDay = isDaytime(currentHour, sunriseTime, sunsetTime);
@@ -2796,7 +2789,9 @@ function renderCityCard(data) {
     </div>`;
   }
 
-  const safeName = sanitizeId(data.name);
+  const safeName = sanitizeId(data.name, suffix);
+  const mergedCanvasId = `chart-merged-${safeName}`;
+  const combinedCanvasId = `chart-combined-${safeName}`;
 
   // Slice to 24 hours (current day only) for chart display
   const temps = (hourly?.temperature_2m || []).slice(0, 24);
@@ -2814,7 +2809,7 @@ function renderCityCard(data) {
   const rainStats = chartStats(rain);
 
   return `
-    <canvas class="chart-canvas chart-merged" id="chart-merged-${safeName}" style="position:absolute;top:0;left:0;right:0;bottom:0;z-index:0;pointer-events:none;"></canvas>
+    <canvas class="chart-canvas chart-merged" id="${mergedCanvasId}" style="position:absolute;top:0;left:0;right:0;bottom:0;z-index:0;pointer-events:none;"></canvas>
     <div style="position:relative;z-index:2;">
     <div class="city-header">
       <div class="city-name-wrap">
@@ -2847,7 +2842,7 @@ function renderCityCard(data) {
       </div>
     </div>
     <div class="combined-chart-row">
-      <canvas class="combined-chart-canvas" id="chart-combined-${safeName}"></canvas>
+      <canvas class="combined-chart-canvas" id="${combinedCanvasId}"></canvas>
       <div class="combined-chart-stats">
         <div class="stat-group">
           <div class="stat-group-title">Humidity</div>
@@ -3133,7 +3128,7 @@ function drawAllCharts() {
   weatherData.forEach((data) => {
     if (!data.weather) return;
     const hourly = data.weather.hourly || {};
-    const safeName = sanitizeId(data.name);
+    const safeName = sanitizeId(data.name, `${data.latitude || 0}_${data.longitude || 0}`);
     if (Object.keys(hourly).length === 0) return;
     drawMergedChart(`chart-merged-${safeName}`, data.weather, data.highTemp, data.lowTemp);
     drawCombinedChart(`chart-combined-${safeName}`, data.weather);
@@ -5420,7 +5415,9 @@ async function addFavoriteCard(city) {
   card.className = 'city-card';
   card.dataset.cityName = data.name;
   card.style.overflow = 'visible';
-  card.innerHTML = renderCityCard(data);
+  // Pass the coordinate-based suffix to renderCityCard so canvas IDs are unique
+  const coordSuffix = `${data.latitude || 0}_${data.longitude || 0}`;
+  card.innerHTML = renderCityCard(data, coordSuffix);
   grid.appendChild(card);
 
   // Update weatherData
@@ -5432,7 +5429,7 @@ async function addFavoriteCard(city) {
   card.style.background = `linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.04)), ${bg}`;
 
   // Draw charts for this card
-  const safeName = sanitizeId(data.name);
+  const safeName = sanitizeId(data.name, coordSuffix);
   setTimeout(() => {
     drawMergedChart(`chart-merged-${safeName}`, data.weather, data.highTemp, data.lowTemp);
     drawCombinedChart(`chart-combined-${safeName}`, data.weather);

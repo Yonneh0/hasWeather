@@ -46,7 +46,3 @@ function aqiLabel(aqi) {
   return { label: 'Unhealthy', cls: 'aqi-unhealthy' };
 }
 
-function sanitizeId(str, suffix) {
-  const base = str.replace(/[^a-zA-Z0-9]/g, '_');
-  return suffix ? `${base}_${suffix}` : base;
-}
