@@ -207,7 +207,7 @@ function renderCityCard(data, suffix) {
     <div style="position:relative;z-index:2;">
     <div class="city-header">
       <div class="city-name-wrap">
-        <span class="city-name">${escapeHTML(data.name)}${FavoritesManager.has(data.place_id) ? '<span class="fav-star">★</span>' : ''}</span>
+        <span class="city-name">${escapeHTML(data.name)}${FavoritesManager.has(data.place_id, data.latitude, data.longitude) ? '<span class="fav-star">★</span>' : ''}</span>
         <span class="city-state">${escapeHTML(data.state)}</span>
       </div>
       <span class="current-temp-inline">${Math.round(curTemp)}°</span>

@@ -27,7 +27,7 @@ async function renderFavDropdown(searchQuery) {
           const lat = parseFloat(item.lat);
           const lon = parseFloat(item.lon);
           const placeId = String(item.place_id);
-          const isFav = FavoritesManager.has(placeId);
+          const isFav = FavoritesManager.has(placeId, lat, lon);
           html += renderFavCityItem(placeId, name, state, lat, lon, isFav, false);
         }
       } else {
@@ -46,7 +46,7 @@ async function renderFavDropdown(searchQuery) {
     if (nearestCities.length > 0) {
       html += '<div class="fav-section-title">Nearest Cities</div>';
       for (const city of nearestCities) {
-        const isFav = FavoritesManager.has(city.place_id);
+        const isFav = FavoritesManager.has(city.place_id, city.latitude, city.longitude);
         html += renderFavCityItem(city.place_id, city.name, city.state || '', city.latitude, city.longitude, isFav, true);
       }
     }
@@ -55,7 +55,7 @@ async function renderFavDropdown(searchQuery) {
     if (regionalCapitals.length > 0) {
       html += '<div class="fav-section-title">Regional Capitals</div>';
       for (const city of regionalCapitals) {
-        const isFav = FavoritesManager.has(city.place_id);
+        const isFav = FavoritesManager.has(city.place_id, city.latitude, city.longitude);
         html += renderFavCityItem(city.place_id, city.name, city.state || '', city.latitude, city.longitude, isFav, true);
       }
     }
@@ -64,8 +64,8 @@ async function renderFavDropdown(searchQuery) {
     if (stateCapitals.length > 0) {
       html += '<div class="fav-section-title">State Capitals</div>';
       for (const city of stateCapitals) {
-        const isFav = FavoritesManager.has(city.place_id);
-        html += renderFavCityItem(city.place_id, city.name, city.state || '', city.latitude, city.longitude, isFav, true);
+      const isFav = FavoritesManager.has(city.place_id, city.latitude, city.longitude);
+      html += renderFavCityItem(city.place_id, city.name, city.state || '', city.latitude, city.longitude, isFav, true);
       }
     }
   }
@@ -108,7 +108,7 @@ function bindFavDropdownEvents() {
       const lat = parseFloat(item.dataset.lat);
       const lon = parseFloat(item.dataset.lon);
       const state = item.dataset.state;
-      const isFav = FavoritesManager.has(placeId);
+      const isFav = FavoritesManager.has(placeId, lat, lon);
 
       if (isFav) {
         FavoritesManager.remove(placeId);
