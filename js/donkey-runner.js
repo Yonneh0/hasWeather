@@ -12,8 +12,11 @@ const DONKEY_RUNNER = {
 
   // Game constants
   GRAVITY: 0.6,
-  JUMP_FORCE: -12,
+  JUMP_FORCE: -10,
+  DOUBLE_JUMP_FORCE: -8,
+  MAX_JUMPS: 2,
   GROUND_Y: 0,
+  CEILING_Y: 5, // donkey can't go higher than this
   INITIAL_SPEED: 5,
   MAX_SPEED: 12,
   SPEED_INCREMENT: 0.001,
@@ -28,6 +31,7 @@ const DONKEY_RUNNER = {
     jumping: false,
     grounded: true,
     wasGrounded: true,  // tracks if donkey was grounded last frame (for landing particles)
+    currentJumpCount: 0,  // tracks how many jumps used this jump cycle (0=grounded, 1=first jump, 2=double jump)
     frame: 0,
     frameTimer: 0,
     // Backflip state
@@ -53,6 +57,19 @@ const DONKEY_RUNNER = {
   obstacleTimer: 0,
   baseObstacleInterval: 80,
 
+  // Air-based obstacle tracking
+  fallingRockX: 0,
+  fallingRockY: 0,
+  fallingRockFallSpeed: 3,
+  fallingRockActive: false,
+  jetY: 0,
+  jetActive: false,
+  droneX: 0,
+  droneY: 0,
+  droneDir: 1,
+  droneActive: false,
+  droneWavePhase: 0,
+
   // Ground
   groundX: 0,
   groundLineY: 0,
@@ -63,9 +80,9 @@ const DONKEY_RUNNER = {
   // Stars (background decoration)
   stars: [],
 
-  // Day/night cycle
+  // Day/night cycle (20 second cycle for more dynamic feel, was 60)
   dayNightPhase: 0,
-  dayNightDuration: 60, // seconds for full cycle
+  dayNightDuration: 20, // seconds for full cycle
 
   // Particle system
   particles: [],
@@ -73,42 +90,67 @@ const DONKEY_RUNNER = {
   // Score milestone tracking
   lastMilestoneScore: 0,
 
-  // Combo / multiplier system
-  comboCount: 0,
-  comboMultiplier: 1,
+  // Property damage (obstacles destroyed while stumbling)
+  propertyDamageCount: 0,
+  propertyDamageScore: 0,
+
+  // Post-game stats tracking
+  maxSpeed: 0,
+  nearMissCount: 0,
+
+  // Jump tracking
+  totalJumps: 0,
+  doubleJumps: 0,
+  ignoredJumps: 0,
+
+  // Time tracking
+  airTime: 0,
+  runTime: 0,
+
+  // Score breakdown
+  nearMissScore: 0,
+  bonusScore: 0,
 
   // DOM elements
   scoreEl: null,
   highScoreEl: null,
   startScreenEl: null,
   gameOverEl: null,
-  speedBarEl: null,
   nearMissEl: null,
   bonusTextEl: null,
   speedLinesEl: null,
-  comboEl: null,
+  soundBtnEl: null,
 
   // Input
   keysDown: {},
-  // Tracks whether the jump key was released after the game over event (prevents held-key restart)
-  jumpReleasedAfterDeath: false,
+  jumpCooldownTimer: 0, // prevents double-jump from held key — cooldown in seconds
+  jumpCooldownDuration: 0.05, // 50ms cooldown between jump inputs
 
   // Game over cooldown to prevent rapid-fire restart glitches
   gameOverCooldown: false,
+  // Cooldown that blocks restart attempts regardless of input method (keyboard + touch/click)
+  restartCooldown: false,
   // Tracks whether game is in the "dead" state (game over screen visible, not playing)
   gameOverActive: false,
+
+  // Pause state
+  paused: false,
 
   // Audio context for procedural sound effects
   audioCtx: null,
   soundEnabled: false,
 
   // Near-miss tracking
-  nearMissThreshold: 5, // pixels — donkey must be nearly touching the obstacle
   nearMissActive: false,
 
   // Speed lines (ground effect lines)
   speedLineX: 0,
   speedLines: [],
+
+  // Delta time tracking for frame-rate-independent game speed
+  lastFrameTime: 0,
+  // Device pixel ratio for canvas scaling
+  dpr: 1,
 
   init() {
     this.highScore = parseInt(localStorage.getItem('hasW_donkeyHighScore') || '0', 10);
@@ -133,24 +175,15 @@ const DONKEY_RUNNER = {
       <div class="donkey-panel-header">
         <button class="donkey-sound-btn" id="donkey-sound-btn" title="Toggle sound">🔇</button>
         <div class="donkey-header-score">
-          <span class="donkey-header-score-label">CURRENT SCORE</span>
           <span class="donkey-score" id="donkey-score">00000</span>
         </div>
         <span class="donkey-title">Half-Assed Solution: Donkey Runner</span>
         <div class="donkey-header-highscore">
-          <span class="donkey-header-highscore-label">HIGH SCORE</span>
-          <span class="donkey-highscore" id="donkey-highscore">${String(this.highScore).padStart(5, '0')}</span>
+          <span class="donkey-highscore" id="donkey-highscore">HI ${String(this.highScore).padStart(5, '0')}</span>
         </div>
         <button class="donkey-close-btn" title="Close game">✕</button>
       </div>
       <div class="donkey-panel-body">
-        <div class="donkey-combo" id="donkey-combo">COMBO x1</div>
-        <div class="donkey-speed-bar" id="donkey-speed-bar">
-          <span class="donkey-speed-label">SPD</span>
-          <div class="donkey-speed-track">
-            <div class="donkey-speed-fill" id="donkey-speed-fill"></div>
-          </div>
-        </div>
         <div class="donkey-play-area">
           <canvas id="donkey-canvas" width="600" height="180"></canvas>
           <div class="donkey-speed-lines" id="donkey-speed-lines"></div>
@@ -159,15 +192,70 @@ const DONKEY_RUNNER = {
           <div class="donkey-startscreen" id="donkey-startscreen">
             <div class="ds-subtitle">dodge the crap, run the plains</div>
             <div class="ds-controls">
-              <div class="ds-ctrl-row"><kbd>SPACE</kbd> / <kbd>↑</kbd> &nbsp;jump</div>
-              <div class="ds-ctrl-row"><kbd>tap</kbd> &nbsp;jump (mobile)</div>
+              <div class="ds-ctrl-row"><kbd>SPACE</kbd> / <kbd>↑</kbd> / <kbd>tap</kbd> &nbsp;start/jump</div>
             </div>
-            <div class="ds-objective">obstacles come faster as you go. score ticks up the longer you survive. stumble sometimes and knock stuff out of the way!</div>
+            <div class="ds-objective">
+              survive as long as you can — score ticks up the longer you live.<br>
+              obstacles get harder as speed increases<br>
+              jump again while mid-air, to give donkey the beans
+            </div>
             <div class="ds-prompt">press space or tap to start</div>
           </div>
           <div class="donkey-gameover hidden" id="donkey-gameover">
             <span class="donkey-gameover-text">GAME OVER</span>
-            <span class="donkey-gameover-score" id="donkey-gameover-score">SCORE: 00000</span>
+            <span class="donkey-gameover-new hidden" id="donkey-gameover-new"><span class="donkey-gameover-new-label">NEW HIGH SCORE!</span><span class="donkey-gameover-new-score" id="donkey-gameover-new-score">00000</span></span>
+            <!-- Top-left stats — score-based block (4 items) -->
+            <div class="donkey-gameover-stats-top-left" id="donkey-gameover-stats-top-left">
+              <div class="donkey-gameover-stat-row">
+                <span class="donkey-gameover-stat-label">NEAR MISSES</span>
+                <span class="donkey-gameover-stat-value" id="donkey-gameover-nearmisses">0</span>
+              </div>
+              <div class="donkey-gameover-stat-row">
+                <span class="donkey-gameover-stat-label">PROPERTY DAMAGE</span>
+                <span class="donkey-gameover-stat-value" id="donkey-gameover-property-damage">0</span>
+              </div>
+            </div>
+            <!-- Top-right stats — non-score block (4 items) -->
+            <div class="donkey-gameover-stats-top-right" id="donkey-gameover-stats-top-right">
+              <div class="donkey-gameover-stat-row">
+                <span class="donkey-gameover-stat-label">DISTANCE</span>
+                <span class="donkey-gameover-stat-value" id="donkey-gameover-distance">0</span>
+              </div>
+              <div class="donkey-gameover-stat-row">
+                <span class="donkey-gameover-stat-label">MAX SPEED</span>
+                <span class="donkey-gameover-stat-value" id="donkey-gameover-maxspeed">0</span>
+              </div>
+            </div>
+            <!-- Bottom-left stats — time-based (3 items) -->
+            <div class="donkey-gameover-stats-bottom-left" id="donkey-gameover-stats-bottom-left">
+              <div class="donkey-gameover-stat-row">
+                <span class="donkey-gameover-stat-label">RUN TIME</span>
+                <span class="donkey-gameover-stat-value" id="donkey-gameover-runtime">0s</span>
+              </div>
+              <div class="donkey-gameover-stat-row">
+                <span class="donkey-gameover-stat-label">AIR TIME</span>
+                <span class="donkey-gameover-stat-value" id="donkey-gameover-airtime">0s</span>
+              </div>
+              <div class="donkey-gameover-stat-row">
+                <span class="donkey-gameover-stat-label">AIR %</span>
+                <span class="donkey-gameover-stat-value" id="donkey-gameover-airpercent">0%</span>
+              </div>
+            </div>
+            <!-- Bottom-right stats — jump-based (3 items) -->
+            <div class="donkey-gameover-stats-bottom-right" id="donkey-gameover-stats-bottom-right">
+              <div class="donkey-gameover-stat-row">
+                <span class="donkey-gameover-stat-label">TOTAL JUMPS</span>
+                <span class="donkey-gameover-stat-value" id="donkey-gameover-totaljumps">0</span>
+              </div>
+              <div class="donkey-gameover-stat-row">
+                <span class="donkey-gameover-stat-label">DOUBLE JUMPS</span>
+                <span class="donkey-gameover-stat-value" id="donkey-gameover-doublejumps">0</span>
+              </div>
+              <div class="donkey-gameover-stat-row">
+                <span class="donkey-gameover-stat-label">IGNORED JUMPS</span>
+                <span class="donkey-gameover-stat-value" id="donkey-gameover-ignoredjumps">0</span>
+              </div>
+            </div>
             <span class="donkey-restart-text">press space or tap to restart</span>
           </div>
         </div>
@@ -177,30 +265,58 @@ const DONKEY_RUNNER = {
     document.body.appendChild(this.gamePanel);
     this.gamePanel.classList.add('donkey-hidden');
 
-    // Set up canvas
+    // Set up canvas — scale for device pixel ratio to prevent blurry rendering on high-DPI screens
+    this.dpr = window.devicePixelRatio || 1;
     this.canvas = document.getElementById('donkey-canvas');
+    // Calculate display dimensions based on actual play area size
+    const playArea = this.gamePanel.querySelector('.donkey-play-area');
+    const displayWidth = Math.round(playArea.offsetWidth);
+    const aspectRatio = 600 / 180; // original aspect ratio
+    const displayHeight = Math.round(displayWidth / aspectRatio);
+    // Set display size via CSS
+    this.canvas.style.width = displayWidth + 'px';
+    this.canvas.style.height = displayHeight + 'px';
+    // Set internal resolution for DPR scaling
+    this.canvas.width = displayWidth * this.dpr;
+    this.canvas.height = displayHeight * this.dpr;
     this.ctx = this.canvas.getContext('2d');
-    this.GROUND_Y = this.canvas.height - 20;
+    this.ctx.scale(this.dpr, this.dpr);
+    this.GROUND_Y = this.canvas.height / this.dpr - 20;
+    // Store display dimensions for use in drawing
+    this.displayWidth = displayWidth;
+    this.displayHeight = displayHeight;
 
     // Score elements
     this.scoreEl = document.getElementById('donkey-score');
     this.highScoreEl = document.getElementById('donkey-highscore');
     this.startScreenEl = document.getElementById('donkey-startscreen');
     this.gameOverEl = document.getElementById('donkey-gameover');
-    this.speedBarEl = document.getElementById('donkey-speed-fill');
     this.nearMissEl = document.getElementById('donkey-near-miss');
     this.bonusTextEl = document.getElementById('donkey-bonus-text');
     this.speedLinesEl = document.getElementById('donkey-speed-lines');
-    this.comboEl = document.getElementById('donkey-combo');
     this.soundBtnEl = document.getElementById('donkey-sound-btn');
 
-    // Sound toggle button — starts muted by default
+    // High score on start screen
+    const dsHighScoreVal = document.getElementById('ds-highscore-val');
+    if (dsHighScoreVal) {
+      dsHighScoreVal.textContent = String(this.highScore).padStart(5, '0');
+    }
+
+    // Sound toggle button — check localStorage for saved preference
     if (this.soundBtnEl) {
-      this.soundBtnEl.textContent = '\u{1F507}'; // muted icon
-      this.soundBtnEl.classList.add('muted');
+      const savedSound = localStorage.getItem('donkeySoundEnabled');
+      this.soundEnabled = savedSound === 'true';
+      this.soundBtnEl.textContent = this.soundEnabled ? '\u{1F50A}' : '\u{1F507}'; // 🔊 or 🔇
+      this.soundBtnEl.classList.toggle('muted', !this.soundEnabled);
+      this.soundBtnEl.title = this.soundEnabled ? 'Mute sound' : 'Unmute sound';
       this.soundBtnEl.addEventListener('click', (e) => {
         e.stopPropagation();
         this.soundEnabled = !this.soundEnabled;
+        if (this.soundEnabled) {
+          localStorage.setItem('donkeySoundEnabled', 'true');
+        } else {
+          localStorage.removeItem('donkeySoundEnabled');
+        }
         this.soundBtnEl.textContent = this.soundEnabled ? '\u{1F50A}' : '\u{1F507}';
         this.soundBtnEl.classList.toggle('muted', !this.soundEnabled);
         this.soundBtnEl.title = this.soundEnabled ? 'Mute sound' : 'Unmute sound';
@@ -282,6 +398,8 @@ const DONKEY_RUNNER = {
       if (e.code === 'Space' || e.code === 'ArrowUp') {
         if (!this.gamePanel || this.gamePanel.classList.contains('donkey-hidden')) return;
         e.preventDefault();
+        // Skip browser auto-repeat events entirely — user must release the key to jump again
+        if (e.repeat) return;
         this.keysDown[e.code] = true;
         this.handleInput();
       }
@@ -290,10 +408,6 @@ const DONKEY_RUNNER = {
     document.addEventListener('keyup', (e) => {
       if (e.code === 'Space' || e.code === 'ArrowUp') {
         this.keysDown[e.code] = false;
-        // Mark jump as released after death - enables restart input
-        if (this.gameOverActive || this.gameOverCooldown) {
-          this.jumpReleasedAfterDeath = true;
-        }
       }
     });
   },
@@ -373,17 +487,6 @@ const DONKEY_RUNNER = {
           oscillator.stop(now + 0.2);
           break;
 
-        case 'combo':
-          oscillator.type = 'sine';
-          oscillator.frequency.setValueAtTime(600, now);
-          oscillator.frequency.setValueAtTime(800, now + 0.06);
-          oscillator.frequency.setValueAtTime(1000, now + 0.12);
-          gainNode.gain.setValueAtTime(0.08, now);
-          gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
-          oscillator.start(now);
-          oscillator.stop(now + 0.25);
-          break;
-
         case 'land':
           oscillator.type = 'sine';
           oscillator.frequency.setValueAtTime(150, now);
@@ -392,6 +495,188 @@ const DONKEY_RUNNER = {
           gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
           oscillator.start(now);
           oscillator.stop(now + 0.1);
+          break;
+
+        case 'fart':
+          // Multi-layered fart sound: constriction + wet squelch + rumble + gurgles + hiss
+          const fartDur = 0.45; // seconds
+          const sampleRate = this.audioCtx.sampleRate;
+          const bufLen = Math.round(sampleRate * fartDur);
+
+          // === LAYER 1: Noise through constriction (air squeezing through narrowing passage) ===
+          const constrictionBuf = this.audioCtx.createBuffer(1, bufLen, sampleRate);
+          const constrData = constrictionBuf.getChannelData(0);
+          for (let i = 0; i < bufLen; i++) {
+            constrData[i] = (Math.random() * 2 - 1);
+          }
+          const constrSource = this.audioCtx.createBufferSource();
+          constrSource.buffer = constrictionBuf;
+          const constrFilter = this.audioCtx.createBiquadFilter();
+          constrFilter.type = 'bandpass';
+          constrFilter.frequency.setValueAtTime(800, now);
+          constrFilter.frequency.exponentialRampToValueAtTime(60, now + fartDur);
+          constrFilter.frequency.setValueAtTime(800, now + 0.05);
+          constrFilter.frequency.exponentialRampToValueAtTime(60, now + 0.45);
+          constrFilter.Q.setValueAtTime(1.5, now);
+          constrFilter.Q.exponentialRampToValueAtTime(8, now + 0.1);
+          constrFilter.Q.setValueAtTime(1.5, now + 0.1);
+          constrFilter.Q.exponentialRampToValueAtTime(8, now + 0.35);
+          constrFilter.Q.setValueAtTime(1.5, now + 0.35);
+          constrFilter.Q.exponentialRampToValueAtTime(8, now + 0.45);
+          const constrGain = this.audioCtx.createGain();
+          constrGain.gain.setValueAtTime(0.3, now);
+          constrGain.gain.exponentialRampToValueAtTime(0.005, now + fartDur);
+          constrSource.connect(constrFilter);
+          constrFilter.connect(constrGain);
+          constrGain.connect(gainNode);
+          constrSource.start(now);
+          constrSource.stop(now + fartDur);
+
+          // === LAYER 2: Wet squelch — gurgling noise with oscillating center frequency ===
+          const squelchBuf = this.audioCtx.createBuffer(1, bufLen, sampleRate);
+          const squelchData = squelchBuf.getChannelData(0);
+          for (let i = 0; i < bufLen; i++) {
+            squelchData[i] = (Math.random() * 2 - 1);
+          }
+          const squelchSource = this.audioCtx.createBufferSource();
+          squelchSource.buffer = squelchBuf;
+          const squelchFilter = this.audioCtx.createBiquadFilter();
+          squelchFilter.type = 'bandpass';
+          // Oscillate the center frequency back and forth — creates the gurgly wet sound
+          squelchFilter.frequency.setValueAtTime(200, now);
+          squelchFilter.frequency.linearRampToValueAtTime(500, now + 0.08);
+          squelchFilter.frequency.linearRampToValueAtTime(150, now + 0.16);
+          squelchFilter.frequency.linearRampToValueAtTime(450, now + 0.24);
+          squelchFilter.frequency.linearRampToValueAtTime(100, now + 0.32);
+          squelchFilter.frequency.linearRampToValueAtTime(400, now + 0.40);
+          squelchFilter.frequency.linearRampToValueAtTime(80, now + fartDur);
+          squelchFilter.Q.setValueAtTime(4, now);
+          squelchFilter.Q.linearRampToValueAtTime(12, now + 0.06);
+          squelchFilter.Q.linearRampToValueAtTime(3, now + 0.12);
+          squelchFilter.Q.linearRampToValueAtTime(10, now + 0.18);
+          squelchFilter.Q.linearRampToValueAtTime(4, now + 0.24);
+          squelchFilter.Q.linearRampToValueAtTime(11, now + 0.30);
+          squelchFilter.Q.linearRampToValueAtTime(5, now + 0.36);
+          squelchFilter.Q.linearRampToValueAtTime(12, now + 0.42);
+          squelchFilter.Q.linearRampToValueAtTime(6, now + fartDur);
+          const squelchGain = this.audioCtx.createGain();
+          squelchGain.gain.setValueAtTime(0.25, now);
+          squelchGain.gain.exponentialRampToValueAtTime(0.008, now + fartDur * 0.9);
+          squelchSource.connect(squelchFilter);
+          squelchFilter.connect(squelchGain);
+          squelchGain.connect(gainNode);
+          squelchSource.start(now);
+          squelchSource.stop(now + fartDur);
+
+          // === LAYER 3: Deep sub-bass rumble with pulsing ===
+          const subOsc1 = this.audioCtx.createOscillator();
+          const subOsc2 = this.audioCtx.createOscillator();
+          const subGain = this.audioCtx.createGain();
+          // Pulsing amplitude — mimics the rhythmic contraction of a real fart
+          const pulseLFO = this.audioCtx.createOscillator();
+          const pulseGain = this.audioCtx.createGain();
+          pulseLFO.frequency.setValueAtTime(18, now);
+          pulseGain.gain.setValueAtTime(0.15, now);
+          pulseGain.gain.exponentialRampToValueAtTime(0.02, now + fartDur);
+          pulseLFO.connect(pulseGain);
+          subOsc1.frequency.setValueAtTime(55, now);
+          subOsc1.frequency.exponentialRampToValueAtTime(22, now + fartDur);
+          subOsc2.frequency.setValueAtTime(35, now);
+          subOsc2.frequency.exponentialRampToValueAtTime(15, now + fartDur);
+          subGain.gain.setValueAtTime(0.2, now);
+          subGain.gain.exponentialRampToValueAtTime(0.005, now + fartDur);
+          subOsc1.connect(subGain);
+          subOsc2.connect(subGain);
+          subGain.connect(pulseGain);
+          pulseGain.connect(gainNode);
+          subOsc1.start(now);
+          subOsc1.stop(now + fartDur);
+          subOsc2.start(now);
+          subOsc2.stop(now + fartDur);
+          pulseLFO.start(now);
+          pulseLFO.stop(now + fartDur);
+
+          // === LAYER 4: Mid-range gurgly bubbles (multiple oscillators) ===
+          const bubbleOsc1 = this.audioCtx.createOscillator();
+          const bubbleOsc2 = this.audioCtx.createOscillator();
+          const bubbleOsc3 = this.audioCtx.createOscillator();
+          const bubbleGain1 = this.audioCtx.createGain();
+          const bubbleGain2 = this.audioCtx.createGain();
+          const bubbleGain3 = this.audioCtx.createGain();
+          // Bubble oscillators — simulate air bubbles escaping through wet passage
+          bubbleOsc1.frequency.setValueAtTime(120, now);
+          bubbleOsc1.frequency.linearRampToValueAtTime(250, now + 0.12);
+          bubbleOsc1.frequency.linearRampToValueAtTime(80, now + 0.24);
+          bubbleOsc1.frequency.linearRampToValueAtTime(280, now + 0.36);
+          bubbleOsc1.frequency.linearRampToValueAtTime(50, now + fartDur);
+          bubbleOsc2.frequency.setValueAtTime(180, now);
+          bubbleOsc2.frequency.linearRampToValueAtTime(90, now + 0.15);
+          bubbleOsc2.frequency.linearRampToValueAtTime(320, now + 0.28);
+          bubbleOsc2.frequency.linearRampToValueAtTime(60, now + 0.42);
+          bubbleOsc2.frequency.linearRampToValueAtTime(150, now + fartDur);
+          bubbleOsc3.frequency.setValueAtTime(250, now);
+          bubbleOsc3.frequency.linearRampToValueAtTime(70, now + 0.18);
+          bubbleOsc3.frequency.linearRampToValueAtTime(350, now + 0.30);
+          bubbleOsc3.frequency.linearRampToValueAtTime(90, now + 0.42);
+          bubbleOsc3.frequency.linearRampToValueAtTime(200, now + fartDur);
+          bubbleGain1.gain.setValueAtTime(0.06, now);
+          bubbleGain1.gain.exponentialRampToValueAtTime(0.005, now + fartDur * 0.7);
+          bubbleGain2.gain.setValueAtTime(0.05, now);
+          bubbleGain2.gain.exponentialRampToValueAtTime(0.005, now + fartDur * 0.65);
+          bubbleGain3.gain.setValueAtTime(0.04, now);
+          bubbleGain3.gain.exponentialRampToValueAtTime(0.005, now + fartDur * 0.6);
+          bubbleOsc1.connect(bubbleGain1);
+          bubbleGain1.connect(gainNode);
+          bubbleOsc2.connect(bubbleGain2);
+          bubbleGain2.connect(gainNode);
+          bubbleOsc3.connect(bubbleGain3);
+          bubbleGain3.connect(gainNode);
+          bubbleOsc1.start(now);
+          bubbleOsc1.stop(now + fartDur);
+          bubbleOsc2.start(now);
+          bubbleOsc2.stop(now + fartDur);
+          bubbleOsc3.start(now);
+          bubbleOsc3.stop(now + fartDur);
+
+          // === LAYER 5: High-frequency air hiss (brief burst) ===
+          const hissBuf = this.audioCtx.createBuffer(1, bufLen, sampleRate);
+          const hissData = hissBuf.getChannelData(0);
+          for (let i = 0; i < bufLen; i++) {
+            hissData[i] = (Math.random() * 2 - 1);
+          }
+          const hissSource = this.audioCtx.createBufferSource();
+          hissSource.buffer = hissBuf;
+          const hissFilter = this.audioCtx.createBiquadFilter();
+          hissFilter.type = 'highpass';
+          hissFilter.frequency.setValueAtTime(3000, now);
+          hissFilter.frequency.linearRampToValueAtTime(6000, now + 0.08);
+          hissFilter.frequency.linearRampToValueAtTime(2000, now + 0.25);
+          hissFilter.frequency.linearRampToValueAtTime(4000, now + 0.35);
+          hissFilter.frequency.linearRampToValueAtTime(1500, now + fartDur);
+          const hissGain = this.audioCtx.createGain();
+          hissGain.gain.setValueAtTime(0.08, now);
+          hissGain.gain.exponentialRampToValueAtTime(0.002, now + fartDur * 0.7);
+          hissSource.connect(hissFilter);
+          hissFilter.connect(hissGain);
+          hissGain.connect(gainNode);
+          hissSource.start(now);
+          hissSource.stop(now + fartDur);
+
+          // === Master gain envelope for the entire fart ===
+          gainNode.gain.setValueAtTime(0.3, now);
+          gainNode.gain.exponentialRampToValueAtTime(0.005, now + fartDur);
+
+          break;
+
+        case 'ceiling':
+          // Metallic clang sound
+          oscillator.type = 'square';
+          oscillator.frequency.setValueAtTime(800, now);
+          oscillator.frequency.exponentialRampToValueAtTime(200, now + 0.15);
+          gainNode.gain.setValueAtTime(0.1, now);
+          gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+          oscillator.start(now);
+          oscillator.stop(now + 0.2);
           break;
       }
     } catch (e) {
@@ -412,20 +697,44 @@ const DONKEY_RUNNER = {
       // Between death and cooldown expiry — should not happen in normal flow, but be safe
       return;
     } else if (!this.gameRunning && this.gameOverActive) {
-      // Game is dead and game over screen is showing — only restart if:
-      // 1. The jump key has been released since death (new press, not held)
-      // 2. At least 200ms have passed since game over (visual flash time)
-      if (!this.jumpReleasedAfterDeath) return;
+      // Game is dead and game over screen is showing — only restart if cooldown has expired
+      if (this.restartCooldown) return;
       this.restart();
     } else if (this.donkey.grounded && !this.donkey.stumbling && !this.gameOverActive) {
+      // First jump — from ground
       this.playSound('jump');
+      this.totalJumps++;
       this.donkey.vy = this.JUMP_FORCE;
       this.donkey.jumping = true;
       this.donkey.grounded = false;
+      this.donkey.currentJumpCount = 1;
       if (Math.random() < 0.08) {
         this.donkey.backflipping = true;
         this.donkey.backflipProgress = 0;
       }
+    } else if (!this.donkey.grounded && !this.donkey.stumbling && this.donkey.currentJumpCount < this.MAX_JUMPS && !this.gameOverActive) {
+      // Only allow double jump if cooldown has expired (prevents held-key rapid-fire)
+      if (this.jumpCooldownTimer <= 0) {
+        // Change to fart sound for double-jump
+        this.playSound('fart');
+        this.totalJumps++;
+        this.doubleJumps++;
+        this.donkey.vy = this.DOUBLE_JUMP_FORCE;
+        this.donkey.currentJumpCount++;
+        // Spawn double-jump particles
+        this.spawnDoubleJumpParticles();
+        // Reset cooldown
+        this.jumpCooldownTimer = this.jumpCooldownDuration;
+      } else {
+        // Cooldown still active — jump attempted but rejected
+        this.ignoredJumps++;
+      }
+    } else if (!this.gameOverActive) {
+      // Jump attempted but rejected for any reason:
+      // - Donkey is stumbling (can't jump)
+      // - Donkey is already airborne with both jumps used (currentJumpCount >= MAX_JUMPS)
+      // - Jump cooldown still active while airborne
+      this.ignoredJumps++;
     }
   },
 
@@ -435,18 +744,14 @@ const DONKEY_RUNNER = {
     if (this.startScreenEl) this.startScreenEl.classList.add('hidden');
     if (this.gameOverEl) this.gameOverEl.classList.add('hidden');
     this.resetGame();
+    this.restartCooldown = false; // Ensure cooldown is cleared when starting from idle state
     this.loop();
   },
 
   restart() {
-    const now = performance.now();
-    // Only allow restart if at least 200ms have passed since last game over event
-    // This prevents held-key auto-restart while still allowing responsive restart
-    if (now - (this.gameOverTimestamp || 0) < 200) return;
     this.gameRunning = true;
     this.gameOverActive = false;
     this.gameOverCooldown = false;
-    this.jumpReleasedAfterDeath = false;
     this.keysDown = {};
     if (this.gameOverEl) {
       this.gameOverEl.classList.add('hidden');
@@ -461,6 +766,7 @@ const DONKEY_RUNNER = {
     this.donkey.jumping = false;
     this.donkey.grounded = true;
     this.donkey.wasGrounded = true;
+    this.donkey.currentJumpCount = 0;
     this.donkey.frame = 0;
     this.donkey.backflipping = false;
     this.donkey.backflipProgress = 0;
@@ -474,15 +780,29 @@ const DONKEY_RUNNER = {
     this.score = 0;
     this.distance = 0;
     this.lastMilestoneScore = 0;
-    this.comboCount = 0;
-    this.comboMultiplier = 1;
+    this.maxSpeed = 0;
+    this.nearMissCount = 0;
+    this.totalJumps = 0;
+    this.doubleJumps = 0;
+    this.ignoredJumps = 0;
+    this.airTime = 0;
+    this.runTime = 0;
+    this.nearMissScore = 0;
+    this.bonusScore = 0;
+    this.propertyDamageCount = 0;
+    this.propertyDamageScore = 0;
     this.obstacles = [];
     this.obstacleTimer = 0;
     this.groundX = 0;
+    // Reset air-based obstacles
+    this.fallingRockActive = false;
+    this.jetActive = false;
+    this.droneActive = false;
     this.particles = [];
     this.dayNightPhase = 0;
     this.frameCount = 0;
     this.nearMissActive = false;
+    this.lastFrameTime = 0; // Reset so first frame after restart gets default deltaTime
 
     // Regenerate clouds for fresh start
     this.generateClouds();
@@ -529,7 +849,11 @@ const DONKEY_RUNNER = {
     if (!this.gameRunning) return;
 
     try {
-      this.update();
+      const now = performance.now();
+      const deltaTime = this.lastFrameTime > 0 ? (now - this.lastFrameTime) / 1000 : 1 / 60; // seconds
+      this.lastFrameTime = now;
+
+      this.update(deltaTime);
       this.draw();
     } catch (e) {
       console.warn('[donkey-runner] loop error:', e);
@@ -540,49 +864,55 @@ const DONKEY_RUNNER = {
     this.animFrameId = requestAnimationFrame(() => this.loop());
   },
 
-  update() {
-    // Increase speed over time
-    this.speed = Math.min(this.MAX_SPEED, this.speed + this.SPEED_INCREMENT);
+  update(deltaTime) {
+    // Decrease jump cooldown timer
+    if (this.jumpCooldownTimer > 0) {
+      this.jumpCooldownTimer -= deltaTime;
+    }
 
-    // Update score
-    this.distance += this.speed * 0.01;
+    // Accumulate run time (total play time)
+    this.runTime += deltaTime;
+
+    // Accumulate air time (only while donkey is not grounded and not stumbling)
+    if (!this.donkey.grounded && !this.donkey.stumbling) {
+      this.airTime += deltaTime;
+    }
+
+    // Increase speed over time (per-second)
+    this.speed = Math.min(this.MAX_SPEED, this.speed + this.SPEED_INCREMENT * deltaTime * 60);
+
+    // Track max speed (per-second) — keep as float
+    if (this.speed > this.maxSpeed) {
+      this.maxSpeed = this.speed;
+    }
+
+    // Update score (per-second) — 33% reduced rate while airborne
+    const airbornMultiplier = this.donkey.grounded ? 1.0 : 0.1;
+    this.distance += this.speed * 0.01 * deltaTime * 60 * airbornMultiplier;
     this.score = Math.floor(this.distance * 100);
 
     // Score milestone flash check
     const currentMilestone = Math.floor(this.score / 1000) * 1000;
     if (currentMilestone > this.lastMilestoneScore && this.lastMilestoneScore > 0) {
       this.triggerMilestoneFlash();
-      // Increment combo multiplier
-      this.comboCount++;
-      this.comboMultiplier = Math.min(5, 1 + Math.floor(this.comboCount / 3)); // Max 5x at 15 milestones
-      this.updateComboDisplay();
-      this.playSound('milestone');
-      if (this.comboCount % 3 === 0) {
-        this.playSound('combo');
-      }
       this.lastMilestoneScore = currentMilestone;
     }
 
+    // Update score display
     if (this.scoreEl) {
       this.scoreEl.textContent = String(this.score).padStart(5, '0');
     }
 
-    // Update speed bar display
-    if (this.speedBarEl) {
-      const speedPercent = ((this.speed - this.INITIAL_SPEED) / (this.MAX_SPEED - this.INITIAL_SPEED)) * 100;
-      this.speedBarEl.style.width = `${Math.max(10, speedPercent)}%`;
-    }
-
-    // Update ground
-    this.groundX = (this.groundX - this.speed) % 20;
+    // Update ground (per-second)
+    this.groundX = (this.groundX - this.speed * deltaTime * 60) % 20;
 
     // Update speed lines visibility based on speed
     if (this.speedLinesEl) {
       if (this.speed > 7) {
         this.speedLinesEl.classList.add('visible');
-        // Animate speed line positions
+        // Animate speed line positions (per-second)
         this.speedLines.forEach((line, i) => {
-          const offset = (this.frameCount * (0.5 + i * 0.15)) % 700;
+          const offset = (this.frameCount * (0.5 + i * 0.15) * deltaTime * 60) % 700;
           line.style.left = `${-offset + (i * 120)}px`;
           line.style.width = `${40 + (this.speed - 7) * 10}px`;
         });
@@ -591,56 +921,56 @@ const DONKEY_RUNNER = {
       }
     }
 
-    // Update day/night cycle
-    this.dayNightPhase += (1 / 60) / 60; // 60 second cycle
+    // Update day/night cycle (60 second cycle, per-second)
+    this.dayNightPhase += deltaTime / 60;
     if (this.dayNightPhase > 1) this.dayNightPhase -= 1;
 
-    // Update clouds
+    // Update clouds (per-second)
     this.clouds.forEach(cloud => {
-      cloud.x -= cloud.speed * (this.speed / this.INITIAL_SPEED) * 0.5;
+      cloud.x -= cloud.speed * (this.speed / this.INITIAL_SPEED) * 0.5 * deltaTime * 60;
       if (cloud.x + cloud.width < 0) {
         cloud.x = 600 + Math.random() * 100;
         cloud.y = 25 + Math.random() * 50;
       }
     });
 
-    // Update stars twinkle
+    // Update stars twinkle (per-second)
     this.stars.forEach(star => {
-      star.twinkle += 0.05;
+      star.twinkle += deltaTime * 3;
     });
 
-    // Update donkey animation
-    this.donkey.frameTimer++;
-    if (this.donkey.frameTimer >= 6) {
+    // Update donkey animation (frameTimer threshold at 60fps = 6 frames = 0.1s)
+    this.donkey.frameTimer += deltaTime;
+    if (this.donkey.frameTimer >= 0.1) {
       this.donkey.frame = (this.donkey.frame + 1) % 4;
       this.donkey.frameTimer = 0;
     }
 
-    // --- Backflip update ---
+    // --- Backflip update (per-second) ---
     if (this.donkey.backflipping) {
-      this.donkey.backflipProgress += (1 / 60) / this.donkey.backflipDuration;
+      this.donkey.backflipProgress += deltaTime / this.donkey.backflipDuration;
       if (this.donkey.backflipProgress >= 1) {
         this.donkey.backflipping = false;
         this.donkey.backflipProgress = 0;
       }
     }
 
-    // Increment frame counter
+    // Increment frame counter (per-frame, not per-second)
     this.frameCount++;
 
-    // --- Stumble update ---
+    // --- Stumble update (per-second) ---
     if (this.donkey.stumbling) {
-      this.donkey.stumbleTimer += 1 / 60;
+      this.donkey.stumbleTimer += deltaTime;
       this.donkey.stumbleWobble = Math.sin(this.donkey.stumbleTimer * 30) * 0.25;
       if (this.donkey.stumbleTimer >= this.donkey.stumbleDuration) {
         this.donkey.stumbling = false;
         this.donkey.stumbleTimer = 0;
         this.donkey.stumbleWobble = 0;
-        // Reschedule next stumble
+        // Reschedule next stumble: every 30–60 seconds of gameplay (converted to frames at 60fps)
         this.donkey.stumbleNextTrigger = this.frameCount + this.randomFrameRange(1800, 3600);
       }
     } else if (!this.donkey.backflipping) {
-      // Schedule next stumble: every 30–60 seconds of gameplay (~1800–3600 frames at 60fps)
+      // Schedule next stumble: every 30–60 seconds of gameplay (converted to frames at 60fps)
       if (this.frameCount >= this.donkey.stumbleNextTrigger) {
         this.donkey.stumbling = true;
         this.donkey.stumbleTimer = 0;
@@ -648,16 +978,33 @@ const DONKEY_RUNNER = {
       }
     }
 
-    // Donkey physics
+    // Donkey physics (per-second)
     if (!this.donkey.grounded) {
-      this.donkey.vy += this.GRAVITY;
-      this.donkey.y += this.donkey.vy;
+      this.donkey.vy += this.GRAVITY * deltaTime * 60;
+      this.donkey.y += this.donkey.vy * deltaTime * 60;
+
+      // Ceiling clamp — donkey can't go above CEILING_Y
+      if (this.donkey.y < this.CEILING_Y) {
+        this.donkey.y = this.CEILING_Y;
+        this.donkey.vy = 3; // bounce down (positive = falling)
+        // Trigger a short stumble from the impact
+        if (!this.donkey.stumbling) {
+          this.donkey.stumbling = true;
+          this.donkey.stumbleTimer = 0;
+          this.donkey.stumbleDuration = 0.8; // short stumble from ceiling impact
+          // Spawn ceiling impact particles
+          this.spawnCeilingParticles();
+          this.playSound('ceiling');
+        }
+      }
 
       if (this.donkey.y >= this.GROUND_Y - this.donkey.height) {
         this.donkey.y = this.GROUND_Y - this.donkey.height;
         this.donkey.vy = 0;
         this.donkey.grounded = true;
         this.donkey.jumping = false;
+        // Reset jump count when landed
+        this.donkey.currentJumpCount = 0;
         // Reset backflip when landed
         if (this.donkey.backflipping) {
           this.donkey.backflipping = false;
@@ -671,18 +1018,18 @@ const DONKEY_RUNNER = {
     }
     this.donkey.wasGrounded = this.donkey.grounded;
 
-    // Spawn obstacles
-    this.obstacleTimer++;
-    const targetInterval = Math.max(35, this.baseObstacleInterval - this.speed * 4);
+    // Spawn obstacles (obstacleTimer threshold at 60fps = 80 frames = ~1.33s)
+    this.obstacleTimer += deltaTime * 60;
+    const targetInterval = 35 + Math.round(45 * Math.pow((12 - this.speed) / 7, 2));
     if (this.obstacleTimer >= targetInterval) {
       this.spawnObstacle();
       this.obstacleTimer = 0;
     }
 
-    // Update obstacles
+    // Update obstacles (per-second)
     for (let i = this.obstacles.length - 1; i >= 0; i--) {
       const obs = this.obstacles[i];
-      obs.x -= this.speed;
+      obs.x -= this.speed * deltaTime * 60;
 
       // Remove off-screen
       if (obs.x + obs.width < 0) {
@@ -690,11 +1037,22 @@ const DONKEY_RUNNER = {
         continue;
       }
 
-      // Near-miss detection (only check when donkey is not stumbling — allow during jumps)
-      if (!this.donkey.stumbling) {
-        const dist = (this.donkey.x + this.donkey.width) - obs.x;
-        if (dist > 0 && dist < this.nearMissThreshold && !this.nearMissActive) {
-          this.triggerNearMiss();
+      // Near-miss detection (only when donkey is airborne, not stumbling)
+      if (this.donkey.grounded || this.donkey.stumbling || this.nearMissActive) {
+        // skip: donkey is on ground, stumbling (intentional knock), or already triggered near-miss
+      } else {
+        const donkeyBottom = this.donkey.y + this.donkey.height;
+        const obstacleRight = obs.x + obs.width;
+        // Horizontal: donkey's right edge just past obstacle's right edge (within 6px)
+        const horizontalDist = (this.donkey.x + this.donkey.width) - obstacleRight;
+        if (horizontalDist > 0 && horizontalDist < 6) {
+          // Vertical: donkey's bottom just above obstacle's top (within 8px)
+          if (donkeyBottom > obs.y - 8 && donkeyBottom < obs.y) {
+            // Minimum obstacle height to avoid false positives from small cacti/rocks
+            if (obs.height >= 30) {
+              this.triggerNearMiss();
+            }
+          }
         }
       }
 
@@ -710,13 +1068,69 @@ const DONKEY_RUNNER = {
       }
     }
 
-    // Update particles — use swap-with-last for O(1) deletion
+    // Update air-based obstacles (per-second)
+    // Jet — moves across the screen
+    if (this.jetActive) {
+      this.jetX -= this.speed * deltaTime * 60;
+      if (this.jetX + this.jetWidth < 0) {
+        this.jetActive = false;
+      } else {
+        // Collision with jet — fatal even during stumble
+        if (this.checkAirCollision('jet')) {
+          this.gameOver();
+          return;
+        }
+      }
+    }
+
+    // Falling rock — drops from the sky
+    if (this.fallingRockActive) {
+      this.fallingRockY += this.fallingRockFallSpeed * deltaTime * 60;
+      // Stop falling when it hits the ground
+      if (this.fallingRockY + this.fallingRockHeight >= this.GROUND_Y) {
+        this.fallingRockActive = false;
+        // Spawn dust particles where the rock landed
+        this.spawnFallingRockLandingParticles(this.fallingRockX + this.fallingRockWidth / 2, this.GROUND_Y);
+      } else {
+        // Collision with falling rock — fatal even during stumble
+        if (this.checkAirCollision('falling-rock')) {
+          this.gameOver();
+          return;
+        }
+      }
+    }
+
+    // Drone — moves in a wave pattern
+    if (this.droneActive) {
+      this.droneX -= this.speed * deltaTime * 60;
+      this.droneWavePhase += deltaTime * 3;
+      this.droneY += this.droneDir * deltaTime * 60 * 0.5;
+      if (this.droneWavePhase >= Math.PI * 2) {
+        this.droneWavePhase -= Math.PI * 2;
+        this.droneDir *= -1;
+      }
+      if (this.droneX + this.droneWidth < 0) {
+        this.droneActive = false;
+      } else {
+        // Collision with drone — knockable during stumble
+        if (this.checkAirCollision('drone')) {
+          if (this.donkey.stumbling) {
+            this.knockDrone();
+          } else {
+            this.gameOver();
+            return;
+          }
+        }
+      }
+    }
+
+    // Update particles — use swap-with-last for O(1) deletion (per-second)
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const p = this.particles[i];
-      p.x += p.vx;
-      p.y += p.vy;
-      p.vy += 0.15; // gravity
-      p.life -= 1 / 60;
+      p.x += p.vx * deltaTime * 60;
+      p.y += p.vy * deltaTime * 60;
+      p.vy += 0.15 * deltaTime * 60; // gravity
+      p.life -= deltaTime;
       if (p.life <= 0) {
         this.particles[i] = this.particles[this.particles.length - 1];
         this.particles.pop();
@@ -735,6 +1149,55 @@ const DONKEY_RUNNER = {
     // Spawn particles from obstacle position with obstacle-type-specific colors
     this.spawnKnockParticles(obs.x + obs.width / 2, obs.y + obs.height / 2, obs.type);
     this.playSound('knock');
+
+    // Add +100 bonus points for property damage
+    this.propertyDamageCount++;
+    this.propertyDamageScore += 100;
+    const bonusScore = 100;
+    this.distance += bonusScore / 100;
+    this.score = Math.floor(this.distance * 100);
+
+    // Show +100 bonus text animation at obstacle position
+    const bonusX = obs.x + obs.width / 2;
+    const bonusY = obs.y - 5;
+    this.showPropertyDamageBonus(bonusX, bonusY);
+
+    // Check for score milestone after bonus
+    const currentMilestone = Math.floor(this.score / 1000) * 1000;
+    if (currentMilestone > this.lastMilestoneScore && this.lastMilestoneScore > 0) {
+      this.triggerMilestoneFlash();
+      this.lastMilestoneScore = currentMilestone;
+    }
+  },
+
+  // Show +100 bonus text animation at a specific position for property damage
+  showPropertyDamageBonus(x, y) {
+    const playArea = this.gamePanel ? this.gamePanel.querySelector('.donkey-play-area') : null;
+    if (!playArea) return;
+
+    // Remove any existing bonus element first
+    const existing = playArea.querySelector('.property-damage-bonus');
+    if (existing) {
+      playArea.removeChild(existing);
+    }
+
+    const el = document.createElement('div');
+    el.className = 'property-damage-bonus';
+    el.textContent = '+100';
+    el.style.left = `${x}px`;
+    el.style.top = `${y}px`;
+    playArea.appendChild(el);
+
+    // Trigger animation
+    void el.offsetWidth;
+    el.classList.add('active');
+
+    // Remove element after animation
+    setTimeout(() => {
+      if (el.parentNode) {
+        playArea.removeChild(el);
+      }
+    }, 1200);
   },
 
   spawnKnockParticles(px, py, type) {
@@ -769,7 +1232,7 @@ const DONKEY_RUNNER = {
     }
   },
 
-  // Spawn landing dust particles
+  // Spawn particles when donkey lands (after a double-jump or regular jump)
   spawnLandingParticles() {
     this.playSound('land');
     for (let i = 0; i < 8; i++) {
@@ -787,6 +1250,54 @@ const DONKEY_RUNNER = {
     }
   },
 
+  // Spawn burst particles from donkey's butt during double-jump (fart particles)
+  spawnDoubleJumpParticles() {
+    // Donkey butt position in canvas world coordinates
+    // Donkey faces right, butt is on the left side of the body
+    const buttX = this.donkey.x + 6;
+    const buttY = this.donkey.y + 26;
+
+    // Cone direction: facing slightly backwards (left) and slightly downward
+    // Center angle: ~185° (left and 5° down), spread: ±40° = 145° to 225°
+    const coneCenter = Math.PI + 0.087; // ~185 degrees in canvas radians (0 = right, π = left, π + 0.087 = slightly down)
+    const coneSpread = Math.PI * 0.44;   // ±40 degrees spread
+
+    for (let i = 0; i < 12; i++) {
+      // Pick angle within the cone
+      const angle = coneCenter + (Math.random() - 0.5) * coneSpread;
+      // Speed varies: some fast bursts, some slow drifts
+      const speed = 0.5 + Math.random() * 3;
+      // Slight downward bias for the fart cloud
+      const vyBias = 0.5;
+      this.particles.push({
+        x: buttX + (Math.random() - 0.5) * 8,
+        y: buttY + (Math.random() - 0.5) * 6,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed + vyBias,
+        size: 1.5 + Math.random() * 3,
+        color: ['#7a8a3a', '#5a6a2a', '#6a7a4a', '#8a9a5a'][Math.floor(Math.random() * 4)], // greenish-brown fart colors
+        life: 0.3 + Math.random() * 0.5,
+      });
+    }
+  },
+
+  // Spawn particles when donkey hits the ceiling
+  spawnCeilingParticles() {
+    for (let i = 0; i < 8; i++) {
+      const angle = Math.PI + (Math.random() - 0.5) * Math.PI; // spread upward from ceiling
+      const speed = 0.5 + Math.random() * 2;
+      this.particles.push({
+        x: this.donkey.x + 20 + (Math.random() - 0.5) * 20,
+        y: this.CEILING_Y + this.donkey.height / 2,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed - 1,
+        size: 1.5 + Math.random() * 2,
+        color: ['#888888', '#aaa', '#666', '#999'][Math.floor(Math.random() * 4)],
+        life: 0.2 + Math.random() * 0.3,
+      });
+    }
+  },
+
   triggerNearMiss() {
     this.nearMissActive = true;
 
@@ -800,7 +1311,7 @@ const DONKEY_RUNNER = {
 
     // Show bonus text "+50"
     if (this.bonusTextEl) {
-      const bonusAmount = 50 * this.comboMultiplier;
+      const bonusAmount = Math.floor(50);
       this.bonusTextEl.textContent = `+${bonusAmount}`;
       this.bonusTextEl.classList.remove('flash');
       void this.bonusTextEl.offsetWidth; // Force reflow for re-trigger
@@ -808,28 +1319,23 @@ const DONKEY_RUNNER = {
       setTimeout(() => this.bonusTextEl.classList.remove('flash'), 700);
     }
 
-    // Add bonus score with multiplier
-    const bonusScore = Math.floor(50 * this.comboMultiplier);
+    // Add bonus score
+    const bonusScore = Math.floor(50);
     this.distance += bonusScore / 100;
     this.score = Math.floor(this.distance * 100);
 
+    // Track score breakdown
+    this.nearMissScore += 50; // Base near miss bonus
+
+    this.nearMissCount++;
+    // Track ignored jumps — jumps made near obstacles
+    this.ignoredJumps++;
     this.playSound('nearmiss');
 
     // Reset near-miss flag after delay
     setTimeout(() => {
       this.nearMissActive = false;
     }, 600);
-  },
-
-  updateComboDisplay() {
-    if (this.comboEl) {
-      this.comboEl.textContent = `COMBO x${this.comboMultiplier}`;
-      if (this.comboMultiplier > 1) {
-        this.comboEl.classList.add('active');
-      } else {
-        this.comboEl.classList.remove('active');
-      }
-    }
   },
 
   triggerMilestoneFlash() {
@@ -887,6 +1393,51 @@ const DONKEY_RUNNER = {
 
     obs.y = this.GROUND_Y - obs.height;
     this.obstacles.push(obs);
+
+    // Air-based obstacles — spawn at higher speeds, more frequently
+    if (this.speed > 7 && Math.random() < 0.15) {
+      this.spawnJet();
+    }
+    if (this.speed > 6 && Math.random() < 0.1) {
+      this.spawnFallingRock();
+    }
+    if (this.speed > 8 && Math.random() < 0.08) {
+      this.spawnDrone();
+    }
+  },
+
+  // Spawn a flying jet — fatal even during stumble
+  spawnJet() {
+    // Jet flies at mid-air height, donkey must duck under or jump over
+    const jetHeight = 20;
+    const jetWidth = 35;
+    const jetY = this.GROUND_Y - 35 - Math.random() * 20; // ~35-55px above ground (donkey can jump under it)
+    this.jetActive = true;
+    this.jetY = jetY;
+    this.jetWidth = jetWidth;
+    this.jetHeight = jetHeight;
+    this.jetX = 620;
+  },
+
+  // Spawn a falling rock — gives time to dodge
+  spawnFallingRock() {
+    this.fallingRockActive = true;
+    this.fallingRockX = 200 + Math.random() * 300; // random x position
+    this.fallingRockY = -20; // start above screen
+    this.fallingRockWidth = 14 + Math.random() * 8;
+    this.fallingRockHeight = 10 + Math.random() * 5;
+    this.fallingRockFallSpeed = 2 + this.speed * 0.3; // faster at higher speeds
+  },
+
+  // Spawn a hovering drone — moves in a wave pattern
+  spawnDrone() {
+    this.droneActive = true;
+    this.droneX = 620;
+    this.droneY = this.GROUND_Y - 50 - Math.random() * 30;
+    this.droneWidth = 18;
+    this.droneHeight = 12;
+    this.droneDir = 1;
+    this.droneWavePhase = 0;
   },
 
   checkCollision(obs) {
@@ -904,6 +1455,86 @@ const DONKEY_RUNNER = {
     );
   },
 
+  // Check collision with air-based obstacles
+  checkAirCollision(type) {
+    const dx = this.donkey.x + 8;
+    const dy = this.donkey.y + 4;
+    const dw = this.donkey.width - 16;
+    const dh = this.donkey.height - 8;
+
+    let ox, oy, ow, oh;
+    switch (type) {
+      case 'jet':
+        ox = this.jetX;
+        oy = this.jetY;
+        ow = this.jetWidth;
+        oh = this.jetHeight;
+        break;
+      case 'falling-rock':
+        ox = this.fallingRockX;
+        oy = this.fallingRockY;
+        ow = this.fallingRockWidth;
+        oh = this.fallingRockHeight;
+        break;
+      case 'drone':
+        ox = this.droneX;
+        oy = this.droneY;
+        ow = this.droneWidth;
+        oh = this.droneHeight;
+        break;
+    }
+
+    const padding = 4;
+    return (
+      dx + dw > ox + padding &&
+      dx < ox + ow - padding &&
+      dy + dh > oy + padding &&
+      dy < oy + oh - padding
+    );
+  },
+
+  // Knock aside the drone during stumble
+  knockDrone() {
+    // Remove drone
+    this.droneActive = false;
+    // Spawn particles from drone position
+    this.spawnKnockParticles(this.droneX + this.droneWidth / 2, this.droneY + this.droneHeight / 2, 'drone');
+    this.playSound('knock');
+    // Add +100 bonus points for property damage
+    this.propertyDamageCount++;
+    this.propertyDamageScore += 100;
+    const bonusScore = 100;
+    this.distance += bonusScore / 100;
+    this.score = Math.floor(this.distance * 100);
+    // Show +100 bonus text animation at drone position
+    const bonusX = this.droneX + this.droneWidth / 2;
+    const bonusY = this.droneY - 5;
+    this.showPropertyDamageBonus(bonusX, bonusY);
+    // Check for score milestone after bonus
+    const currentMilestone = Math.floor(this.score / 1000) * 1000;
+    if (currentMilestone > this.lastMilestoneScore && this.lastMilestoneScore > 0) {
+      this.triggerMilestoneFlash();
+      this.lastMilestoneScore = currentMilestone;
+    }
+  },
+
+  // Spawn dust particles when falling rock hits the ground
+  spawnFallingRockLandingParticles(px, py) {
+    for (let i = 0; i < 10; i++) {
+      const angle = Math.PI + (Math.random() - 0.5) * Math.PI; // spread left and right
+      const speed = 0.5 + Math.random() * 2;
+      this.particles.push({
+        x: px + (Math.random() - 0.5) * 10,
+        y: py,
+        vx: Math.cos(angle) * speed,
+        vy: -0.5 - Math.random() * 1.5,
+        size: 2 + Math.random() * 3,
+        color: '#6B6B6B',
+        life: 0.3 + Math.random() * 0.4,
+      });
+    }
+  },
+
   gameOver() {
     this.gameRunning = false;
     this.gameOverActive = true;
@@ -912,7 +1543,8 @@ const DONKEY_RUNNER = {
     this.playSound('gameover');
 
     // Update high score
-    if (this.score > this.highScore) {
+    const isNewHighScore = this.score > this.highScore;
+    if (isNewHighScore) {
       this.highScore = this.score;
       localStorage.setItem('hasW_donkeyHighScore', this.highScore);
       if (this.highScoreEl) {
@@ -920,11 +1552,69 @@ const DONKEY_RUNNER = {
       }
     }
 
-    // Show game over screen with score
+    // Show game over screen with score breakdown and stats
     if (this.gameOverEl) {
-      const scoreDisplay = document.getElementById('donkey-gameover-score');
-      if (scoreDisplay) {
-        scoreDisplay.textContent = `SCORE: ${String(this.score).padStart(5, '0')}`;
+      // Show new high score badge if applicable
+      const newBadgeEl = document.getElementById('donkey-gameover-new');
+      if (newBadgeEl) {
+        if (isNewHighScore) {
+          const newScoreEl = document.getElementById('donkey-gameover-new-score');
+          if (newScoreEl) {
+            newScoreEl.textContent = String(this.highScore).padStart(5, '0');
+          }
+          newBadgeEl.classList.remove('hidden');
+        } else {
+          newBadgeEl.classList.add('hidden');
+        }
+      }
+      // Populate time-based stats (bottom-left)
+      const runtimeDisplay = document.getElementById('donkey-gameover-runtime');
+      if (runtimeDisplay) {
+        const minutes = Math.floor(this.runTime / 60);
+        const seconds = Math.floor(this.runTime % 60);
+        runtimeDisplay.textContent = minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
+      }
+      const airTimeDisplay = document.getElementById('donkey-gameover-airtime');
+      if (airTimeDisplay) {
+        const minutes = Math.floor(this.airTime / 60);
+        const seconds = Math.floor(this.airTime % 60);
+        airTimeDisplay.textContent = minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
+      }
+      const airPercentDisplay = document.getElementById('donkey-gameover-airpercent');
+      if (airPercentDisplay) {
+        const airPercent = this.runTime > 0 ? Math.round((this.airTime / this.runTime) * 100) : 0;
+        airPercentDisplay.textContent = `${airPercent}%`;
+      }
+      // Populate jump-based stats (bottom-right)
+      const totalJumpsDisplay = document.getElementById('donkey-gameover-totaljumps');
+      if (totalJumpsDisplay) {
+        totalJumpsDisplay.textContent = this.totalJumps;
+      }
+      const doubleJumpsDisplay = document.getElementById('donkey-gameover-doublejumps');
+      if (doubleJumpsDisplay) {
+        doubleJumpsDisplay.textContent = this.doubleJumps;
+      }
+      const ignoredJumpsDisplay = document.getElementById('donkey-gameover-ignoredjumps');
+      if (ignoredJumpsDisplay) {
+        ignoredJumpsDisplay.textContent = this.ignoredJumps;
+      }
+      // Populate side stats (middle edges)
+      const distanceDisplay = document.getElementById('donkey-gameover-distance');
+      if (distanceDisplay) {
+        distanceDisplay.textContent = `${this.distance.toFixed(1)}km`;
+      }
+      const maxSpeedDisplay = document.getElementById('donkey-gameover-maxspeed');
+      if (maxSpeedDisplay) {
+        maxSpeedDisplay.textContent = this.maxSpeed.toFixed(1);
+      }
+      const nearMissesDisplay = document.getElementById('donkey-gameover-nearmisses');
+      if (nearMissesDisplay) {
+        nearMissesDisplay.textContent = this.nearMissCount;
+      }
+      // Populate property damage stat (top-left, now 4 items)
+      const propertyDamageDisplay = document.getElementById('donkey-gameover-property-damage');
+      if (propertyDamageDisplay) {
+        propertyDamageDisplay.textContent = String(this.propertyDamageCount);
       }
       this.gameOverEl.classList.remove('hidden');
     }
@@ -937,8 +1627,11 @@ const DONKEY_RUNNER = {
 
     setTimeout(() => { this.draw(); }, 100);
 
-    // Record timestamp for restart cooldown (prevents held-key instant restart)
-    this.gameOverTimestamp = performance.now();
+    // Set restart cooldown — prevents held-key instant restart (300ms cooldown for all input methods)
+    this.restartCooldown = true;
+    setTimeout(() => {
+      this.restartCooldown = false;
+    }, 300);
 
     this.gameOverCooldown = true;
     setTimeout(() => {
@@ -992,6 +1685,11 @@ const DONKEY_RUNNER = {
 
     // Obstacles
     this.obstacles.forEach(obs => this.drawObstacle(ctx, obs));
+
+    // Air-based obstacles
+    if (this.jetActive) this.drawJet(ctx);
+    if (this.fallingRockActive) this.drawFallingRock(ctx);
+    if (this.droneActive) this.drawDrone(ctx);
 
     // Particles
     this.drawParticles(ctx);
@@ -1433,6 +2131,204 @@ const DONKEY_RUNNER = {
     ctx.fill();
     ctx.beginPath();
     ctx.arc(obs.x + obs.width - 8, obs.y + 18, 1.5, 0, Math.PI * 2);
+    ctx.fill();
+  },
+
+  // Draw a flying jet — fatal even during stumble
+  drawJet(ctx) {
+    const x = this.jetX;
+    const y = this.jetY;
+    const w = this.jetWidth;
+    const h = this.jetHeight;
+
+    // Jet body (pointing right, flying left)
+    ctx.fillStyle = '#555';
+    ctx.strokeStyle = '#333';
+    ctx.lineWidth = 1;
+
+    // Main body (pointed nose facing left)
+    ctx.beginPath();
+    ctx.moveTo(x - 5, y + h / 2); // nose tip
+    ctx.lineTo(x, y + h * 0.2);
+    ctx.lineTo(x + w, y + h * 0.2);
+    ctx.lineTo(x + w, y + h * 0.8);
+    ctx.lineTo(x, y + h * 0.8);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Nose cone
+    ctx.fillStyle = '#444';
+    ctx.beginPath();
+    ctx.moveTo(x - 5, y + h / 2);
+    ctx.lineTo(x + 3, y + h * 0.35);
+    ctx.lineTo(x + 3, y + h * 0.65);
+    ctx.closePath();
+    ctx.fill();
+
+    // Wings
+    ctx.fillStyle = '#666';
+    // Top wing
+    ctx.beginPath();
+    ctx.moveTo(x + w * 0.3, y + h * 0.15);
+    ctx.lineTo(x + w * 0.5, y - 3);
+    ctx.lineTo(x + w * 0.7, y + h * 0.15);
+    ctx.closePath();
+    ctx.fill();
+    // Bottom wing
+    ctx.beginPath();
+    ctx.moveTo(x + w * 0.3, y + h * 0.85);
+    ctx.lineTo(x + w * 0.5, y + h + 3);
+    ctx.lineTo(x + w * 0.7, y + h * 0.85);
+    ctx.closePath();
+    ctx.fill();
+
+    // Tail fins
+    ctx.fillStyle = '#555';
+    // Top tail fin
+    ctx.beginPath();
+    ctx.moveTo(x + w * 0.85, y + h * 0.2);
+    ctx.lineTo(x + w + 4, y - 1);
+    ctx.lineTo(x + w + 4, y + h * 0.3);
+    ctx.closePath();
+    ctx.fill();
+    // Bottom tail fin
+    ctx.beginPath();
+    ctx.moveTo(x + w * 0.85, y + h * 0.8);
+    ctx.lineTo(x + w + 4, y + h + 1);
+    ctx.lineTo(x + w + 4, y + h * 0.7);
+    ctx.closePath();
+    ctx.fill();
+
+    // Cockpit
+    ctx.fillStyle = 'rgba(150, 200, 255, 0.5)';
+    ctx.beginPath();
+    ctx.ellipse(x + w * 0.5, y + h * 0.5, w * 0.15, h * 0.15, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Engine glow
+    ctx.fillStyle = 'rgba(255, 150, 50, 0.3)';
+    ctx.beginPath();
+    ctx.ellipse(x + w + 2, y + h * 0.5, 4, h * 0.15, 0, 0, Math.PI * 2);
+    ctx.fill();
+  },
+
+  // Draw a falling rock
+  drawFallingRock(ctx) {
+    const x = this.fallingRockX;
+    const y = this.fallingRockY;
+    const w = this.fallingRockWidth;
+    const h = this.fallingRockHeight;
+
+    // Dark warning glow around rock
+    ctx.fillStyle = 'rgba(255, 50, 30, 0.15)';
+    ctx.beginPath();
+    ctx.ellipse(x + w / 2, y + h / 2, w + 6, h + 6, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Rock body
+    ctx.fillStyle = '#6B6B6B';
+    ctx.strokeStyle = '#4A4A4A';
+    ctx.lineWidth = 1;
+
+    ctx.beginPath();
+    ctx.moveTo(x + 2, y);
+    ctx.lineTo(x + w - 2, y + 1);
+    ctx.lineTo(x + w, y + h - 2);
+    ctx.lineTo(x + 1, y + h);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Highlight
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+    ctx.beginPath();
+    ctx.ellipse(x + w / 2, y + h / 2, w / 3, h / 3, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Warning symbol
+    ctx.fillStyle = '#e8a838';
+    ctx.font = 'bold 10px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('!', x + w / 2, y + h / 2 + 4);
+  },
+
+  // Draw a hovering drone
+  drawDrone(ctx) {
+    const x = this.droneX;
+    const y = this.droneY;
+    const w = this.droneWidth;
+    const h = this.droneHeight;
+
+    // Drone body
+    ctx.fillStyle = '#444';
+    ctx.strokeStyle = '#333';
+    ctx.lineWidth = 1;
+
+    // Main body
+    ctx.beginPath();
+    ctx.roundRect(x + 2, y + h * 0.3, w - 4, h * 0.4, 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // Central hub
+    ctx.fillStyle = '#555';
+    ctx.beginPath();
+    ctx.arc(x + w / 2, y + h / 2, h * 0.25, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // Propeller arms
+    ctx.strokeStyle = '#555';
+    ctx.lineWidth = 1;
+    // Top arm
+    ctx.beginPath();
+    ctx.moveTo(x + w * 0.35, y + h * 0.3);
+    ctx.lineTo(x + w * 0.35, y);
+    ctx.stroke();
+    // Bottom arm
+    ctx.beginPath();
+    ctx.moveTo(x + w * 0.65, y + h * 0.7);
+    ctx.lineTo(x + w * 0.65, y + h);
+    ctx.stroke();
+
+    // Spinning propellers
+    const propAngle = this.droneWavePhase * 2;
+    ctx.strokeStyle = 'rgba(200, 200, 200, 0.4)';
+    ctx.lineWidth = 0.5;
+    // Top propeller
+    ctx.beginPath();
+    ctx.moveTo(x + w * 0.35 + Math.cos(propAngle) * 6, y - 2);
+    ctx.lineTo(x + w * 0.35 - Math.cos(propAngle) * 6, y - 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x + w * 0.35 + Math.sin(propAngle) * 6, y - 2);
+    ctx.lineTo(x + w * 0.35 - Math.sin(propAngle) * 6, y - 2);
+    ctx.stroke();
+    // Bottom propeller
+    ctx.beginPath();
+    ctx.moveTo(x + w * 0.65 + Math.cos(propAngle) * 6, y + h + 2);
+    ctx.lineTo(x + w * 0.65 - Math.cos(propAngle) * 6, y + h + 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x + w * 0.65 + Math.sin(propAngle) * 6, y + h + 2);
+    ctx.lineTo(x + w * 0.65 - Math.sin(propAngle) * 6, y + h + 2);
+    ctx.stroke();
+
+    // Propeller centers
+    ctx.fillStyle = '#666';
+    ctx.beginPath();
+    ctx.arc(x + w * 0.35, y, 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x + w * 0.65, y + h, 2, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Red light
+    const lightAlpha = 0.5 + Math.sin(propAngle * 2) * 0.3;
+    ctx.fillStyle = `rgba(255, 50, 50, ${lightAlpha})`;
+    ctx.beginPath();
+    ctx.arc(x + w / 2, y + h * 0.3, 1.5, 0, Math.PI * 2);
     ctx.fill();
   },
 };

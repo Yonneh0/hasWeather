@@ -1,0 +1,399 @@
+diff --git a/donkey.diff b/donkey.diff
+index ad3a1c0..e69de29 100644
+--- a/donkey.diff
++++ b/donkey.diff
+@@ -1,394 +0,0 @@
+-diff --git a/css/main.css b/css/main.css
+-index cbc4b29..1048c8c 100644
+---- a/css/main.css
+-+++ b/css/main.css
+-@@ -13,5 +13,6 @@
+- @import 'modal.css';
+- @import 'favorites.css';
+- @import 'outage.css';
+--@import 'donkey-runner.css';
+--@import 'utilities.css';
+-+ @import 'donkey-runner.css';
+-+ @import 'donkey-sweeper.css';
+-+ @import 'utilities.css';
+-diff --git a/index.html b/index.html
+-index 0471d0b..a4f67ac 100644
+---- a/index.html
+-+++ b/index.html
+-@@ -5,6 +5,8 @@
+- <meta name="viewport" content="width=device-width, initial-scale=1.0">
+- <title>hasW Weather</title>
+- <link rel="stylesheet" href="css/main.css">
+-+<link rel="stylesheet" href="css/donkey-runner.css">
+-+<link rel="stylesheet" href="css/donkey-sweeper.css">
+- </head>
+- <body translate="no">
+- 
+-@@ -15,6 +17,7 @@
+-   <button id="unit-toggle" class="btn btn-small" title="Toggle °F/°C">°F</button>
+-    <button id="refresh-btn" class="btn btn-small" title="Refresh data">⟳</button>
+-    <button id="game-btn" class="btn btn-small" title="Donkey Runner Minigame">🫏</button>
+-+   <button id="sweeper-btn" class="btn btn-small" title="Donkey Sweeper Minigame">💩</button>
+-    <div class="fav-wrapper">
+-     <button id="fav-btn" class="btn btn-small" title="Favorites">★</button>
+-     <div id="fav-dropdown" class="fav-dropdown">
+-@@ -64,6 +67,7 @@
+- <script src="js/refresh-utils.js"></script>
+-  <script src="js/network-monitor.js"></script>
+-  <script src="js/donkey-runner.js"></script>
+-+ <script src="js/donkey-sweeper.js"></script>
+-  <script src="js/main-run.js"></script>
+-  <script src="js/favorites-ui.js"></script>
+-  <script src="js/main.js"></script>
+-diff --git a/js/cache.js b/js/cache.js
+-index 4a8dda5..da390f9 100644
+---- a/js/cache.js
+-+++ b/js/cache.js
+-@@ -98,15 +98,4 @@ const DataCache = {
+-     console.log(`[DataCache] CLEARED ALL: ${keysToRemove.length} entries`);
+-   },
+- 
+--  // Get total cache size in KB
+--  getSize() {
+--    let total = 0;
+--    for (let i = 0; i < localStorage.length; i++) {
+--      const key = localStorage.key(i);
+--      if (key && key.startsWith('hasw_cache_')) {
+--        total += localStorage.key(i).length + localStorage.getItem(key).length;
+--      }
+--    }
+--    return Math.round(total / 1024 * 100) / 100;
+--  }
+- };
+-diff --git a/js/charts.js b/js/charts.js
+-index 61f7ae2..35d6398 100644
+---- a/js/charts.js
+-+++ b/js/charts.js
+-@@ -235,7 +235,7 @@ function drawAllCharts() {
+-   weatherData.forEach((data) => {
+-     if (!data.weather) return;
+-     const hourly = data.weather.hourly || {};
+--    const safeName = sanitizeId(data.name);
+-+    const safeName = sanitizeId(data.name, `${data.latitude || 0}_${data.longitude || 0}`);
+-     if (Object.keys(hourly).length === 0) return;
+-     drawMergedChart(`chart-merged-${safeName}`, data.weather, data.highTemp, data.lowTemp);
+-     drawCombinedChart(`chart-combined-${safeName}`, data.weather);
+-diff --git a/js/donkey-runner.js b/js/donkey-runner.js
+-index a0c0100..2d115b8 100644
+---- a/js/donkey-runner.js
+-+++ b/js/donkey-runner.js
+-@@ -501,6 +501,8 @@ const DONKEY_RUNNER = {
+-     this.gamePanel.classList.remove('donkey-visible');
+-     this.gamePanel.classList.add('donkey-hidden');
+-     if (typeof adjustOutagePosition === 'function') adjustOutagePosition();
+-+    // Update panel positions for dual-panel layout
+-+    if (typeof syncPanelPositions === 'function') syncPanelPositions();
+-   },
+- 
+-   stop() {
+-@@ -521,8 +523,10 @@ const DONKEY_RUNNER = {
+-       if (this.gameOverEl) this.gameOverEl.classList.add('hidden');
+-       this.resetGame();
+-       this.drawIdle();
+--      if (typeof adjustOutagePosition === 'function') adjustOutagePosition();
+-     }
+-+    if (typeof adjustOutagePosition === 'function') adjustOutagePosition();
+-+    // Update panel positions for dual-panel layout
+-+    if (typeof syncPanelPositions === 'function') syncPanelPositions();
+-   },
+- 
+-   loop() {
+-diff --git a/js/favorites-ui.js b/js/favorites-ui.js
+-index c407b71..42d9309 100644
+---- a/js/favorites-ui.js
+-+++ b/js/favorites-ui.js
+-@@ -345,7 +345,9 @@ async function addFavoriteCard(city) {
+-   card.className = 'city-card';
+-   card.dataset.cityName = data.name;
+-   card.style.overflow = 'visible';
+--  card.innerHTML = renderCityCard(data);
+-+  // Pass the coordinate-based suffix to renderCityCard so canvas IDs are unique
+-+  const coordSuffix = `${data.latitude || 0}_${data.longitude || 0}`;
+-+  card.innerHTML = renderCityCard(data, coordSuffix);
+-   grid.appendChild(card);
+- 
+-   // Update weatherData
+-@@ -357,7 +359,7 @@ async function addFavoriteCard(city) {
+-   card.style.background = `linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.04)), ${bg}`;
+- 
+-   // Draw charts for this card
+--  const safeName = sanitizeId(data.name);
+-+  const safeName = sanitizeId(data.name, coordSuffix);
+-   setTimeout(() => {
+-     drawMergedChart(`chart-merged-${safeName}`, data.weather, data.highTemp, data.lowTemp);
+-     drawCombinedChart(`chart-combined-${safeName}`, data.weather);
+-diff --git a/js/main.js b/js/main.js
+-index 35a0f27..4cdb775 100644
+---- a/js/main.js
+-+++ b/js/main.js
+-@@ -15,7 +15,8 @@ document.addEventListener('DOMContentLoaded', () => {
+- 
+-   const unitBtn = document.getElementById('unit-toggle');
+-   const refreshBtn = document.getElementById('refresh-btn');
+--  const gameBtn = document.getElementById('game-btn');
+-+   const gameBtn = document.getElementById('game-btn');
+-+   const sweeperBtn = document.getElementById('sweeper-btn');
+-   const favBtn = document.getElementById('fav-btn');
+-   const favDropdown = document.getElementById('fav-dropdown');
+-   const favSearch = document.getElementById('fav-search');
+-@@ -26,7 +27,8 @@ document.addEventListener('DOMContentLoaded', () => {
+- 
+-   if (unitBtn) unitBtn.addEventListener('click', toggleUnit);
+-   if (refreshBtn) refreshBtn.addEventListener('click', refresh);
+--  if (gameBtn) gameBtn.addEventListener('click', toggleGame);
+-+   if (gameBtn) gameBtn.addEventListener('click', toggleGame);
+-+   if (sweeperBtn) sweeperBtn.addEventListener('click', toggleSweeper);
+-   if (searchBtn) searchBtn.addEventListener('click', handleCitySearch);
+-   if (cityInput) {
+-     cityInput.addEventListener('keydown', e => {
+-@@ -166,3 +168,18 @@ function toggleGame() {
+-     gameBtn.classList.add('active');
+-   }
+- }
+-+
+-+// ===== SWEEPER TOGGLE =====
+-+function toggleSweeper() {
+-+  const sweeperBtn = document.getElementById('sweeper-btn');
+-+  if (!sweeperBtn || typeof DONKEY_SWEEPER === 'undefined') return;
+-+
+-+  const isVisible = !DONKEY_SWEEPER.gamePanel?.classList.contains('sweeper-hidden');
+-+  if (isVisible) {
+-+    DONKEY_SWEEPER.close();
+-+    sweeperBtn.classList.remove('active');
+-+  } else {
+-+    DONKEY_SWEEPER.toggle();
+-+    sweeperBtn.classList.add('active');
+-+  }
+-+}
+-diff --git a/js/network-monitor.js b/js/network-monitor.js
+-index 8770c9d..1f39bff 100644
+---- a/js/network-monitor.js
+-+++ b/js/network-monitor.js
+-@@ -12,6 +12,8 @@ const OUTAGE_MESSAGES = [
+-   "👽 Aliens intercepted your WiFi signal.",
+-   "🧊 Your connection froze. Literally.",
+-   "🎪 The router joined a circus. No return date.",
+-+  "💩 The network met a 💩. It didn't go well.",
+-+  "🦠 The network has a cold. Stay away.",
+- ];
+- 
+- const RETRY_DELAYS = [2000, 4000, 8000, 15000];
+-@@ -107,12 +109,9 @@ function adjustOutagePositionImmediate() {
+-   const panel = document.getElementById('outage-panel');
+-   if (!panel) return;
+- 
+--  const donkeyVisible = DONKEY_RUNNER && DONKEY_RUNNER.gamePanel &&
+--    !DONKEY_RUNNER.gamePanel.classList.contains('donkey-hidden');
+--
+--  if (donkeyVisible) {
+--    const donkeyRect = DONKEY_RUNNER.gamePanel.getBoundingClientRect();
+--    panel.style.top = (donkeyRect.bottom + 20) + 'px';
+-+  const bottomEdge = getLowestPanelBottom();
+-+  if (bottomEdge !== null) {
+-+    panel.style.top = (bottomEdge + 20) + 'px';
+-     panel.style.bottom = 'auto';
+-   } else {
+-     panel.style.top = '64px';
+-@@ -126,10 +125,7 @@ function adjustOutagePosition() {
+-   const panel = document.getElementById('outage-panel');
+-   if (!panel) return;
+- 
+--  const donkeyVisible = DONKEY_RUNNER && DONKEY_RUNNER.gamePanel &&
+--    !DONKEY_RUNNER.gamePanel.classList.contains('donkey-hidden');
+--
+--  // The donkey panel has a 0.4s CSS transition on `top`. We must wait for it
+-+  // The game panels have a 0.4s CSS transition on `top`. We must wait for it
+-   // to finish animating before calling getBoundingClientRect(), otherwise we
+-   // measure a mid-transition (incorrect) position.  450ms ≈ transition duration
+-   // plus a small safety margin.
+-@@ -147,9 +143,9 @@ function adjustOutagePosition() {
+-     if (!document.getElementById('outage-panel')) return;
+-     const p = document.getElementById('outage-panel');
+- 
+--    if (donkeyVisible) {
+--      const donkeyRect = DONKEY_RUNNER.gamePanel.getBoundingClientRect();
+--      p.style.top = (donkeyRect.bottom + 20) + 'px';
+-+    const bottomEdge = getLowestPanelBottom();
+-+    if (bottomEdge !== null) {
+-+      p.style.top = (bottomEdge + 20) + 'px';
+-       p.style.bottom = 'auto';
+-     } else {
+-       p.style.top = '64px';
+-@@ -158,6 +154,54 @@ function adjustOutagePosition() {
+-   }, transitionDelay);
+- }
+- 
+-+// Get the bottom edge of the lowest visible game panel (Donkey Runner or Donkey Sweeper).
+-+// Returns null if no panels are visible.
+-+function getLowestPanelBottom() {
+-+  const runners = [];
+-+  if (DONKEY_RUNNER && DONKEY_RUNNER.gamePanel &&
+-+      !DONKEY_RUNNER.gamePanel.classList.contains('donkey-hidden')) {
+-+    runners.push(DONKEY_RUNNER.gamePanel.getBoundingClientRect().bottom);
+-+  }
+-+  if (DONKEY_SWEEPER && DONKEY_SWEEPER.gamePanel &&
+-+      !DONKEY_SWEEPER.gamePanel.classList.contains('sweeper-hidden')) {
+-+    runners.push(DONKEY_SWEEPER.gamePanel.getBoundingClientRect().bottom);
+-+  }
+-+  if (runners.length === 0) return null;
+-+  return Math.max(...runners);
+-+}
+-+
+-+// Sync panel positions when either game is toggled.
+-+// When both are open, offset them side-by-side so they don't overlap.
+-+function syncPanelPositions() {
+-+  const runnerVisible = DONKEY_RUNNER && DONKEY_RUNNER.gamePanel &&
+-+    !DONKEY_RUNNER.gamePanel.classList.contains('donkey-hidden');
+-+  const sweeperVisible = DONKEY_SWEEPER && DONKEY_SWEEPER.gamePanel &&
+-+    !DONKEY_SWEEPER.gamePanel.classList.contains('sweeper-hidden');
+-+  const bothVisible = runnerVisible && sweeperVisible;
+-+
+-+  // Donkey Runner positioning
+-+  if (DONKEY_RUNNER && DONKEY_RUNNER.gamePanel) {
+-+    if (bothVisible) {
+-+      DONKEY_RUNNER.gamePanel.style.left = 'calc(50% - 330px)';
+-+      DONKEY_RUNNER.gamePanel.style.transform = 'translateX(0)';
+-+    } else {
+-+      DONKEY_RUNNER.gamePanel.style.left = '';
+-+      DONKEY_RUNNER.gamePanel.style.transform = '';
+-+    }
+-+  }
+-+
+-+  // Donkey Sweeper positioning
+-+  if (DONKEY_SWEEPER && DONKEY_SWEEPER.gamePanel) {
+-+    if (bothVisible) {
+-+      DONKEY_SWEEPER.gamePanel.style.left = 'calc(50% + 10px)';
+-+      DONKEY_SWEEPER.gamePanel.style.transform = 'translateX(0)';
+-+    } else {
+-+      DONKEY_SWEEPER.gamePanel.style.left = '';
+-+      DONKEY_SWEEPER.gamePanel.style.transform = '';
+-+    }
+-+  }
+-+}
+-+
+- function cycleOutageMessage() {
+-   if (!_outageVisible) return;
+- 
+-diff --git a/js/render.js b/js/render.js
+-index bb78b52..18f61aa 100644
+---- a/js/render.js
+-+++ b/js/render.js
+-@@ -1,4 +1,12 @@
+- // ===== RENDER =====
+-+
+-+// Parse time string as decimal hours so minutes are accounted for (e.g., "18:45" → 18.75)
+-+function parseDecimalTime(timeStr, fallback) {
+-+  if (!timeStr) return fallback;
+-+  const [h, m] = timeStr.split(':').map(Number);
+-+  return h + (m / 60);
+-+}
+-+
+- function renderAll() {
+-   const grid = document.getElementById('city-grid');
+-   if (!grid) return;
+-@@ -12,7 +20,8 @@ function renderAll() {
+-     card.style.animationDelay = `${i * 120}ms`;
+-     card.style.animationFillMode = 'forwards';
+-     card.style.overflow = 'visible';
+--    card.innerHTML = renderCityCard(data);
+-+    const suffix = data.latitude != null && data.longitude != null ? `${data.latitude}_${data.longitude}` : undefined;
+-+    card.innerHTML = renderCityCard(data, suffix);
+-     grid.appendChild(card);
+-   });
+- 
+-@@ -37,7 +46,7 @@ function applyBackgrounds() {
+-   });
+- }
+- 
+--function renderCityCard(data) {
+-+function renderCityCard(data, suffix) {
+-   const w = data.weather;
+-   const a = data.aqi;
+-   if (!w || !w.current) {
+-@@ -72,12 +81,6 @@ function renderCityCard(data) {
+-   const now = new Date();
+-   const currentHour = now.getHours();
+- 
+--  // Parse as decimal hours so minutes are accounted for (e.g., 18:45 → 18.75)
+--  function parseDecimalTime(timeStr, fallback) {
+--    if (!timeStr) return fallback;
+--    const [h, m] = timeStr.split(':').map(Number);
+--    return h + (m / 60);
+--  }
+-   const sunriseTime = parseDecimalTime(sunrise, 6);
+-   const sunsetTime = parseDecimalTime(sunset, 19);
+-   const isDay = isDaytime(currentHour, sunriseTime, sunsetTime);
+-@@ -144,7 +147,9 @@ function renderCityCard(data) {
+-     </div>`;
+-   }
+- 
+--  const safeName = sanitizeId(data.name);
+-+  const safeName = sanitizeId(data.name, suffix);
+-+  const mergedCanvasId = `chart-merged-${safeName}`;
+-+  const combinedCanvasId = `chart-combined-${safeName}`;
+- 
+-   // Slice to 24 hours (current day only) for chart display
+-   const temps = (hourly?.temperature_2m || []).slice(0, 24);
+-@@ -162,7 +167,7 @@ function renderCityCard(data) {
+-   const rainStats = chartStats(rain);
+- 
+-   return `
+--    <canvas class="chart-canvas chart-merged" id="chart-merged-${safeName}" style="position:absolute;top:0;left:0;right:0;bottom:0;z-index:0;pointer-events:none;"></canvas>
+-+    <canvas class="chart-canvas chart-merged" id="${mergedCanvasId}" style="position:absolute;top:0;left:0;right:0;bottom:0;z-index:0;pointer-events:none;"></canvas>
+-     <div style="position:relative;z-index:2;">
+-     <div class="city-header">
+-       <div class="city-name-wrap">
+-@@ -195,7 +200,7 @@ function renderCityCard(data) {
+-       </div>
+-     </div>
+-     <div class="combined-chart-row">
+--      <canvas class="combined-chart-canvas" id="chart-combined-${safeName}"></canvas>
+-+      <canvas class="combined-chart-canvas" id="${combinedCanvasId}"></canvas>
+-       <div class="combined-chart-stats">
+-         <div class="stat-group">
+-           <div class="stat-group-title">Humidity</div>
+-diff --git a/js/utils.js b/js/utils.js
+-index 443d8a7..12a680e 100644
+---- a/js/utils.js
+-+++ b/js/utils.js
+-@@ -40,12 +40,13 @@ function bearingToCompass(deg) {
+- }
+- 
+- function aqiLabel(aqi) {
+--  if (!aqi && aqi !== 0) return { label: '—', cls: '' };
+-+  if (aqi === null || aqi === undefined || aqi === false || aqi !== aqi) return { label: '—', cls: '' };
+-   if (aqi <= 50) return { label: 'Good', cls: 'aqi-good' };
+-   if (aqi <= 100) return { label: 'Moderate', cls: 'aqi-moderate' };
+-   return { label: 'Unhealthy', cls: 'aqi-unhealthy' };
+- }
+- 
+--function sanitizeId(str) {
+--  return str.replace(/[^a-zA-Z0-9]/g, '_');
+-+function sanitizeId(str, suffix) {
+-+  const base = str.replace(/[^a-zA-Z0-9]/g, '_');
+-+  return suffix ? `${base}_${suffix}` : base;
+- }
+-diff --git a/js/weather.js b/js/weather.js
+-index ec311cd..68ff032 100644
+---- a/js/weather.js
+-+++ b/js/weather.js
+-@@ -48,11 +48,11 @@ async function fetchWeatherForCities(cities) {
+- 
+-     const result = new Array(cities.length);
+- 
+--    // First fill cached results
+-+    // First fill cached results (use get directly — it already handles expiration internally)
+-     for (let i = 0; i < cities.length; i++) {
+-       const ck = weatherCacheKey(cities[i].latitude, cities[i].longitude);
+--      if (DataCache.has(ck, 'weather')) {
+--        const entry = DataCache.get(ck, 'weather');
+-+      const entry = DataCache.get(ck, 'weather');
+-+      if (entry) {
+-         result[i] = { ...cities[i], weather: entry.weather, aqi: entry.aqi };
+-       }
+-     }

@@ -15,6 +15,7 @@
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 60px rgba(100, 200, 100, 0.05);
   transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease, top 0.4s cubic-bezier(0.16, 1, 0.3, 1);
   transform-origin: top center;
+  will-change: transform, opacity;
 }
 
 .donkey-panel.donkey-visible {
@@ -87,15 +88,6 @@
   min-width: 0;
 }
 
-.donkey-header-score-label {
-  font-size: 0.55rem;
-  font-weight: 700;
-  color: rgba(255, 255, 255, 0.4);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  line-height: 1.2;
-}
-
 /* Score display - 7-segment look */
 .donkey-score {
   font-size: 1.8rem;
@@ -129,15 +121,6 @@
   min-width: 0;
 }
 
-.donkey-header-highscore-label {
-  font-size: 0.55rem;
-  font-weight: 700;
-  color: rgba(255, 255, 255, 0.35);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  line-height: 1.2;
-}
-
 /* High score display */
 .donkey-highscore {
   font-size: 1.2rem;
@@ -154,63 +137,6 @@
   padding: 0.3rem 0.8rem 0.8rem;
 }
 
-/* Combo indicator */
-.donkey-combo {
-  font-size: 0.7rem;
-  font-weight: 700;
-  color: #f59e0b;
-  letter-spacing: 0.08em;
-  opacity: 0;
-  transition: opacity 0.2s ease, transform 0.2s ease;
-  text-shadow: 0 0 8px rgba(245, 158, 11, 0.3);
-}
-
-.donkey-combo.active {
-  opacity: 1;
-}
-
-/* Speed bar */
-.donkey-speed-bar {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  margin-bottom: 0.4rem;
-  font-size: 0.65rem;
-  font-family: 'Courier New', monospace;
-  color: rgba(255, 255, 255, 0.3);
-  pointer-events: none;
-}
-
-.donkey-speed-label {
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  min-width: 24px;
-}
-
-.donkey-speed-label-text {
-  font-weight: 400;
-  color: rgba(255, 255, 255, 0.45);
-  min-width: 55px;
-  text-align: right;
-  letter-spacing: 0.03em;
-}
-
-.donkey-speed-track {
-  flex: 1;
-  height: 4px;
-  background: rgba(255, 255, 255, 0.08);
-  border-radius: 2px;
-  overflow: hidden;
-}
-
-.donkey-speed-fill {
-  height: 100%;
-  width: 10%;
-  background: linear-gradient(90deg, #4ade80, #f59e0b, #ef4444);
-  border-radius: 2px;
-  transition: width 0.3s ease;
-}
-
 /* Sound toggle button - muted state (inherits header button base styles) */
 .donkey-sound-btn.muted {
   color: rgba(255, 255, 255, 0.35);
@@ -221,12 +147,14 @@
 .donkey-play-area {
   position: relative;
   width: 100%;
+  height: 180px;
+  overflow: hidden;
 }
 
 /* Canvas inside play area */
 #donkey-canvas {
   width: 100%;
-  height: 180px;
+  height: 100%;
   display: block;
   cursor: pointer;
 }
@@ -264,7 +192,55 @@
   color: rgba(255, 255, 255, 0.3);
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  margin-bottom: 0.6rem;
+}
+
+.ds-quick-tip {
+  font-size: 0.6rem;
+  color: rgba(255, 255, 255, 0.25);
+  margin-bottom: 0.8rem;
+  font-style: italic;
+}
+
+.ds-highlight {
+  color: #f59e0b;
+  font-weight: 700;
+}
+
+.ds-objective {
+  font-size: 0.65rem;
+  color: rgba(255, 255, 255, 0.25);
+  line-height: 1.6;
+  margin: 0 auto 1rem;
+  text-align: center;
+}
+
+.ds-highscore {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
   margin-bottom: 1rem;
+  padding: 0.4rem 0.8rem;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.ds-highscore-label {
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.3);
+  letter-spacing: 0.1em;
+}
+
+.ds-highscore-val {
+  font-size: 0.9rem;
+  font-weight: 900;
+  color: rgba(255, 255, 255, 0.6);
+  letter-spacing: 0.08em;
+  font-family: 'Courier New', 'Lucida Console', monospace;
+  text-shadow: 0 0 6px rgba(255, 255, 255, 0.1);
 }
 
 .ds-controls {
@@ -286,14 +262,6 @@
   font-family: 'Courier New', monospace;
   font-size: 0.65rem;
   color: rgba(255, 255, 255, 0.55);
-}
-
-.ds-objective {
-  font-size: 0.65rem;
-  color: rgba(255, 255, 255, 0.25);
-  line-height: 1.4;
-  max-width: 260px;
-  margin: 0 auto 0.8rem;
 }
 
 .ds-prompt {
@@ -327,35 +295,169 @@
   pointer-events: none;
 }
 
+/* GAME OVER title — the hero of the panel, big and dramatic */
 .donkey-gameover-text {
-  font-size: 1.6rem;
-  font-weight: 800;
-  letter-spacing: 0.18em;
+  font-size: 2.8rem;
+  font-weight: 900;
+  letter-spacing: 0.22em;
   color: #e05555;
-  margin-bottom: 0.35rem;
+  margin-bottom: 0.3rem;
   font-family: 'Courier New', monospace;
-  text-shadow: 0 0 12px rgba(224, 85, 85, 0.4);
+  text-shadow: 0 0 20px rgba(224, 85, 85, 0.6), 0 0 40px rgba(224, 85, 85, 0.3), 0 0 60px rgba(224, 85, 85, 0.15);
+  animation: gameoverShake 0.6s cubic-bezier(0.36, 0.07, 0.19, 0.97) both, gameoverPulse 2.5s ease-in-out 0.6s infinite;
 }
 
+@keyframes gameoverShake {
+  0% { transform: scale(2) translateY(-20px); opacity: 0; }
+  20% { transform: scale(1.4) translateY(5px); opacity: 0.8; }
+  40% { transform: scale(1.1) translateY(-3px); opacity: 1; }
+  60% { transform: scale(1.02) translateY(1px); }
+  80% { transform: scale(0.99) translateY(-1px); }
+  100% { transform: scale(1) translateY(0); }
+}
+
+@keyframes gameoverPulse {
+  0%, 100% { text-shadow: 0 0 20px rgba(224, 85, 85, 0.6), 0 0 40px rgba(224, 85, 85, 0.3), 0 0 60px rgba(224, 85, 85, 0.15); }
+  50% { text-shadow: 0 0 30px rgba(224, 85, 85, 0.8), 0 0 50px rgba(224, 85, 85, 0.4), 0 0 80px rgba(224, 85, 85, 0.2); }
+}
+
+/* Score — prominent but not overpowering the GAME OVER text */
 .donkey-gameover-score {
-  font-size: 0.85rem;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  color: rgba(255, 255, 255, 0.5);
+  font-size: 1.2rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: rgba(255, 255, 255, 0.6);
   margin-bottom: 0.6rem;
-  font-family: 'Courier New', monospace;
+  font-family: 'Courier New', 'Lucida Console', monospace;
+  text-shadow: 0 0 10px rgba(255, 255, 255, 0.2);
 }
 
-.donkey-restart-text {
-  font-size: 0.65rem;
+/* New high score badge — clean, compact */
+.donkey-gameover-new {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.5rem;
+  padding: 0.15rem 0.5rem;
+  background: linear-gradient(135deg, rgba(74, 222, 128, 0.15), rgba(74, 222, 128, 0.08));
+  border: 1px solid rgba(74, 222, 128, 0.3);
+  border-radius: 20px;
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: #4ade80;
+  animation: newBadgePulse 1.5s ease-in-out 0.6s infinite;
+}
+
+.donkey-gameover-new.hidden {
+  display: none;
+}
+
+.donkey-gameover-new-label {
+  letter-spacing: 0.12em;
+}
+
+.donkey-gameover-new-score {
+  font-size: 0.75rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  color: #4ade80;
+  font-family: 'Courier New', monospace;
+  text-shadow: 0 0 8px rgba(74, 222, 128, 0.4);
+}
+
+@keyframes newBadgePulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(74, 222, 128, 0.1); }
+  50% { box-shadow: 0 0 16px rgba(74, 222, 128, 0.25); }
+}
+
+/* Corner stat blocks — compact, no overlap with center heroes */
+.donkey-gameover-stats-top-left,
+.donkey-gameover-stats-top-right,
+.donkey-gameover-stats-bottom-left,
+.donkey-gameover-stats-bottom-right {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
+  padding: 0.25rem 0.4rem;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 4px;
+}
+
+.donkey-gameover-stats-top-left {
+  left: 8px;
+  top: 8px;
+}
+
+.donkey-gameover-stats-top-right {
+  right: 8px;
+  top: 8px;
+}
+
+.donkey-gameover-stats-bottom-left {
+  left: 8px;
+  bottom: 8px;
+}
+
+.donkey-gameover-stats-bottom-right {
+  right: 8px;
+  bottom: 8px;
+}
+
+/* Corner stat row */
+.donkey-gameover-stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.4rem;
+  line-height: 1.1;
+}
+
+/* Corner stat label — right-aligned for left blocks, left-aligned for right blocks */
+.donkey-gameover-stat-label {
+  font-size: 0.35rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
   color: rgba(255, 255, 255, 0.3);
-  animation: restartBlink 1.8s ease-in-out infinite;
-  letter-spacing: 0.05em;
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.donkey-gameover-stats-top-right .donkey-gameover-stat-label,
+.donkey-gameover-stats-bottom-right .donkey-gameover-stat-label {
+  text-align: left;
+}
+
+.donkey-gameover-stat-value {
+  font-size: 0.55rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.65);
+  font-family: 'Courier New', 'Lucida Console', monospace;
+  text-shadow: 0 0 6px rgba(255, 255, 255, 0.1);
+  flex-shrink: 0;
+}
+
+.donkey-gameover-stat-value.highlight {
+  color: #f59e0b;
+  text-shadow: 0 0 10px rgba(245, 158, 11, 0.3);
+}
+
+/* Restart text — the other hero, big and inviting */
+.donkey-restart-text {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.4);
+  animation: restartBlink 2s ease-in-out infinite;
+  letter-spacing: 0.08em;
+  margin-top: 0.5rem;
 }
 
 @keyframes restartBlink {
-  0%, 100% { opacity: 0.3; }
-  50% { opacity: 0.7; }
+  0%, 100% { opacity: 0.3; transform: translateY(0); }
+  50% { opacity: 0.6; transform: translateY(-2px); }
 }
 
 /* Score milestone flash */
@@ -420,6 +522,44 @@
 @keyframes bonusFlash {
   0% { opacity: 1; transform: translate(-50%, -50%) translateY(0); }
   100% { opacity: 0; transform: translate(-50%, -50%) translateY(-25px); }
+}
+
+/* Property damage bonus text animation — positioned at obstacle, green, prominent */
+.property-damage-bonus {
+  position: absolute;
+  font-size: 0.9rem;
+  font-weight: 900;
+  font-family: 'Courier New', monospace;
+  letter-spacing: 0.1em;
+  color: #4ade80;
+  text-shadow: 0 0 8px rgba(74, 222, 128, 0.8), 0 0 16px rgba(74, 222, 128, 0.4), 0 0 24px rgba(74, 222, 128, 0.2);
+  z-index: 9;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.5);
+}
+
+.property-damage-bonus.active {
+  animation: propertyDamageBonusAnim 1.2s ease-out forwards;
+}
+
+@keyframes propertyDamageBonusAnim {
+  0% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(0.5);
+  }
+  15% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.4);
+  }
+  35% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) translateY(-40px) scale(0.6);
+  }
 }
 
 /* Speed lines overlay */

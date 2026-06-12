@@ -1,6 +1,9 @@
 // ===== DATA CACHE =====
-// Unified cache for ALL API calls with configurable TTL per type
+// Unified cache for ALL API calls with configurable TTL per type and LRU eviction
 const DataCache = {
+  // Default: max number of cache entries per type before LRU eviction kicks in
+  MAX_ENTRIES_PER_TYPE: 500,
+
   // TTLs in milliseconds
   TTL: {
     weather: 15 * 60 * 1000,      // 15 minutes
@@ -13,6 +16,66 @@ const DataCache = {
   // Round coordinates to 2 decimal places (~1km accuracy) for cache key grouping
   _roundCoord(coord) {
     return Math.round(coord * 100) / 100;
+  },
+
+  // Get the LRU list key for a cache type
+  _lruKey(type) {
+    return `hasw_lru_${type}`;
+  },
+
+  // Get the LRU list for a type (array of keys, most-recently-used first)
+  _getLruList(type) {
+    try {
+      const raw = localStorage.getItem(this._lruKey(type));
+      if (!raw) return [];
+      const list = JSON.parse(raw);
+      return Array.isArray(list) ? list : [];
+    } catch (e) {
+      return [];
+    }
+  },
+
+  // Set the LRU list for a type
+  _setLruList(type, list) {
+    try {
+      localStorage.setItem(this._lruKey(type), JSON.stringify(list));
+    } catch (e) {
+      // ignore LRU write failures
+    }
+  },
+
+  // Evict least-recently-used entries when the cache exceeds the limit
+  _evictIfNecessary(type) {
+    try {
+      const maxEntries = this.MAX_ENTRIES_PER_TYPE;
+      const lruList = this._getLruList(type);
+      if (lruList.length <= maxEntries) return;
+
+      // Remove the oldest entries (they're at the end of the LRU list)
+      const toRemove = lruList.splice(0, lruList.length - maxEntries);
+      for (const key of toRemove) {
+        localStorage.removeItem(`hasw_cache_${key}`);
+        console.log(`[DataCache] EVICTED (LRU): ${key}`);
+      }
+      this._setLruList(type, lruList);
+    } catch (e) {
+      // ignore eviction failures
+    }
+  },
+
+  // Move a key to the front of the LRU list (most-recently-used)
+  _touchLru(type, key) {
+    try {
+      const lruList = this._getLruList(type);
+      const idx = lruList.indexOf(key);
+      if (idx !== -1) {
+        lruList.splice(idx, 1); // remove from current position
+      }
+      lruList.unshift(key); // move to front
+      this._setLruList(type, lruList);
+    } catch (e) {
+      // ignore LRU touch failures
+    }
   },
 
   // Check if a cache entry exists and is not expired
@@ -62,6 +125,7 @@ const DataCache = {
         return null;
       }
       console.log(`[DataCache] HIT: ${key} (type: ${type}, age: ${Math.round((Date.now() - entry.timestamp) / 1000)}s)`);
+      this._touchLru(type, key);
       return entry.data;
     } catch (e) {
       console.log(`[DataCache] MISS (parse error): ${key}`, e);
@@ -79,6 +143,8 @@ const DataCache = {
         type: type,
         data: data
       }));
+      this._touchLru(type, key);
+      this._evictIfNecessary(type);
     } catch (e) {
       console.log(`[DataCache] SET FAILED: ${key} - ${e.message}`);
     }

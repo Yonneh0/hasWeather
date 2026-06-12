@@ -4,6 +4,95 @@ function weatherCacheKey(lat, lon) {
   return `weather_${DataCache._roundCoord(lat)}_${DataCache._roundCoord(lon)}`;
 }
 
+// ===== RETRY HELPER =====
+// Retry a fetch with exponential backoff
+async function retryWithBackoff(fn, maxRetries = 3, baseDelay = 1000) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const result = await fn();
+      return result;
+    } catch (err) {
+      if (attempt === maxRetries) throw err;
+      const delay = baseDelay * Math.pow(2, attempt);
+      console.log(`[retry] Attempt ${attempt + 1}/${maxRetries + 1} failed, retrying in ${delay}ms`);
+      await new Promise(r => setTimeout(r, delay));
+    }
+  }
+}
+
+// Known keys that are NOT hourly variable data
+const KNOWN_NON_HOURLY_KEYS = new Set([
+  'latitude', 'longitude', 'elevation',
+  'generationtime_ms', 'utc_offset_seconds',
+  'timezone', 'timezone_abbreviation',
+  'current', 'daily', 'hourly'
+]);
+
+// Helper: extract hourly variable keys from a raw response object
+function extractHourlyKeys(raw) {
+  return Object.keys(raw).filter(k =>
+    KNOWN_NON_HOURLY_KEYS.has(k) === false &&
+    Array.isArray(raw[k]) &&
+    raw[k].length > 0 &&
+    typeof raw[k][0] !== 'object'
+  );
+}
+
+// Deduplicate city results by coordinate pair (keep first entry per coordinate pair)
+// Prefer entries with a non-null place_id when there's a tie
+function deduplicateResults(results) {
+  const seenCoords = new Map();
+  const deduped = [];
+  for (const entry of results) {
+    const lat = entry.latitude != null ? DataCache._roundCoord(entry.latitude) : null;
+    const lon = entry.longitude != null ? DataCache._roundCoord(entry.longitude) : null;
+    if (lat == null || lon == null) {
+      deduped.push(entry);
+      continue;
+    }
+    const coordKey = `${lat},${lon}`;
+    let isDup = false;
+    for (const [existingKey, existingEntry] of seenCoords) {
+      const [exLat, exLon] = existingKey.split(',').map(Number);
+      if (Math.abs(lat - exLat) < 0.01 && Math.abs(lon - exLon) < 0.01) {
+        isDup = true;
+        // Prefer the entry with a non-null place_id
+        if (!existingEntry.place_id && entry.place_id) {
+          seenCoords.set(existingKey, entry);
+          const dupIdx = deduped.findIndex(d => d === existingEntry);
+          if (dupIdx !== -1) deduped[dupIdx] = entry;
+        }
+        break;
+      }
+    }
+    if (!isDup) {
+      seenCoords.set(coordKey, entry);
+      deduped.push(entry);
+    }
+  }
+  return deduped;
+}
+
+// Deduplicate cities by coordinate pair (for deduplication BEFORE the API call)
+function deduplicateCities(cities) {
+  const seenCoords = new Set();
+  const deduped = [];
+  for (const city of cities) {
+    const lat = city.latitude != null ? DataCache._roundCoord(city.latitude) : null;
+    const lon = city.longitude != null ? DataCache._roundCoord(city.longitude) : null;
+    if (lat == null || lon == null) {
+      deduped.push(city);
+      continue;
+    }
+    const coordKey = `${lat},${lon}`;
+    if (!seenCoords.has(coordKey)) {
+      seenCoords.add(coordKey);
+      deduped.push(city);
+    }
+  }
+  return deduped;
+}
+
 async function fetchWeatherForCities(cities) {
   // Check cache for each city individually
   const cachedResults = [];
@@ -12,9 +101,10 @@ async function fetchWeatherForCities(cities) {
 
   for (let i = 0; i < cities.length; i++) {
     const ck = weatherCacheKey(cities[i].latitude, cities[i].longitude);
-    const cached = DataCache.get(ck, 'weather');
-    if (cached) {
-      cachedResults.push({ ...cities[i], weather: cached.weather, aqi: cached.aqi });
+    const cachedWeather = DataCache.get(ck, 'weather');
+    const cachedAqi = DataCache.get(ck, 'airQuality');
+    if (cachedWeather) {
+      cachedResults.push({ ...cities[i], weather: cachedWeather, aqi: cachedAqi || {} });
     } else {
       cityCacheMap.push(i);
       uncachedCities.push(cities[i]);
@@ -23,84 +113,33 @@ async function fetchWeatherForCities(cities) {
 
   // If all cached, apply deduplication before returning
   if (uncachedCities.length === 0) {
-    const seenCoords = new Map();
-    const deduped = [];
-    for (const entry of cachedResults) {
-      const lat = entry.latitude != null ? DataCache._roundCoord(entry.latitude) : null;
-      const lon = entry.longitude != null ? DataCache._roundCoord(entry.longitude) : null;
-      if (lat == null || lon == null) {
-        deduped.push(entry);
-        continue;
-      }
-      const coordKey = `${lat},${lon}`;
-      let isDup = false;
-      for (const [existingKey, existingEntry] of seenCoords) {
-        const [exLat, exLon] = existingKey.split(',').map(Number);
-        if (Math.abs(lat - exLat) < 0.01 && Math.abs(lon - exLon) < 0.01) {
-          isDup = true;
-          if (!existingEntry.place_id && entry.place_id) {
-            seenCoords.set(existingKey, entry);
-            const dupIdx = deduped.findIndex(d => d === existingEntry);
-            if (dupIdx !== -1) deduped[dupIdx] = entry;
-          }
-          break;
-        }
-      }
-      if (!isDup) {
-        seenCoords.set(coordKey, entry);
-        deduped.push(entry);
-      }
-    }
-    return deduped;
+    return deduplicateResults(cachedResults);
   }
 
-  // Build combined weather + AQI URL for uncached cities only
-  try {
-    const weatherUrl = `${WEATHER_API}?latitude=${uncachedCities.map(c => c.latitude).join(',')}&longitude=${uncachedCities.map(c => c.longitude).join(',')}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m,surface_pressure,uv_index,visibility&hourly=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,uv_index_max,precipitation_sum,wind_speed_10m_max&forecast_days=${FORECAST_DAYS}&temperature_unit=celsius&wind_speed_unit=kmh&precipitation_unit=mm&timezone=auto`;
+  // ===== FIX #1: Deduplicate BEFORE caching =====
+  // Only unique coordinate pairs should be fetched from the API
+  const dedupedUncached = deduplicateCities(uncachedCities);
 
-    const weatherRes = await fetch(weatherUrl);
+  // Build combined weather + AQI URL for deduplicated uncached cities only
+  try {
+    const weatherUrl = `${WEATHER_API}?latitude=${dedupedUncached.map(c => c.latitude).join(',')}&longitude=${dedupedUncached.map(c => c.longitude).join(',')}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m,surface_pressure,uv_index,visibility&hourly=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,uv_index_max,precipitation_sum,wind_speed_10m_max&forecast_days=${FORECAST_DAYS}&temperature_unit=celsius&wind_speed_unit=kmh&precipitation_unit=mm&timezone=auto`;
+
+    // ===== FIX #5: Retry logic for weather API =====
+    const weatherRes = await retryWithBackoff(() => fetch(weatherUrl));
 
     if (!weatherRes.ok) {
       // Fill uncached with null data
       for (const idx of cityCacheMap) {
         cachedResults[idx] = { ...cities[idx], weather: null, aqi: {} };
       }
-      // Apply deduplication before returning
-      const seenCoords = new Map();
-      const deduped = [];
-      for (const entry of cachedResults) {
-        const lat = entry.latitude != null ? DataCache._roundCoord(entry.latitude) : null;
-        const lon = entry.longitude != null ? DataCache._roundCoord(entry.longitude) : null;
-        if (lat == null || lon == null) {
-          deduped.push(entry);
-          continue;
-        }
-        const coordKey = `${lat},${lon}`;
-        let isDup = false;
-        for (const [existingKey, existingEntry] of seenCoords) {
-          const [exLat, exLon] = existingKey.split(',').map(Number);
-          if (Math.abs(lat - exLat) < 0.01 && Math.abs(lon - exLon) < 0.01) {
-            isDup = true;
-            if (!existingEntry.place_id && entry.place_id) {
-              seenCoords.set(existingKey, entry);
-              const dupIdx = deduped.findIndex(d => d === existingEntry);
-              if (dupIdx !== -1) deduped[dupIdx] = entry;
-            }
-            break;
-          }
-        }
-        if (!isDup) {
-          seenCoords.set(coordKey, entry);
-          deduped.push(entry);
-        }
-      }
-      return deduped;
+      return deduplicateResults(cachedResults);
     }
 
     const weatherAll = await weatherRes.json();
 
-    const aqiUrl = `${AIR_QUALITY_API}?latitude=${uncachedCities.map(c => c.latitude).join(',')}&longitude=${uncachedCities.map(c => c.longitude).join(',')}&current=us_aqi,pm2_5,european_aqi&timezone=auto`;
-    const aqiRes = await fetch(aqiUrl);
+    const aqiUrl = `${AIR_QUALITY_API}?latitude=${dedupedUncached.map(c => c.latitude).join(',')}&longitude=${dedupedUncached.map(c => c.longitude).join(',')}&current=us_aqi,pm2_5,european_aqi&timezone=auto`;
+    // ===== FIX #5: Retry logic for AQI API =====
+    const aqiRes = await retryWithBackoff(() => fetch(aqiUrl));
     const aqiData = await aqiRes.json();
 
     const result = new Array(cities.length);
@@ -108,9 +147,10 @@ async function fetchWeatherForCities(cities) {
     // First fill cached results (use get directly — it already handles expiration internally)
     for (let i = 0; i < cities.length; i++) {
       const ck = weatherCacheKey(cities[i].latitude, cities[i].longitude);
-      const entry = DataCache.get(ck, 'weather');
-      if (entry) {
-        result[i] = { ...cities[i], weather: entry.weather, aqi: entry.aqi };
+      const entryWeather = DataCache.get(ck, 'weather');
+      const entryAqi = DataCache.get(ck, 'airQuality');
+      if (entryWeather) {
+        result[i] = { ...cities[i], weather: entryWeather, aqi: entryAqi || {} };
       }
     }
 
@@ -132,7 +172,8 @@ async function fetchWeatherForCities(cities) {
 
       if (hasResultsArray) {
         const raw = weatherAll.results[wIdx] || {};
-        const rawHourlyKeys = Object.keys(raw).filter(k => k !== 'latitude' && k !== 'longitude' && k !== 'elevation' && k !== 'generationtime_ms' && k !== 'utc_offset_seconds' && k !== 'timezone' && k !== 'timezone_abbreviation' && k !== 'current' && k !== 'daily');
+        // ===== FIX #4: Clean up hourly variable extraction =====
+        const rawHourlyKeys = extractHourlyKeys(raw);
         const mergedHourly = raw.hourly ? { ...raw.hourly } : { time: [] };
         rawHourlyKeys.forEach(k => {
           const val = raw[k];
@@ -196,53 +237,24 @@ async function fetchWeatherForCities(cities) {
         }
       }
 
-      // Store in cache
+      // ===== FIX #2: Use separate cache types for weather and AQI =====
       const ck = weatherCacheKey(city.latitude, city.longitude);
-      DataCache.set(ck, { weather: cityWeather, aqi: aqiResult }, 'weather');
+      DataCache.set(ck, cityWeather, 'weather');
+      DataCache.set(ck, aqiResult, 'airQuality');
 
       result[i] = { ...city, weather: cityWeather, aqi: aqiResult };
     }
 
-    // De-duplicate results by coordinates (keep first entry per coordinate pair)
-    const seenCoords = new Map();
-    const deduped = [];
-    for (const entry of result) {
-      const lat = entry.latitude != null ? DataCache._roundCoord(entry.latitude) : null;
-      const lon = entry.longitude != null ? DataCache._roundCoord(entry.longitude) : null;
-      if (lat == null || lon == null) {
-        deduped.push(entry);
-        continue;
-      }
-      const coordKey = `${lat},${lon}`;
-      // Check for existing coordinate match (0.01° tolerance)
-      let isDup = false;
-      for (const [existingKey, existingEntry] of seenCoords) {
-        const [exLat, exLon] = existingKey.split(',').map(Number);
-        if (Math.abs(lat - exLat) < 0.01 && Math.abs(lon - exLon) < 0.01) {
-          isDup = true;
-          // Prefer the entry with a non-null place_id
-          if (!existingEntry.place_id && entry.place_id) {
-            seenCoords.set(existingKey, entry);
-            const dupIdx = deduped.findIndex(d => d === existingEntry);
-            if (dupIdx !== -1) deduped[dupIdx] = entry;
-          }
-          break;
-        }
-      }
-      if (!isDup) {
-        seenCoords.set(coordKey, entry);
-        deduped.push(entry);
-      }
-    }
-    return deduped;
+    return deduplicateResults(result);
   } catch {
     // Fill uncached with null data
     const result = new Array(cities.length);
     for (let i = 0; i < cities.length; i++) {
       const ck = weatherCacheKey(cities[i].latitude, cities[i].longitude);
       if (DataCache.has(ck, 'weather')) {
-        const entry = DataCache.get(ck, 'weather');
-        result[i] = { ...cities[i], weather: entry.weather, aqi: entry.aqi };
+        const entryWeather = DataCache.get(ck, 'weather');
+        const entryAqi = DataCache.get(ck, 'airQuality');
+        result[i] = { ...cities[i], weather: entryWeather, aqi: entryAqi || {} };
       } else {
         result[i] = { ...cities[i], weather: null, aqi: {} };
       }

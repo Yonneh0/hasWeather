@@ -267,17 +267,34 @@ function initParticles() {
     });
   }
 
+  // Pause particles when the donkey runner game is active (reduces GPU compositing load)
+  let animId = null;
+
   function animate() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    particles.forEach(p => {
-      p.y -= p.speed;
-      if (p.y < -10) { p.y = canvas.height + 10; p.x = Math.random() * canvas.width; }
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(255,255,255,${p.opacity})`;
-      ctx.fill();
-    });
-    requestAnimationFrame(animate);
+    if (animId) cancelAnimationFrame(animId);
+    animId = null;
+
+    function step() {
+      animId = requestAnimationFrame(step);
+
+      // Check if game is active — pause particles when game is running
+      const isGameActive = typeof DONKEY_RUNNER !== 'undefined' && DONKEY_RUNNER && DONKEY_RUNNER.gameRunning;
+      if (!isGameActive) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        particles.forEach(p => {
+          p.y -= p.speed;
+          if (p.y < -10) { p.y = canvas.height + 10; p.x = Math.random() * canvas.width; }
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(255,255,255,${p.opacity})`;
+          ctx.fill();
+        });
+      } else {
+        // Clear canvas when paused to keep it clean (no particles drawn)
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+    }
+    step();
   }
   animate();
 }
