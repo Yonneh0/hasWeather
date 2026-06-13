@@ -2666,6 +2666,37 @@ function loudWeatherIcon(type, size) {
 const WEATHER_API = 'https://api.open-meteo.com/v1/forecast';
 const AIR_QUALITY_API = 'https://air-quality-api.open-meteo.com/v1/air-quality';
 
+// ===== CROSS-SOURCE LOOKUP FUNCTIONS =====
+// These functions allow fetching data from alternate source caches when needed.
+
+function crossSourceGetWeather(lat, lon) {
+  // Try OM weather key
+  const omWeather = DataCache.get(weatherCacheKey(lat, lon), 'weather');
+  if (omWeather) return { data: omWeather, source: 'open-meteo' };
+
+  // Try NWS city data key (which contains full weather object)
+  const nwsCityData = DataCache.get(nwsCacheKey(lat, lon), 'nwsCityData');
+  if (nwsCityData && nwsCityData.weather) return { data: nwsCityData, source: 'nws' };
+
+  // Try NWS point cache key (which contains full weather object)
+  const nwsPoint = DataCache.get(nwsPointCacheKey(lat, lon), 'nwsPoint');
+  if (nwsPoint && nwsPoint.weather) return { data: nwsPoint, source: 'nws' };
+
+  return null;
+}
+
+function crossSourceGetAQI(lat, lon) {
+  // Try OM AQI key
+  const omAqi = DataCache.get(aqiCacheKey(lat, lon), 'airQuality');
+  if (omAqi) return { data: omAqi, source: 'open-meteo' };
+
+  // Try NWS city data key (which may have AQI)
+  const nwsCityData = DataCache.get(nwsCacheKey(lat, lon), 'nwsCityData');
+  if (nwsCityData && nwsCityData.aqi) return { data: nwsCityData.aqi, source: 'nws' };
+
+  return null;
+}
+
 // ===== CACHE KEY HELPERS =====
 function weatherCacheKey(lat, lon) {
   return `weather_${DataCache._roundCoord(lat)}_${DataCache._roundCoord(lon)}`;
@@ -4132,7 +4163,7 @@ function crossSourceGetNws(lat, lon) {
 }
 
 // Cross-source AQI lookup for NWS: try NWS city data first, then OM AQI key
-function crossSourceGetAQI(lat, lon) {
+function crossSourceGetNwsAQI(lat, lon) {
   // Try NWS city data key (current source priority)
   const nwsCityData = DataCache.get(nwsCacheKey(lat, lon), 'nwsCityData');
   if (nwsCityData && nwsCityData.aqi) return { data: nwsCityData.aqi, source: 'nws' };
@@ -4158,12 +4189,12 @@ async function fetchNwsForCities(cities) {
     const crossSource = crossSourceGetNws(cities[i].latitude, cities[i].longitude);
     if (cached) {
       // Cross-source AQI from OM cache if NWS doesn't have it
-      const crossAqi = crossSourceGetAQI(cities[i].latitude, cities[i].longitude);
+      const crossAqi = crossSourceGetNwsAQI(cities[i].latitude, cities[i].longitude);
       const aqiData = crossAqi?.data || cached.aqi || {};
       cachedResults.push({ ...cities[i], source: 'nws', weather: cached.weather, aqi: aqiData });
     } else if (crossSource && crossSource.data.weather) {
       // OM data can serve as NWS weather data (it has the same structure)
-      const crossAqi = crossSourceGetAQI(cities[i].latitude, cities[i].longitude);
+      const crossAqi = crossSourceGetNwsAQI(cities[i].latitude, cities[i].longitude);
       cachedResults.push({ ...cities[i], source: crossSource.source, weather: crossSource.data.weather, aqi: crossAqi?.data || {} });
     } else {
       cityCacheMap.push(i);
@@ -4203,7 +4234,7 @@ async function fetchNwsForCities(cities) {
     const cached = DataCache.get(ck, 'nwsCityData');
     if (cached) {
       // Cross-source AQI from OM cache if NWS doesn't have it
-      const crossAqi = crossSourceGetAQI(cities[i].latitude, cities[i].longitude);
+      const crossAqi = crossSourceGetNwsAQI(cities[i].latitude, cities[i].longitude);
       const aqiData = crossAqi?.data || cached.aqi || {};
       result[i] = { ...cities[i], source: 'nws', weather: cached.weather, aqi: aqiData };
     }
