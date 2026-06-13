@@ -90,14 +90,17 @@ css/
   utilities.css          7 lines — glow/shadow text utilities
 js/
   main.js               168 lines — entry point (state + DOM init + event bindings + game toggle)
-  constants.js          77 lines — API endpoints, constants, WMO codes & gradients
+  constants.js          68 lines — shared constants (WMO codes & gradients)
   cache.js              159 lines — DataCache (localStorage caching with configurable TTLs and LRU eviction)
   favorites.js          108 lines — FavoritesManager (place_id-based favorites)
   utils.js              48 lines — utility functions (unit conversion, haversine, bearing, etc.)
   icons.js              289 lines — animated SVG weather icons
-  geo.js                223 lines — geolocation, nearby city discovery, geocoding
-  weather.js            262 lines — Open-Meteo weather/AQI API fetching with deduplication and retry logic
-  nws-api.js            350 lines — NWS API client (gridpoint data, observation stations, alerts) with rate limiting and cross-source lookup
+  geo.js                11 lines — shared utilities (wind compass, day/night check)
+  api-openmeteo.js      307 lines — Open-Meteo weather/AQI API client with deduplication and retry logic
+  api-openstreetmap.js  185 lines — Nominatim/OSM nearby city discovery
+  api-misc.js           42 lines — IP-based location fallback (ipinfo.io)
+  api-nws.js            1162 lines — NWS API client (gridpoint data, observation stations, alerts) with rate limiting and cross-source lookup
+  weather.js            30 lines — cross-source cache lookup helpers
   render.js             260 lines — DOM rendering (city cards, hourly forecast) with cross-source field mapping
   charts.js             302 lines — canvas chart rendering (merged chart, combined chart, particles)
   location-prompt.js    32 lines — location prompt modal helpers

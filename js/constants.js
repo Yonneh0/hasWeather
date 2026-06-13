@@ -1,11 +1,3 @@
-
-// ===== API ENDPOINTS =====
-const WEATHER_API = 'https://api.open-meteo.com/v1/forecast';
-const AIR_QUALITY_API = 'https://air-quality-api.open-meteo.com/v1/air-quality';
-const OPEN_METEO_GEOCODING = 'https://geocoding-api.open-meteo.com/v1/search';
-const IP_API = 'https://ipinfo.io/json';
-const NOMINATIM = 'https://nominatim.openstreetmap.org/search';
-
 // ===== CURRENT DATA SOURCE =====
 // 'open-meteo' or 'nws' — controlled by source toggle button
 let currentSource = 'open-meteo';
@@ -14,8 +6,6 @@ let currentSource = 'open-meteo';
 const EARTH_RADIUS_MI = 3958.8;
 const GEOLOCATION_TIMEOUT_MS = 8000;
 const NEARBY_CACHE_TTL_MS = 600000;
-const NOMINATIM_CLOSE_RADIUS = 0.45;
-const NOMINATIM_WIDE_RADIUS = 1.0;
 const MAX_CITIES = 6;
 const MIN_CITY_DISTANCE_MI = 8;
 const HOURLY_FORECAST_SLOTS = 24;

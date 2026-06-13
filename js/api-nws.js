@@ -955,7 +955,7 @@ function crossSourceGetNws(lat, lon) {
 }
 
 // Cross-source AQI lookup for NWS: try NWS city data first, then OM AQI key
-function crossSourceGetAQI(lat, lon) {
+function crossSourceGetNwsAQI(lat, lon) {
   // Try NWS city data key (current source priority)
   const nwsCityData = DataCache.get(nwsCacheKey(lat, lon), 'nwsCityData');
   if (nwsCityData && nwsCityData.aqi) return { data: nwsCityData.aqi, source: 'nws' };
@@ -981,12 +981,12 @@ async function fetchNwsForCities(cities) {
     const crossSource = crossSourceGetNws(cities[i].latitude, cities[i].longitude);
     if (cached) {
       // Cross-source AQI from OM cache if NWS doesn't have it
-      const crossAqi = crossSourceGetAQI(cities[i].latitude, cities[i].longitude);
+      const crossAqi = crossSourceGetNwsAQI(cities[i].latitude, cities[i].longitude);
       const aqiData = crossAqi?.data || cached.aqi || {};
       cachedResults.push({ ...cities[i], source: 'nws', weather: cached.weather, aqi: aqiData });
     } else if (crossSource && crossSource.data.weather) {
       // OM data can serve as NWS weather data (it has the same structure)
-      const crossAqi = crossSourceGetAQI(cities[i].latitude, cities[i].longitude);
+      const crossAqi = crossSourceGetNwsAQI(cities[i].latitude, cities[i].longitude);
       cachedResults.push({ ...cities[i], source: crossSource.source, weather: crossSource.data.weather, aqi: crossAqi?.data || {} });
     } else {
       cityCacheMap.push(i);
@@ -1026,7 +1026,7 @@ async function fetchNwsForCities(cities) {
     const cached = DataCache.get(ck, 'nwsCityData');
     if (cached) {
       // Cross-source AQI from OM cache if NWS doesn't have it
-      const crossAqi = crossSourceGetAQI(cities[i].latitude, cities[i].longitude);
+      const crossAqi = crossSourceGetNwsAQI(cities[i].latitude, cities[i].longitude);
       const aqiData = crossAqi?.data || cached.aqi || {};
       result[i] = { ...cities[i], source: 'nws', weather: cached.weather, aqi: aqiData };
     }
