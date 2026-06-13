@@ -2902,6 +2902,36 @@ function aqiCacheKey(lat, lon) {
   return `airQuality_${DataCache._roundCoord(lat)}_${DataCache._roundCoord(lon)}`;
 }
 
+// Cross-source cache lookup: try OM keys first, then NWS keys (and vice versa)
+// Returns { data, source } or null if nothing found
+function crossSourceGetWeather(lat, lon) {
+  // Try OM weather key
+  const omWeather = DataCache.get(weatherCacheKey(lat, lon), 'weather');
+  if (omWeather) return { data: omWeather, source: 'open-meteo' };
+
+  // Try NWS city data key (which contains full weather object)
+  const nwsCityData = DataCache.get(nwsCacheKey(lat, lon), 'nwsCityData');
+  if (nwsCityData && nwsCityData.weather) return { data: nwsCityData, source: 'nws' };
+
+  // Try NWS point cache key (which contains full weather object)
+  const nwsPoint = DataCache.get(nwsPointCacheKey(lat, lon), 'nwsPoint');
+  if (nwsPoint && nwsPoint.weather) return { data: nwsPoint, source: 'nws' };
+
+  return null;
+}
+
+function crossSourceGetAQI(lat, lon) {
+  // Try OM AQI key
+  const omAqi = DataCache.get(aqiCacheKey(lat, lon), 'airQuality');
+  if (omAqi) return { data: omAqi, source: 'open-meteo' };
+
+  // Try NWS city data key (which may have AQI)
+  const nwsCityData = DataCache.get(nwsCacheKey(lat, lon), 'nwsCityData');
+  if (nwsCityData && nwsCityData.aqi) return { data: nwsCityData.aqi, source: 'nws' };
+
+  return null;
+}
+
 // ===== RETRY HELPER =====
 // Retry a fetch with exponential backoff
 async function retryWithBackoff(fn, maxRetries = 3, baseDelay = 1000) {
@@ -2992,7 +3022,7 @@ function deduplicateCities(cities) {
 }
 
 async function fetchWeatherForCities(cities) {
-  // Check cache for each city individually
+  // Check cache for each city individually — use cross-source lookup
   const cachedResults = [];
   const uncachedCities = [];
   const cityCacheMap = []; // map city index to its position in uncachedCities
@@ -3002,8 +3032,14 @@ async function fetchWeatherForCities(cities) {
     const aqiCk = aqiCacheKey(cities[i].latitude, cities[i].longitude);
     const cachedWeather = DataCache.get(weatherCk, 'weather');
     const cachedAqi = DataCache.get(aqiCk, 'airQuality');
+    // Cross-source: also check NWS keys for OM lookup
+    const crossSource = crossSourceGetWeather(cities[i].latitude, cities[i].longitude);
     if (cachedWeather) {
-      cachedResults.push({ ...cities[i], weather: cachedWeather, aqi: cachedAqi || {} });
+      cachedResults.push({ ...cities[i], source: 'open-meteo', weather: cachedWeather, aqi: cachedAqi || {} });
+    } else if (crossSource && crossSource.data.weather) {
+      // NWS data can serve as OM weather data (it has the same structure)
+      const crossAqi = crossSourceGetAQI(cities[i].latitude, cities[i].longitude);
+      cachedResults.push({ ...cities[i], source: crossSource.source, weather: crossSource.data.weather, aqi: crossAqi?.data || {} });
     } else {
       cityCacheMap.push(i);
       uncachedCities.push(cities[i]);
@@ -3050,7 +3086,7 @@ async function fetchWeatherForCities(cities) {
       const entryWeather = DataCache.get(weatherCk, 'weather');
       const entryAqi = DataCache.get(aqiCk, 'airQuality');
       if (entryWeather) {
-        result[i] = { ...cities[i], weather: entryWeather, aqi: entryAqi || {} };
+        result[i] = { ...cities[i], source: 'open-meteo', weather: entryWeather, aqi: entryAqi || {} };
       }
     }
 
@@ -3140,7 +3176,7 @@ async function fetchWeatherForCities(cities) {
       DataCache.set(weatherCk, cityWeather, 'weather');
       DataCache.set(aqiCk, aqiResult, 'airQuality');
 
-      result[i] = { ...city, weather: cityWeather, aqi: aqiResult };
+      result[i] = { ...city, source: 'open-meteo', weather: cityWeather, aqi: aqiResult };
     }
 
     return deduplicateResults(result);
@@ -3153,9 +3189,9 @@ async function fetchWeatherForCities(cities) {
       if (DataCache.has(weatherCk, 'weather')) {
         const entryWeather = DataCache.get(weatherCk, 'weather');
         const entryAqi = DataCache.get(aqiCk, 'airQuality');
-        result[i] = { ...cities[i], weather: entryWeather, aqi: entryAqi || {} };
+        result[i] = { ...cities[i], source: 'open-meteo', weather: entryWeather, aqi: entryAqi || {} };
       } else {
-        result[i] = { ...cities[i], weather: null, aqi: {} };
+        result[i] = { ...cities[i], source: 'open-meteo', weather: null, aqi: {} };
       }
     }
     return result;
@@ -3484,7 +3520,8 @@ async function fetchCurrentConditions(wfo, x, y) {
   const wg = findCurrent('windGust');
   const wd = findCurrent('windDirection');
   const vis = findCurrent('visibility');
-  const pr = findCurrent('pressure');
+  // NWS gridpoint uses 'surfacePressure' or 'surface_pressure' for surface-level pressure
+  const pr = findCurrent('surfacePressure') ?? findCurrent('surface_pressure') ?? findCurrent('pressure');
   const ch = findCurrent('ceilingHeight');
 
   // Weather and hazards have a different structure (array of objects)
@@ -3569,6 +3606,7 @@ async function fetchCurrentConditions(wfo, x, y) {
     ceilingHeightUnit: ch?.uom ?? 'wmoUnit:m',
     visibility: vis?.value ?? null,
     visibilityUnit: vis?.uom ?? 'wmoUnit:m',
+    // Use surfacePressure if available (NWS gridpoint), fallback to pressure
     pressure: pr?.value ?? null,
     pressureUnit: pr?.uom ?? 'nwsUnit:inHg',
   };
@@ -3918,18 +3956,24 @@ function nwsToAppData(city, nwsData) {
   // Convert wind gust from m/s to km/h for the app (same as wind speed conversion)
   const windGust = convertWindSpeedToKmh(current.windGust, current.windGustUnit);
 
+  // Check if NWS fields are missing — we'll try to cross-source them from OM cache
+  const nwsHasPressure = current.pressure != null;
+  const nwsHasVisibility = current.visibility != null;
+  const nwsHasUvIndex = false; // NWS never provides UV Index
+
   const currentApp = {
     temperature_2m: temp,
     temperatureUnit: 'C', // Always store Celsius — convertTemp() converts from Celsius
     relative_humidity_2m: current.relativeHumidity,
     wind_speed_10m: windSpeed,
     wind_direction_10m: current.windDirection,
-    surface_pressure: convertPressureToHpa(current.pressure, current.pressureUnit),
+    surface_pressure: nwsHasPressure ? convertPressureToHpa(current.pressure, current.pressureUnit) : null,
     weather_code: nwsWeatherToWmo(current.weather),
     probabilityOfPrecipitation: current.probabilityOfPrecipitation,
     skyCover: current.skyCover,
-    visibility: vis,
-    visibilityUnit: needsVisConversion ? 'mi' : current.visibilityUnit,
+    visibility: nwsHasVisibility ? vis : null,
+    visibilityUnit: needsVisConversion ? 'mi' : (nwsHasVisibility ? current.visibilityUnit : null),
+    uv_index: null, // NWS doesn't provide UV Index — will be cross-sourced below
     dewpoint: dewpoint,
     windGust: windGust,
     shortForecast: current.weather?.[0]?.icon || '',
@@ -3948,6 +3992,24 @@ function nwsToAppData(city, nwsData) {
     _rawSnow: current.snowfallAmount,
     _rawSnowUnit: current.snowfallAmount?.uom ?? 'wmoUnit:mm',
   };
+
+  // Cross-source missing fields from OM cache (pressure, visibility, UV Index)
+  const omWeather = DataCache.get(weatherCacheKey(city.latitude, city.longitude), 'weather');
+  if (omWeather && omWeather.current) {
+    // Merge missing pressure from OM
+    if (!nwsHasPressure && omWeather.current.surface_pressure != null) {
+      currentApp.surface_pressure = omWeather.current.surface_pressure;
+    }
+    // Merge missing visibility from OM (OM returns meters, convert to miles)
+    if (!nwsHasVisibility && omWeather.current.visibility != null) {
+      currentApp.visibility = metersToMiles(omWeather.current.visibility);
+      currentApp.visibilityUnit = 'mi';
+    }
+    // Merge UV Index from OM (NWS doesn't provide it)
+    if (omWeather.current.uv_index != null) {
+      currentApp.uv_index = omWeather.current.uv_index;
+    }
+  }
 
   // Build hourly forecast array (NWS hourly is already in order)
   const hourlyTimes = hourly.map(p => p.startTime);
@@ -4081,9 +4143,43 @@ function nwsDeduplicateResults(results) {
   return deduped;
 }
 
+// Cross-source cache lookup for NWS: try NWS keys first (current source), then OM keys (cross-source)
+function crossSourceGetNws(lat, lon) {
+  // Try NWS city data key FIRST (current source priority)
+  const nwsCityData = DataCache.get(nwsCacheKey(lat, lon), 'nwsCityData');
+  if (nwsCityData && nwsCityData.weather) return { data: nwsCityData, source: 'nws' };
+
+  // Try NWS point cache key (current source priority)
+  const nwsPoint = DataCache.get(nwsPointCacheKey(lat, lon), 'nwsPoint');
+  if (nwsPoint && nwsPoint.weather) return { data: nwsPoint, source: 'nws' };
+
+  // Try OM weather key (cross-source fallback)
+  const omWeather = DataCache.get(weatherCacheKey(lat, lon), 'weather');
+  if (omWeather) return { data: omWeather, source: 'open-meteo' };
+
+  // Try OM AQI key (cross-source fallback for AQI)
+  const omAqi = DataCache.get(aqiCacheKey(lat, lon), 'airQuality');
+  if (omAqi) return { data: omAqi, source: 'open-meteo' };
+
+  return null;
+}
+
+// Cross-source AQI lookup for NWS: try NWS city data first, then OM AQI key
+function crossSourceGetAQI(lat, lon) {
+  // Try NWS city data key (current source priority)
+  const nwsCityData = DataCache.get(nwsCacheKey(lat, lon), 'nwsCityData');
+  if (nwsCityData && nwsCityData.aqi) return { data: nwsCityData.aqi, source: 'nws' };
+
+  // Try OM AQI key (cross-source fallback)
+  const omAqi = DataCache.get(aqiCacheKey(lat, lon), 'airQuality');
+  if (omAqi) return { data: omAqi, source: 'open-meteo' };
+
+  return null;
+}
+
 // Main orchestrator: fetch NWS data for multiple cities
 async function fetchNwsForCities(cities) {
-  // Check cache for each city individually
+  // Check cache for each city individually — use cross-source lookup
   const cachedResults = [];
   const uncachedCities = [];
   const cityCacheMap = []; // map city index to its position in uncachedCities
@@ -4091,8 +4187,17 @@ async function fetchNwsForCities(cities) {
   for (let i = 0; i < cities.length; i++) {
     const ck = nwsCacheKey(cities[i].latitude, cities[i].longitude);
     const cached = DataCache.get(ck, 'nwsCityData');
+    // Cross-source: also check OM keys for NWS lookup
+    const crossSource = crossSourceGetNws(cities[i].latitude, cities[i].longitude);
     if (cached) {
-      cachedResults.push({ ...cities[i], weather: cached.weather, aqi: {} });
+      // Cross-source AQI from OM cache if NWS doesn't have it
+      const crossAqi = crossSourceGetAQI(cities[i].latitude, cities[i].longitude);
+      const aqiData = crossAqi?.data || cached.aqi || {};
+      cachedResults.push({ ...cities[i], source: 'nws', weather: cached.weather, aqi: aqiData });
+    } else if (crossSource && crossSource.data.weather) {
+      // OM data can serve as NWS weather data (it has the same structure)
+      const crossAqi = crossSourceGetAQI(cities[i].latitude, cities[i].longitude);
+      cachedResults.push({ ...cities[i], source: crossSource.source, weather: crossSource.data.weather, aqi: crossAqi?.data || {} });
     } else {
       cityCacheMap.push(i);
       uncachedCities.push(cities[i]);
@@ -4121,23 +4226,35 @@ async function fetchNwsForCities(cities) {
 
   const result = new Array(cities.length);
 
-  // Fill cached results first
+  // Fill cached results first (with source: 'nws' to ensure badge updates on toggle)
   for (let i = 0; i < cities.length; i++) {
     const ck = nwsCacheKey(cities[i].latitude, cities[i].longitude);
     const cached = DataCache.get(ck, 'nwsCityData');
     if (cached) {
-      result[i] = { ...cities[i], weather: cached.weather, aqi: {} };
+      // Cross-source AQI from OM cache if NWS doesn't have it
+      const crossAqi = crossSourceGetAQI(cities[i].latitude, cities[i].longitude);
+      const aqiData = crossAqi?.data || cached.aqi || {};
+      result[i] = { ...cities[i], source: 'nws', weather: cached.weather, aqi: aqiData };
     }
   }
 
-  // Fill fetched results
+  // Fill fetched results using coordinate-based matching instead of cache key string comparison
   for (const nwsResult of nwsResults) {
     const ck = nwsCacheKey(nwsResult.latitude, nwsResult.longitude);
     DataCache.set(ck, nwsResult, 'nwsCityData');
-    result[cityCacheMap.find(idx => {
-      const cityCk = nwsCacheKey(cities[idx].latitude, cities[idx].longitude);
-      return cityCk === ck;
-    })] = nwsResult;
+    // Find the city by matching coordinates instead of cache key strings
+    for (const idx of cityCacheMap) {
+      const cityLat = cities[idx].latitude;
+      const cityLon = cities[idx].longitude;
+      if (cityLat != null && cityLon != null) {
+        const resultLat = nwsResult.latitude;
+        const resultLon = nwsResult.longitude;
+        if (Math.abs(resultLat - cityLat) < 0.01 && Math.abs(resultLon - cityLon) < 0.01) {
+          result[idx] = nwsResult;
+          break;
+        }
+      }
+    }
   }
 
   // Fill any uncached cities with null data
@@ -4258,22 +4375,40 @@ function renderCityCard(data, suffix) {
   const hourly = w.hourly || {};
   const aqiData = aqiLabel(a?.us_aqi ?? null);
 
-  // NWS data uses different field names than Open-Meteo
-  const isNws = data.source === 'nws';
+  // Use currentSource (toggle state) for field lookup consistency with badge display
+  const isCurrentSourceNws = currentSource === 'nws';
   const curTemp = current?.temperature_2m != null ? convertTemp(current.temperature_2m) :
                   current?.temperature != null ? convertTemp(current.temperature) : '—';
   const curWeatherCode = current?.weather_code ?? current?.weatherCode ?? 0;
+  // Field names: both sources use the same field names after nwsToAppData mapping
   const humidity = current?.relative_humidity_2m ?? current?.relativeHumidity ?? '—';
   const windSpeed = current?.wind_speed_10m ?? current?.windSpeed ?? '—';
   const windDir = current?.wind_direction_10m ?? current?.windDirection ?? 0;
-  // NWS pressure is in hPa (same as Open-Meteo), but may be null if no data available
-  const pressure = current?.surface_pressure ?? current?.pressure ?? '—';
-  // NWS doesn't provide UV Index — show N/A
-  const uv = current?.uv_index ?? '—';
-  // Visibility: NWS may have null visibility
-  const vis = current?.visibility ? (isNws && current.visibilityUnit === 'mi' ? current.visibility.toFixed(1) : (current.visibility / 1609.34).toFixed(1)) : '—';
-  // NWS doesn't provide AQI — show N/A
-  const pm25 = isNws ? '—' : (a && a.pm2_5 !== undefined && a.pm2_5 !== null ? a.pm2_5 : '—');
+  
+  // Pressure: always in hPa (NWS converted from inHg, OM already in hPa)
+  let pressure = '—';
+  if (current?.surface_pressure != null) {
+    pressure = current.surface_pressure;
+  } else if (current?.pressure != null) {
+    pressure = current.pressure;
+  }
+  
+  // UV Index: cross-source from OM cache if available
+  const uv = current?.uv_index != null ? current.uv_index : '—';
+  
+  // Visibility: always in meters, convert to miles for display
+  let vis = '—';
+  if (current?.visibility != null) {
+    if (current.visibilityUnit === 'mi') {
+      vis = current.visibility.toFixed(1);
+    } else {
+      // meters to miles
+      vis = (current.visibility / 1609.34).toFixed(1);
+    }
+  }
+  
+  // PM2.5: cross-source from OM cache if available
+  const pm25 = a && a.pm2_5 !== undefined && a.pm2_5 !== null ? a.pm2_5 : '—';
 
   const now = new Date();
   const currentHour = now.getHours();
@@ -4316,7 +4451,8 @@ function renderCityCard(data, suffix) {
     </div>`;
   }
 
-  const sourceBadge = data.source === 'nws' ? '<span class="source-badge nws">NWS</span>' : '<span class="source-badge open-meteo">OM</span>';
+  // Badge reflects CURRENT SOURCE (toggle state), not data source (where data came from)
+  const sourceBadge = isCurrentSourceNws ? '<span class="source-badge nws">NWS</span>' : '<span class="source-badge open-meteo">OM</span>';
 
   const safeName = data.place_id || suffix;
   const mergedCanvasId = `chart-merged-${safeName}`;
@@ -4327,11 +4463,15 @@ function renderCityCard(data, suffix) {
   const rain = (hourly?.precipitation || []).slice(0, 24);
   const hum = (hourly?.relative_humidity_2m || hourly?.relativeHumidity || []).slice(0, 24);
   const wind = (hourly?.wind_speed_10m || hourly?.windSpeed || []).slice(0, 24);
-  const chartStats = (data) => data.length ? {
-    min: Math.round(Math.min(...data)),
-    max: Math.round(Math.max(...data)),
-    avg: Math.round(data.reduce((a, b) => a + b, 0) / data.length),
-  } : { min: '—', max: '—', avg: '—' };
+  const chartStats = (data) => {
+    // Filter out null values before computing stats
+    const valid = data.filter(v => v != null);
+    return valid.length ? {
+      min: Math.round(Math.min(...valid)),
+      max: Math.round(Math.max(...valid)),
+      avg: Math.round(valid.reduce((a, b) => a + b, 0) / valid.length),
+    } : { min: '—', max: '—', avg: '—' };
+  };
 
   const humStats = chartStats(hum);
   const windStats = chartStats(wind);
