@@ -711,14 +711,15 @@ body.donkey-fullscreen .fav-dropdown {
   pointer-events: none;
 }
 
-/* Fullscreen game panel - centered and scaled to fit viewport */
+/* Fullscreen game panel - fills the viewport with responsive constraints */
 .donkey-panel.fullscreen {
   position: fixed;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  width: 640px;
+  top: 16px;
+  right: 16px;
+  bottom: 16px;
+  left: 16px;
+  width: auto;
+  height: auto;
   z-index: 9999;
   border-radius: 12px;
   box-shadow: 0 0 60px rgba(0, 0, 0, 0.8);
