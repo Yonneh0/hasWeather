@@ -248,6 +248,7 @@ body {
   justify-content: space-between;
   margin-bottom: 0.4rem;
   position: relative;
+  padding-bottom: 1.8rem;
 }
 .city-name-wrap {
   display: flex;
@@ -335,34 +336,6 @@ body {
   border: 1px solid rgba(100, 200, 100, 0.4);
 }
 
-/* NWS toggle button */
-.nws-toggle-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: rgba(128, 128, 128, 0.3);
-  border: 1px solid rgba(128, 128, 128, 0.4);
-  color: rgba(255, 255, 255, 0.6);
-  cursor: pointer;
-  font-size: 0.85rem;
-  margin-left: 0.3rem;
-  vertical-align: middle;
-  transition: background 0.2s, border-color 0.2s, color 0.2s;
-}
-.nws-toggle-btn:hover {
-  background: rgba(70, 130, 255, 0.3);
-  border-color: rgba(70, 130, 255, 0.4);
-  color: rgba(255, 255, 255, 0.9);
-}
-.nws-toggle-btn.active {
-  background: rgba(70, 130, 255, 0.4);
-  border-color: rgba(70, 130, 255, 0.6);
-  color: #fff;
-}
-
 /* Details row: HIGH / LOW / ☀️ / 🌙 */
 .info-row {
   display: flex;
@@ -394,6 +367,7 @@ body {
 
 /* Details Grid */
 .details-grid {
+  position: relative;
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0.6rem;
@@ -453,6 +427,7 @@ body {
 
 /* Hourly Forecast */
 .hourly-section {
+  position: relative;
   margin-bottom: 0.8rem;
 }
 .hourly-title {
@@ -670,7 +645,178 @@ body {
 .city-compass-row {
   font-size: 0.65rem;
   color: rgba(255,255,255,0.4);
-}/* ===== INTERACTIVE - Interactive elements and visual effects ===== */
+}
+
+/* ===== NWS GHOST OVERLAY - Section-specific ghost elements ===== */
+
+/* Ghost value styling - dark blue tint, reduced opacity */
+.nws-ghost {
+  pointer-events: none;
+  opacity: 0.25;
+  color: #003087 !important;
+}
+
+/* ===== GHOST HEADER ELEMENTS (positioned relative to city-header) ===== */
+
+/* Ghost temperature - offset from OM temp (below and to the right of OM temp) */
+.nws-ghost-temp {
+  position: absolute;
+  top: 100%;
+  left: 100%;
+  margin-left: 8px;
+  margin-top: 4px;
+  font-size: 1.2rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* Ghost weather icon - offset from OM icon (which is at left: 100%; top: -50%) */
+.nws-ghost-icon {
+  position: absolute;
+  top: calc(-30% + 20px);
+  left: calc(100% + 16px);
+  width: 48px;
+  height: 48px;
+}
+
+/* Ghost NOAA badge */
+.nws-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin-left: 0.3rem;
+  vertical-align: middle;
+}
+
+.nws-badge svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* ===== GHOST DETAILS GRID (positioned relative to details-grid) ===== */
+.details-grid {
+  position: relative;
+  margin-bottom: 2.8rem;
+}
+.nws-ghost-details {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6rem;
+  padding: 0.6rem;
+}
+
+/* Ghost detail cell */
+.nws-ghost-detail-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.nws-ghost-detail-label {
+  font-size: 0.55rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: rgba(0, 48, 135, 0.4);
+}
+
+.nws-ghost-detail-value {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #003087;
+}
+
+/* ===== GHOST HIGH/LOW + SUNRISE/SUNSET (positioned relative to card body) ===== */
+.high-low-section {
+  position: relative;
+  margin-bottom: 2.8rem;
+}
+.nws-ghost-high-low {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 3;
+  margin-top: 4px;
+}
+
+/* ===== GHOST HOURLY FORECAST (positioned relative to hourly-section) ===== */
+.hourly-section {
+  position: relative;
+  margin-bottom: 2.8rem;
+}
+.nws-ghost-hourly {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: repeat(6, auto);
+  gap: 0.3rem;
+  margin-top: 4px;
+}
+
+.nws-ghost-hour-slot {
+  text-align: center;
+  padding: 0.4rem 0.3rem;
+  border-radius: 8px;
+  background: rgba(0, 48, 135, 0.12);
+  border: 1px solid rgba(0, 48, 135, 0.18);
+}
+
+.nws-ghost-hour-slot.current {
+  border-color: rgba(0, 48, 135, 0.25);
+  background: rgba(0, 48, 135, 0.18);
+}
+
+.nws-ghost-hour-time {
+  font-size: 0.5rem;
+  color: rgba(0, 48, 135, 0.35);
+}
+
+.nws-ghost-hour-temp {
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: #003087;
+}
+
+.nws-ghost-hour-wind {
+  font-size: 0.5rem;
+  color: rgba(0, 48, 135, 0.35);
+}
+
+.nws-ghost-hour-precip {
+  font-size: 0.45rem;
+  color: rgba(0, 48, 135, 0.4);
+}
+
+/* Ghost icon for weather */
+.nws-ghost-icon svg {
+  width: 48px;
+  height: 48px;
+}
+
+/* Ghost hourly icon */
+.nws-ghost-hour-icon {
+  width: 36px;
+  height: 36px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.nws-ghost-hour-icon svg {
+  width: 36px;
+  height: 36px;
+}
+/* ===== INTERACTIVE - Interactive elements and visual effects ===== */
 
 /* ===== FAVORITES ===== */
 .fav-star {
@@ -2464,7 +2610,7 @@ async function handleCitySearch() {
 }
 
 // ===== NWS BOUNDS CHECK =====
-// Track NWS bounds availability per city (checked lazily when rendering card)
+// Track NWS bounds availability per city (checked during initial fetch)
 const _nwsBoundsCache = {}; // { lat,lon: Promise<boolean> | { value: boolean, expiresAt: number } }
 const NWS_BOUNDS_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour TTL
 
@@ -2499,188 +2645,6 @@ async function isNwsBoundsAvailable(lat, lon) {
   // Replace with TTL entry after resolution
   _nwsBoundsCache[key] = { value: result, expiresAt: Date.now() + NWS_BOUNDS_CACHE_TTL_MS };
   return result;
-}
-
-// ===== PER-CITY NWS TOGGLE =====
-// Per-city toggle allows users to switch individual city cards from Open-Meteo (OM) base data
-// to NWS-enhanced data. The toggle state is persisted to localStorage for cross-session
-// persistence, so user preferences are remembered across app reloads.
-//
-// Note: _nwsActive state and saveNwsActiveState() are declared in cache.js as global state.
-
-// In-flight guard: prevent concurrent toggles for the same city (Fix #2)
-const _nwsToggleInFlight = {}; // { placeId: Promise | null }
-
-/**
- * Toggle NWS enhancement for a city card.
- * 
- * When the user clicks the NWS toggle button (⚡) on a city card, this function:
- * 1. If NWS is currently active: deactivates and switches to OM display (no network traffic)
- * 2. If NWS is not active: checks geographic bounds, cached data, and NWS API availability
- *    before attempting to fetch from the NWS API
- * 
- * Visual feedback is provided for all outcomes: green (success), red (error), amber (outside bounds).
- * 
- * @param {string} placeId - The unique place_id of the city card
- */
-async function toggleCityNws(placeId) {
-   // Show processing feedback immediately before checking in-flight guard
-   showNwsToggleFeedback(placeId, 'processing');
-
-   // Prevent concurrent toggles for the same city (Fix #2)
-   if (_nwsToggleInFlight[placeId]) return;
-
-   const city = weatherData.find(c => c.place_id === placeId);
-   if (!city) return;
-
-   if (_nwsActive[placeId]) {
-     // Deactivate — just swap to OM display, no network traffic
-     _nwsActive[placeId] = false;
-     city.nwsActive = false;
-     city.source = 'open-meteo';
-     saveNwsActiveState();
-     renderAll();
-     return;
-   }
-
-   // Activate — check geographic bounds first (no API call for obvious non-NWS cities)
-   if (city.latitude < 17 || city.latitude > 71 || city.longitude < -170 || city.longitude > -65) {
-     showNwsToggleFeedback(placeId, 'bounds');
-     return;
-   }
-
-    // Check for cached NWS data first (avoid redundant API calls)
-    const ck = nwsCacheKey(city.latitude, city.longitude);
-    const cachedNws = DataCache.get(ck, 'nwsCityData');
-    if (cachedNws && cachedNws.weather) {
-      // Merge cached NWS data into the city object so toggle actually shows NWS data (Fix #5)
-      const nwsCurrent = cachedNws.weather.current || {};
-      const nwsHourly = cachedNws.weather.hourly || {};
-      // Preserve OM precipitation since NWS hourly doesn't have it
-      const omHourly = city.weather?.hourly || {};
-      city.source = 'nws';
-      city.nwsActive = true;
-      city.weather = {
-        current: { ...city.weather?.current, ...nwsCurrent },
-        hourly: {
-          time: nwsHourly.time || omHourly.time || [],
-          temperature: nwsHourly.temperature ?? omHourly.temperature_2m ?? [],
-          weather_code: nwsHourly.weather_code ?? omHourly.weather_code ?? [],
-          precipitation: omHourly.precipitation ?? omHourly.precipitation_mm ?? [],
-          wind_speed_10m: nwsHourly.wind_speed_10m ?? omHourly.wind_speed_10m ?? [],
-          wind_direction_10m: nwsHourly.wind_direction_10m ?? omHourly.wind_direction_10m ?? [],
-          relative_humidity_2m: nwsHourly.relative_humidity_2m ?? omHourly.relative_humidity_2m ?? [],
-        },
-      };
-      if (cachedNws.aqi) city.aqi = cachedNws.aqi;
-      _nwsActive[placeId] = true;
-      saveNwsActiveState();
-      renderAll();
-      showNwsToggleFeedback(placeId, 'success'); // Fix #14: Show feedback on cache hit activation
-      return;
-    }
-
-   // Check NWS bounds — use cached result if available
-   const hasNws = await isNwsBoundsAvailable(city.latitude, city.longitude);
-   if (!hasNws) {
-     showNwsToggleFeedback(placeId, 'bounds');
-     return;
-   }
-
-   // Cache the bounds result on the city object
-   city.nwsBounds = true;
-
-   // Set in-flight guard — store the actual fetch promise so concurrent toggles can share it
-   _nwsToggleInFlight[placeId] = (async () => {
-     try {
-       // Fetch from NWS API
-       const nwsData = await fetchForCity(city.latitude, city.longitude);
-      if (!nwsData) {
-        // NWS returned no data — deactivate toggle with visual feedback
-        _nwsActive[placeId] = false;
-        city.nwsActive = false;
-        city.source = 'open-meteo';
-        saveNwsActiveState();
-        renderAll();
-        showNwsToggleFeedback(placeId, 'error');
-        return;
-      }
-      // Validate that NWS data has a valid current condition (partial data = not usable)
-      if (!nwsData.current) {
-        _nwsActive[placeId] = false;
-        city.nwsActive = false;
-        city.source = 'open-meteo';
-        saveNwsActiveState();
-        renderAll();
-        // Show bounds-style feedback for incomplete data (not a full error — just insufficient data)
-        showNwsToggleFeedback(placeId, 'bounds');
-        return;
-      }
-      DataCache.set(ck, nwsData, 'nwsCityData');
-      _nwsActive[placeId] = true;
-      city.nwsActive = true;
-      city.source = 'nws';
-      saveNwsActiveState();
-      renderAll();
-      showNwsToggleFeedback(placeId, 'success');
-    } catch (err) {
-      // NWS fetch failed — show visual feedback and deactivate toggle
-      _nwsActive[placeId] = false;
-      city.nwsActive = false;
-      city.source = 'open-meteo';
-      saveNwsActiveState();
-      renderAll();
-      showNwsToggleFeedback(placeId, 'error');
-      console.error('[NWS] Failed to fetch data for city:', placeId, err);
-    } finally {
-      // Clear in-flight guard (Fix #2)
-      delete _nwsToggleInFlight[placeId];
-    }
-   })();
-
-   await _nwsToggleInFlight[placeId];
- }
-
-// ===== NWS TOGGLE VISUAL FEEDBACK =====
-
-// Visual feedback types: 'success' (green), 'error' (red), 'bounds' (amber - city outside NWS bounds), 'processing' (blue - already toggling)
-const FEEDBACK_STYLES = Object.freeze({ // Fix #12: Freeze to prevent accidental mutation
-  success:    { bg: 'rgba(70, 200, 100, 0.5)', border: 'rgba(70, 200, 100, 0.6)', text: '#fff', title: 'NWS enhancement active!' },
-  error:      { bg: 'rgba(200, 70, 70, 0.5)', border: 'rgba(200, 70, 70, 0.6)', text: '#fff', title: 'NWS enhancement unavailable' },
-  bounds:     { bg: 'rgba(200, 180, 50, 0.5)', border: 'rgba(200, 180, 50, 0.6)', text: '#fff', title: 'Outside NWS coverage area' },
-  processing: { bg: 'rgba(70, 130, 255, 0.5)', border: 'rgba(70, 130, 255, 0.6)', text: '#fff', title: 'Processing toggle...' },
-});
-
-// Track pending feedback timeouts to prevent timing conflicts (Fix #12)
-const _feedbackTimeouts = {}; // { placeId: timeoutId }
-
-function showNwsToggleFeedback(placeId, type) {
-  const btn = document.querySelector(`.nws-toggle-btn[data-placeid="${CSS.escape(String(placeId))}"]`);
-  if (!btn) return;
-  
-  // Clear any pending feedback for this city (Fix #12: prevent timing conflict)
-  if (_feedbackTimeouts[placeId]) {
-    clearTimeout(_feedbackTimeouts[placeId]);
-    delete _feedbackTimeouts[placeId];
-  }
-  
-  const style = FEEDBACK_STYLES[type];
-  if (!style) return;
-  
-  // Set inline styles to override CSS class defaults
-  btn.style.background = style.bg;
-  btn.style.borderColor = style.border;
-  btn.style.color = style.text;
-  btn.title = style.title;
-  
-  _feedbackTimeouts[placeId] = setTimeout(() => {
-    // Remove inline styles to restore CSS class-based defaults
-    btn.style.background = '';
-    btn.style.borderColor = '';
-    btn.style.color = '';
-    btn.title = 'Toggle NWS enhancement'; // Fix #13: Restore default title instead of removing it
-    delete _feedbackTimeouts[placeId];
-  }, 1500);
 }
 
 // ===== BACKGROUND REFRESH =====
@@ -2747,21 +2711,12 @@ function startBackgroundRefresh() {
     // Only refresh if we have weather data
     if (weatherData.length === 0) return;
     
-    // Invalidate caches for all cities (conditional by source type to avoid unnecessary ops)
+    // Invalidate OM caches for all cities (NWS is always fetched where available)
     for (const city of weatherData) {
-      if (city.source === 'nws') {
-        // NWS-only cities — only invalidate NWS cache
-        const nwsCityCk = nwsCacheKey(city.latitude, city.longitude);
-        DataCache.invalidate(nwsCityCk);
-      } else {
-        // OM cities — invalidate OM caches and any NWS cache that might exist (for cross-source)
-        const weatherCk = weatherCacheKey(city.latitude, city.longitude);
-        const aqiCk = aqiCacheKey(city.latitude, city.longitude);
-        const nwsCityCk = nwsCacheKey(city.latitude, city.longitude);
-        DataCache.invalidate(weatherCk);
-        DataCache.invalidate(aqiCk);
-        DataCache.invalidate(nwsCityCk);
-      }
+      const weatherCk = weatherCacheKey(city.latitude, city.longitude);
+      const aqiCk = aqiCacheKey(city.latitude, city.longitude);
+      DataCache.invalidate(weatherCk);
+      DataCache.invalidate(aqiCk);
     }
     
     // Re-fetch data silently
@@ -3252,13 +3207,11 @@ async function fetchWeatherForCities(cities) {
     // Cross-source: also check NWS keys for OM lookup
     const crossSource = crossSourceGetWeather(cities[i].latitude, cities[i].longitude);
     if (cachedWeather) {
-      cachedResults.push({ ...cities[i], source: 'open-meteo', nwsActive: false, weather: cachedWeather, aqi: cachedAqi || {} });
+      cachedResults.push({ ...cities[i], source: 'open-meteo', weather: cachedWeather, aqi: cachedAqi || {} });
     } else if (crossSource && crossSource.data.weather) {
       // NWS data can serve as OM weather data (it has the same structure)
       const crossAqi = crossSourceGetAQI(cities[i].latitude, cities[i].longitude);
-      // Set source and nwsActive based on user preference — only show NWS if they toggled it on
-      const shouldShowNws = _nwsActive[cities[i].place_id] === true;
-      cachedResults.push({ ...cities[i], source: shouldShowNws ? 'nws' : crossSource.source, nwsActive: shouldShowNws, weather: crossSource.data.weather, aqi: crossAqi?.data || {} });
+      cachedResults.push({ ...cities[i], source: crossSource.source, weather: crossSource.data.weather, aqi: crossAqi?.data || {} });
     } else {
       cityCacheMap.push(i);
       uncachedCities.push(cities[i]);
@@ -3305,7 +3258,7 @@ async function fetchWeatherForCities(cities) {
       const entryWeather = DataCache.get(weatherCk, 'weather');
       const entryAqi = DataCache.get(aqiCk, 'airQuality');
       if (entryWeather) {
-        result[i] = { ...cities[i], source: 'open-meteo', nwsActive: false, weather: entryWeather, aqi: entryAqi || {} };
+        result[i] = { ...cities[i], source: 'open-meteo', weather: entryWeather, aqi: entryAqi || {} };
       }
     }
 
@@ -3395,7 +3348,7 @@ async function fetchWeatherForCities(cities) {
       DataCache.set(weatherCk, cityWeather, 'weather');
       DataCache.set(aqiCk, aqiResult, 'airQuality');
 
-      result[i] = { ...city, source: 'open-meteo', nwsActive: false, weather: cityWeather, aqi: aqiResult };
+      result[i] = { ...city, source: 'open-meteo', weather: cityWeather, aqi: aqiResult };
     }
 
     return deduplicateResults(result);
@@ -3408,9 +3361,9 @@ async function fetchWeatherForCities(cities) {
       if (DataCache.has(weatherCk, 'weather')) {
         const entryWeather = DataCache.get(weatherCk, 'weather');
         const entryAqi = DataCache.get(aqiCk, 'airQuality');
-        result[i] = { ...cities[i], source: 'open-meteo', nwsActive: false, weather: entryWeather, aqi: entryAqi || {} };
+        result[i] = { ...cities[i], source: 'open-meteo', weather: entryWeather, aqi: entryAqi || {} };
       } else {
-        result[i] = { ...cities[i], source: 'open-meteo', nwsActive: false, weather: null, aqi: {} };
+        result[i] = { ...cities[i], source: 'open-meteo', weather: null, aqi: {} };
       }
     }
     return result;
@@ -4507,8 +4460,6 @@ function renderCityCard(data, suffix) {
   const hourly = w.hourly || {};
   const aqiData = aqiLabel(a?.us_aqi ?? null);
 
-  // Check if this city has NWS data active (per-city toggle) — use data.nwsActive for consistency
-  const nwsActiveForCity = data.nwsActive === true;
   const curTemp = current?.temperature_2m != null ? convertTemp(current.temperature_2m) :
                   current?.temperature != null ? convertTemp(current.temperature) : '—';
   const curWeatherCode = current?.weather_code ?? current?.weatherCode ?? 0;
@@ -4583,18 +4534,11 @@ function renderCityCard(data, suffix) {
     </div>`;
   }
 
-    // Badge reflects each city's actual data source (OM base, NWS-only, or NWS-enhanced)
-    // Always show a default "OM" badge for cities without NWS enhancement
-    const nwsBoundsAvailable = !!data.nwsBounds;
-    const sourceBadge = (data.source === 'enhanced')
-      ? '<span class="source-badge enhanced">ENHANCED</span>'
-      : (data.source === 'nws' && nwsActiveForCity)
-        ? '<span class="source-badge enhanced">ENHANCED</span>'
-        : '<span class="source-badge open-meteo">OM</span>';
-
-    // NWS toggle button HTML — show when NWS bounds are available or city already has NWS active from cross-session persistence
-    const nwsToggleBtn = ((nwsBoundsAvailable || nwsActiveForCity) && data.place_id !== '') 
-      ? `<span class="nws-toggle-btn" data-placeid="${escapeHTML(data.place_id)}" title="Toggle NWS enhancement">⚡</span>` : '';
+    // NOAA badge — show when NWS data is available for this city
+    const hasNwsData = !!data.nwsData;
+    const nwsBadge = hasNwsData 
+      ? `<span class="nws-badge" title="NWS data available"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 74 74"><path fill="#003087" d="M70.17,20.61c-5.27,7.93-14,19-24.19,22.69l-1.26.53a2.86,2.86,0,0,0,.77.23h1.2c2.58-.1,6.3-1.19,7.06,1.43A30.55,30.55,0,0,0,39,49.41c-4.61,2.53-10.45,4.81-14.27,1.26,3.06-.41,8.71-2.26,10.7-4.07C19.25,46.38,12.06,36.3,7,30.79c-1.82-2.11-3.69-3.88-5.6-4.06a37,37,0,1,0,68.74-6.12Z"/><path fill="#fff" d="M7,30.77c5,5.51,12.22,15.58,28.42,15.81-2,1.8-7.64,3.65-10.7,4.07C28.53,54.22,34.41,52,39,49.39a30.46,30.46,0,0,1,14.69-3.87C53,42.9,49.23,44,46.65,44.08h-1.2a2.63,2.63,0,0,1-.77-.23l1.26-.52C56.1,39.54,64.85,28.54,70.13,20.55a35.57,35.57,0,0,0-3.78-6c-9.52,1.74-12.6,15.68-18,22.59-7.16,10.08-14,7.85-21.27,1.13S14.44,19.61,6.77,15.54A37.06,37.06,0,0,0,1.38,26.72C3.34,26.91,5.21,28.68,7,30.77Z"/><path fill="#003087" d="M27.1,38.26c7.22,6.72,14.11,8.92,21.28-1.14,5.45-6.91,8.5-20.85,18-22.59a37,37,0,0,0-59.58,1C14.49,19.61,19.88,31.65,27.1,38.26Z"/></svg></span>`
+      : '<span class="source-badge open-meteo">OM</span>';
 
   const safeName = data.place_id || suffix;
   const mergedCanvasId = `chart-merged-${safeName}`;
@@ -4619,15 +4563,159 @@ function renderCityCard(data, suffix) {
   const windStats = chartStats(wind);
   const rainStats = chartStats(rain);
 
+  // Compute day high/low from current-day hourly data only
+  const dayHigh = temps.length ? Math.round(Math.max(...temps.filter(v => v != null))) : '—';
+  const dayLow = temps.length ? Math.round(Math.min(...temps.filter(v => v != null))) : '—';
+  const sunriseStr = current?.sunrise ? current.sunrise.split('T')[1]?.split('+')[0] : '';
+  const sunsetStr = current?.sunset ? current.sunset.split('T')[1]?.split('+')[0] : '';
+
+  // Format time from HH:MM:SS to HH:MM (used for both OM and NWS high/low section)
+  const formatTime = (t) => {
+    if (!t) return '—';
+    return t.length >= 5 ? t.slice(0, 5) : t;
+  };
+
+  // Build ghost overlay HTML when NWS data is available
+  let ghostHeaderHTML = '';
+  let ghostDetailsHTML = '';
+  let ghostHighLowHTML = '';
+  let ghostHourlyHTML = '';
+  if (hasNwsData) {
+    const nwsCurrent = data.nwsData?.weather?.current || {};
+    const nwsHourly = data.nwsData?.weather?.hourly || {};
+    
+    // Ghost temperature (offset from OM temp)
+    const ghostTemp = nwsCurrent?.temperature_2m != null ? convertTemp(nwsCurrent.temperature_2m) :
+                      nwsCurrent?.temperature != null ? convertTemp(nwsCurrent.temperature) : '—';
+    
+    // Ghost weather icon
+    const ghostWeatherCode = nwsCurrent?.weather_code ?? nwsCurrent?.weatherCode ?? 0;
+    const isNwsDay = isDaytime(currentHour, sunriseTime, sunsetTime);
+    const ghostIcon = isNwsDay ? getWeatherIcon(ghostWeatherCode) : getMoonIcon(ghostWeatherCode);
+    
+    // Ghost details grid values
+    const ghostHumidity = nwsCurrent?.relative_humidity_2m ?? nwsCurrent?.relativeHumidity ?? '—';
+    const ghostWindSpeed = nwsCurrent?.wind_speed_10m != null ? `${Math.round(nwsCurrent.wind_speed_10m)} km/h` :
+                          nwsCurrent?.windSpeed != null ? `${Math.round(nwsCurrent.windSpeed)} km/h` : '';
+    const ghostWindDir = nwsCurrent?.wind_direction_10m ?? nwsCurrent?.windDirection ?? 0;
+    let ghostPressure = '—';
+    if (nwsCurrent?.surface_pressure != null) {
+      ghostPressure = nwsCurrent.surface_pressure;
+    } else if (nwsCurrent?.pressure != null) {
+      ghostPressure = nwsCurrent.pressure;
+    }
+    // NWS doesn't provide UV Index
+    const ghostUv = '—';
+    let ghostVis = '—';
+    if (nwsCurrent?.visibility != null) {
+      if (nwsCurrent.visibilityUnit === 'mi') {
+        ghostVis = nwsCurrent.visibility.toFixed(1);
+      } else {
+        ghostVis = (nwsCurrent.visibility / 1609.34).toFixed(1);
+      }
+    }
+    
+    // Ghost hourly forecast
+    const nwsTimeArr = nwsHourly?.time || [];
+    const nwsCurrentDay = now.toISOString().split('T')[0];
+    const nwsCurrentIdx = nwsTimeArr.findIndex(t => {
+      const [datePart, timePart] = t.split('T');
+      return datePart === nwsCurrentDay && timePart.startsWith(`T${String(currentHour).padStart(2, '0')}`);
+    });
+    
+    // Build ghost hourly slots
+    let ghostHourlySlotsHTML = '';
+    for (let i = 0; i < 24; i++) {
+      const hIdx = nwsCurrentIdx >= 0 ? nwsCurrentIdx + i : currentHour + i;
+      if (hIdx < 0 || hIdx >= nwsTimeArr.length) break;
+      const hTime = nwsTimeArr[hIdx]?.split('T')[1]?.split('+')[0]?.slice(0, 5);
+      const hTemp = nwsHourly?.temperature_2m?.[hIdx] != null ? convertTemp(nwsHourly.temperature_2m[hIdx]) :
+                    nwsHourly?.temperature?.[hIdx] != null ? convertTemp(nwsHourly.temperature[hIdx]) : '—';
+      const hCode = nwsHourly?.weather_code?.[hIdx] ?? nwsHourly?.weatherCode?.[hIdx] ?? 0;
+      const isGhostCurrent = i === 0;
+      const hHourDecimal = parseDecimalTime(hTime, 12);
+      const hIsDay = isDaytime(hHourDecimal, sunriseTime, sunsetTime);
+      const hWind = nwsHourly?.wind_speed_10m?.[hIdx] != null ? `${Math.round(nwsHourly.wind_speed_10m[hIdx])} km/h` :
+                    nwsHourly?.windSpeed?.[hIdx] != null ? `${Math.round(nwsHourly.windSpeed[hIdx])} km/h` : '';
+      const hPrecip = nwsHourly?.precipitation?.[hIdx] != null && nwsHourly.precipitation[hIdx] > 0.1 
+        ? `${Math.round(nwsHourly.precipitation[hIdx])}mm` : '';
+      ghostHourlySlotsHTML += `<div class="nws-ghost-hour-slot${isGhostCurrent ? ' current' : ''}">
+        <div class="nws-ghost-hour-time">${hTime}</div>
+        <div class="nws-ghost-hour-icon">${isGhostCurrent ? ghostIcon : (hIsDay ? getWeatherIcon(hCode) : getMoonIcon(hCode))}</div>
+        <div class="nws-ghost-hour-temp">${Math.round(hTemp)}°</div>
+        ${hWind ? `<div class="nws-ghost-hour-wind">${hWind}</div>` : ''}
+        ${hPrecip ? `<div class="nws-ghost-hour-precip">${hPrecip}</div>` : ''}
+      </div>`;
+    }
+    
+    // Ghost header elements (positioned relative to city-header)
+    ghostHeaderHTML = `
+      <div class="nws-ghost nws-ghost-temp">${Math.round(ghostTemp)}°</div>
+      <div class="nws-ghost nws-ghost-icon">${ghostIcon}</div>`;
+    
+    // Ghost details grid (positioned relative to details-grid)
+    ghostDetailsHTML = `
+      <div class="nws-ghost nws-ghost-details">
+        <div class="nws-ghost-detail-cell">
+          <span class="nws-ghost-detail-label">Humidity</span>
+          <span class="nws-ghost-detail-value">${ghostHumidity}%</span>
+        </div>
+        <div class="nws-ghost-detail-cell">
+          <span class="nws-ghost-detail-label">Wind</span>
+          <span class="nws-ghost-detail-value">${ghostWindDir !== 0 ? getWindCompass(ghostWindDir) + ' ' + ghostWindSpeed : '—'}</span>
+        </div>
+        <div class="nws-ghost-detail-cell">
+          <span class="nws-ghost-detail-label">Pressure</span>
+          <span class="nws-ghost-detail-value">${ghostPressure} hPa</span>
+        </div>
+        <div class="nws-ghost-detail-cell">
+          <span class="nws-ghost-detail-label">UV Index</span>
+          <span class="nws-ghost-detail-value">${ghostUv}</span>
+        </div>
+        <div class="nws-ghost-detail-cell">
+          <span class="nws-ghost-detail-label">Visibility</span>
+          <span class="nws-ghost-detail-value">${ghostVis} mi</span>
+        </div>
+      </div>`;
+    
+    // Ghost high/low + sunrise/sunset
+    const nwsTemps = (nwsHourly?.temperature_2m || nwsHourly?.temperature || []).slice(0, 24);
+    const nwsValidTemps = nwsTemps.filter(v => v != null);
+    const nwsDayHigh = nwsValidTemps.length ? Math.round(Math.max(...nwsValidTemps)) : '—';
+    const nwsDayLow = nwsValidTemps.length ? Math.round(Math.min(...nwsValidTemps)) : '—';
+    const nwsSunriseStr = nwsCurrent?.sunrise ? nwsCurrent.sunrise.split('T')[1]?.split('+')[0] : '';
+    const nwsSunsetStr = nwsCurrent?.sunset ? nwsCurrent.sunset.split('T')[1]?.split('+')[0] : '';
+    
+    ghostHighLowHTML = `
+      <div class="nws-ghost nws-ghost-high-low">
+        <div class="high-low-section">
+          <div class="high-low-row">
+            <span class="high-label">HIGH</span><span class="high-val">${Math.round(nwsDayHigh)}°</span>
+            <span class="low-label">LOW</span><span class="low-val">${Math.round(nwsDayLow)}°</span>
+          </div>
+          <div class="sun-row">
+            <span>SUNRISE ${formatTime(nwsSunriseStr)}</span>
+            <span>SUNSET ${formatTime(nwsSunsetStr)}</span>
+          </div>
+        </div>
+      </div>`;
+    
+    // Ghost hourly forecast (positioned relative to hourly-section)
+    ghostHourlyHTML = `
+      <div class="nws-ghost nws-ghost-hourly">
+        ${ghostHourlySlotsHTML}
+      </div>`;
+  }
+
   return `
     <canvas class="chart-canvas chart-merged" id="${mergedCanvasId}" style="position:absolute;top:0;left:0;right:0;bottom:0;z-index:0;pointer-events:none;"></canvas>
     <div style="position:relative;z-index:2;">
    <div class="city-header">
+       ${ghostHeaderHTML}
        <div class="city-name-wrap">
-         <span class="city-name">${escapeHTML(data.name)}${FavoritesManager.has(data.place_id, data.latitude, data.longitude) ? '<span class="fav-star">★</span>' : ''}${sourceBadge}</span>
+         <span class="city-name">${escapeHTML(data.name)}${FavoritesManager.has(data.place_id, data.latitude, data.longitude) ? '<span class="fav-star">★</span>' : ''}${nwsBadge}</span>
          <span class="city-state">${escapeHTML(data.state)}</span>
        </div>
-       ${nwsToggleBtn}
        <span class="current-temp-inline">${Math.round(curTemp)}°</span>
       <div class="current-weather-icon-inline">${curIconLarge}</div>
     </div>
@@ -4663,7 +4751,8 @@ function renderCityCard(data, suffix) {
         </div>
       </div>
     </div>
-    <div class="details-grid">
+    <div class="details-grid" style="position:relative;">
+      ${ghostDetailsHTML}
       <div class="detail-cell"><span class="detail-label">Humidity</span><span class="detail-value">${humidity}%</span></div>
       <div class="detail-cell"><span class="detail-label">Wind</span><span class="detail-value">${windDir !== 0 ? getWindCompass(windDir) + ' ' + windSpeed : '—'}</span></div>
       <div class="detail-cell"><span class="detail-label">Pressure</span><span class="detail-value">${pressure} hPa</span></div>
@@ -4671,9 +4760,20 @@ function renderCityCard(data, suffix) {
       <div class="detail-cell"><span class="detail-label">Visibility</span><span class="detail-value">${vis} mi</span></div>
       <div class="detail-cell"><span class="detail-label">AQI (PM2.5)</span><span class="detail-value"><span class="aqi-badge ${aqiData.cls}">${aqiData.label}</span> ${pm25}</span></div>
     </div>
-    <div class="hourly-section">
+    <div class="high-low-section">
+      <div class="high-low-row">
+        <span class="high-label">HIGH</span><span class="high-val">${dayHigh}°</span>
+        <span class="low-label">LOW</span><span class="low-val">${dayLow}°</span>
+      </div>
+      <div class="sun-row">
+        <span>SUNRISE ${formatTime(sunriseStr)}</span>
+        <span>SUNSET ${formatTime(sunsetStr)}</span>
+      </div>
+    </div>
+    <div class="hourly-section" style="position:relative;">
       <div class="hourly-title">24-Hour Forecast</div>
       <div class="hourly-row">${hourlyHTML}</div>
+      ${ghostHourlyHTML}
     </div>
     </div>`;
 }
@@ -7905,8 +8005,6 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
  <script>
 // ===== FAVORITES DROPDOWN =====
-// Note: This file depends on _nwsActive and saveNwsActiveState() from cache.js.
-// These are only accessed after DOMContentLoaded events fire, so by that time cache.js has loaded.
 
 let _allNearbyCities = []; // 20 nearest cities for dropdown (with place_id)
 
@@ -8290,46 +8388,23 @@ async function addFavoriteCard(city) {
   if (!weatherResult?.[0]?.weather) return;
   let data = weatherResult[0];
 
-   // Restore NWS toggle state for this city (cross-session persistence).
-   // Only restore if cached NWS data exists and is fresh (Fix #4: Validate cache before restoring).
-   if (_nwsActive[data.place_id] === true) {
-     const ck = nwsCacheKey(data.latitude, data.longitude);
-     const cachedNws = DataCache.get(ck, 'nwsCityData');
-     if (cachedNws && cachedNws.weather && cachedNws.weather.current) {
-       // Merge cached NWS data into the city object so toggle actually shows NWS data (Fix #9)
-       const nwsCurrent = cachedNws.weather.current || {};
-       const nwsHourly = cachedNws.weather.hourly || {};
-       // Preserve OM precipitation since NWS hourly doesn't have it
-       const omHourly = data.weather?.hourly || {};
-       data.source = 'nws';
-       data.nwsActive = true;
-       data.weather = {
-         current: { ...data.weather?.current, ...nwsCurrent },
-         hourly: {
-           time: nwsHourly.time || omHourly.time || [],
-           temperature: nwsHourly.temperature ?? omHourly.temperature_2m ?? [],
-           weather_code: nwsHourly.weather_code ?? omHourly.weather_code ?? [],
-           precipitation: omHourly.precipitation ?? omHourly.precipitation_mm ?? [],
-           wind_speed_10m: nwsHourly.wind_speed_10m ?? omHourly.wind_speed_10m ?? [],
-           wind_direction_10m: nwsHourly.wind_direction_10m ?? omHourly.wind_direction_10m ?? [],
-           relative_humidity_2m: nwsHourly.relative_humidity_2m ?? omHourly.relative_humidity_2m ?? [],
-         },
-       };
-       if (cachedNws.aqi) data.aqi = cachedNws.aqi;
-       saveNwsActiveState();
-     } else {
-       // Clear stale toggle preference — no valid NWS data available
-       delete _nwsActive[data.place_id];
-       saveNwsActiveState();
-     }
-   }
-   // Set nwsBounds so toggle button shows immediately (even if not restoring)
-   // Await the bounds check to ensure nwsBounds is a boolean, not a Promise
+   // Check NWS bounds for this city and fetch NWS data where available
    if (data.latitude != null && data.longitude != null) {
      data.nwsBounds = await isNwsBoundsAvailable(data.latitude, data.longitude);
    }
 
-  const grid = document.getElementById('city-grid');
+   // Fetch NWS data if bounds are available
+   if (data.nwsBounds) {
+     const nwsData = await fetchForCity(data.latitude, data.longitude).catch(() => null);
+     if (nwsData && nwsData.current) {
+       const nwsAppData = nwsToAppData(data, nwsData);
+       if (nwsAppData) {
+         data.nwsData = nwsAppData;
+       }
+     }
+   }
+
+   const grid = document.getElementById('city-grid');
   if (!grid) return;
 
   const card = document.createElement('div');
@@ -8696,15 +8771,6 @@ document.addEventListener('DOMContentLoaded', () => {
    // Toggle network outage retry when pressing the refresh button while offline
    // (already handled above in checkNetwork)
 
-   // Event delegation for NWS toggle buttons on city cards
-   document.getElementById('city-grid')?.addEventListener('click', (e) => {
-     const btn = e.target.closest('.nws-toggle-btn');
-     if (btn) {
-       const placeId = btn.dataset.placeid;
-       if (placeId) toggleCityNws(placeId);
-     }
-   });
-
    // Start the app with network check
    checkNetworkAndRun(run);
  });
@@ -8778,63 +8844,48 @@ async function run() {
     return;
   }
 
-   // Always use OM as base for all cities
-   weatherData = await fetchWeatherForCities(allCities);
+    // Always use OM as base for all cities
+    weatherData = await fetchWeatherForCities(allCities);
 
-   // Check NWS bounds for each city (set nwsBounds flag) — sequential to respect rate limits
-   for (const city of weatherData) {
-     if (city.latitude != null && city.longitude != null) {
-       // Quick bounds filter first (no API call for obvious non-NWS cities)
-       if (city.latitude >= 17 && city.latitude <= 71 && city.longitude >= -170 && city.longitude <= -65) {
-         city.nwsBounds = await isNwsBoundsAvailable(city.latitude, city.longitude);
-       } else {
-         city.nwsBounds = false;
-       }
-     } else {
-       city.nwsBounds = false;
-     }
-   }
-
-    // Restore _nwsActive state for cities currently in weatherData (cross-session persistence).
-    // Only restore NWS active state if the cached NWS data is still fresh.
-    const activePlaceIds = new Set();
+    // Check NWS bounds for each city and fetch NWS data where available — sequential to respect rate limits
+    const nwsCities = [];
     for (const city of weatherData) {
-      if (_nwsActive[city.place_id] === true) {
-        // Verify cached NWS data exists and hasn't expired (Fix #4 / Fix #9: Validate cache before restoring)
-        const ck = nwsCacheKey(city.latitude, city.longitude);
-        const cachedNws = DataCache.get(ck, 'nwsCityData');
-        if (cachedNws && cachedNws.weather && cachedNws.weather.current) {
-          // Merge cached NWS data into the city object so toggle actually shows NWS data (Fix #9)
-          const nwsCurrent = cachedNws.weather.current || {};
-          const nwsHourly = cachedNws.weather.hourly || {};
-          // Preserve OM precipitation since NWS hourly doesn't have it
-          const omHourly = city.weather?.hourly || {};
-          city.source = 'nws';
-          city.nwsActive = true;
-          city.weather = {
-            current: { ...city.weather?.current, ...nwsCurrent },
-            hourly: {
-              time: nwsHourly.time || omHourly.time || [],
-              temperature: nwsHourly.temperature ?? omHourly.temperature_2m ?? [],
-              weather_code: nwsHourly.weather_code ?? omHourly.weather_code ?? [],
-              precipitation: omHourly.precipitation ?? omHourly.precipitation_mm ?? [],
-              wind_speed_10m: nwsHourly.wind_speed_10m ?? omHourly.wind_speed_10m ?? [],
-              wind_direction_10m: nwsHourly.wind_direction_10m ?? omHourly.wind_direction_10m ?? [],
-              relative_humidity_2m: nwsHourly.relative_humidity_2m ?? omHourly.relative_humidity_2m ?? [],
-            },
-          };
-          if (cachedNws.aqi) city.aqi = cachedNws.aqi;
-          activePlaceIds.add(city.place_id);
+      if (city.latitude != null && city.longitude != null) {
+        // Quick bounds filter first (no API call for obvious non-NWS cities)
+        if (city.latitude >= 17 && city.latitude <= 71 && city.longitude >= -170 && city.longitude <= -65) {
+          city.nwsBounds = await isNwsBoundsAvailable(city.latitude, city.longitude);
         } else {
-          // Clear stale toggle preference — no valid NWS data available
-          delete _nwsActive[city.place_id];
-          saveNwsActiveState();
+          city.nwsBounds = false;
+        }
+      } else {
+        city.nwsBounds = false;
+      }
+
+      // Queue cities that have NWS bounds for data fetching
+      if (city.nwsBounds) {
+        nwsCities.push(city);
+      }
+    }
+
+    // Fetch NWS data for all queued cities in parallel
+    if (nwsCities.length > 0) {
+      const nwsResults = await Promise.allSettled(
+        nwsCities.map(city => fetchForCity(city.latitude, city.longitude).catch(() => null))
+      );
+
+      // Store NWS data on each city object as separate from OM data
+      for (let i = 0; i < nwsCities.length; i++) {
+        const city = nwsCities[i];
+        const result = nwsResults[i];
+        if (result.status === 'fulfilled' && result.value && result.value.current) {
+          // Convert NWS data to app format
+          const nwsAppData = nwsToAppData(city, result.value);
+          if (nwsAppData) {
+            city.nwsData = nwsAppData;
+          }
         }
       }
     }
-   // Save updated state (only if there are active toggles) — do NOT delete stale entries
-   // to preserve user preference when cities are removed and re-added
-   if (activePlaceIds.size > 0) saveNwsActiveState();
 
    renderAll();
 }
