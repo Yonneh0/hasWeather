@@ -6,6 +6,10 @@ const OPEN_METEO_GEOCODING = 'https://geocoding-api.open-meteo.com/v1/search';
 const IP_API = 'https://ipinfo.io/json';
 const NOMINATIM = 'https://nominatim.openstreetmap.org/search';
 
+// ===== CURRENT DATA SOURCE =====
+// 'open-meteo' or 'nws' — controlled by source toggle button
+let currentSource = 'open-meteo';
+
 // ===== CONSTANTS =====
 const EARTH_RADIUS_MI = 3958.8;
 const GEOLOCATION_TIMEOUT_MS = 8000;

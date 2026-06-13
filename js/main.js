@@ -12,8 +12,10 @@ let _maxCities = parseInt(localStorage.getItem('hasW_maxCities') ?? '6', 10);
 // ===== INIT =====
 document.addEventListener('DOMContentLoaded', () => {
   initParticles();
+  restoreSourcePreference();
 
   const unitBtn = document.getElementById('unit-toggle');
+  const sourceBtn = document.getElementById('source-toggle');
   const refreshBtn = document.getElementById('refresh-btn');
   const gameBtn = document.getElementById('game-btn');
   const favBtn = document.getElementById('fav-btn');
@@ -25,6 +27,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const cityInput = document.getElementById('city-input');
 
   if (unitBtn) unitBtn.addEventListener('click', toggleUnit);
+  if (sourceBtn) sourceBtn.addEventListener('click', toggleSource);
   if (refreshBtn) refreshBtn.addEventListener('click', refresh);
   if (gameBtn) gameBtn.addEventListener('click', toggleGame);
   if (searchBtn) searchBtn.addEventListener('click', handleCitySearch);

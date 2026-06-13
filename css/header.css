@@ -64,3 +64,37 @@
   border-color: rgba(100, 200, 100, 0.4);
   box-shadow: 0 0 8px rgba(100, 200, 100, 0.2);
 }
+
+/* Source toggle button */
+#source-toggle {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+#source-toggle.nws {
+  background: rgba(70, 130, 255, 0.3);
+  border-color: rgba(70, 130, 255, 0.5);
+}
+
+#source-toggle.nws:hover {
+  background: rgba(70, 130, 255, 0.4);
+}
+
+#source-toggle.loading {
+  animation: spin 1s linear infinite;
+}
+
+#source-toggle.disabled {
+  background: rgba(128,128,128,0.1);
+  border-color: rgba(128,128,128,0.2);
+  color: rgba(255,255,255,0.3);
+  cursor: not-allowed;
+}
+
+#source-toggle.disabled:hover {
+  background: rgba(128,128,128,0.1);
+}
+
+#source-toggle.disabled:active {
+  transform: none;
+}

@@ -10,7 +10,33 @@ const DataCache = {
     airQuality: 15 * 60 * 1000,   // 15 minutes
     geocode: 24 * 60 * 60 * 1000, // 24 hours
     nearby: 10 * 60 * 1000,       // 10 minutes
-    ipLocation: 24 * 60 * 60 * 1000 // 24 hours
+    ipLocation: 24 * 60 * 60 * 1000, // 24 hours
+    nwsPoint: 15 * 60 * 1000,     // 15 minutes
+    nwsForecast: 10 * 60 * 1000,  // 10 minutes
+    nwsHourly: 5 * 60 * 1000,     // 5 minutes
+    nwsCurrent: 10 * 60 * 1000,   // 10 minutes
+    nwsObservation: 5 * 60 * 1000, // 5 minutes
+    nwsAlerts: 2 * 60 * 1000,     // 2 minutes
+    nwsZoneForecast: 10 * 60 * 1000, // 10 minutes
+    nwsCityData: 10 * 60 * 1000,   // 10 minutes (NWS city data)
+    nwsStations: 30 * 60 * 1000,   // 30 minutes (observation stations)
+    nwsObsLatest: 5 * 60 * 1000,   // 5 minutes (latest observation from station)
+    nwsObsHistorical: 5 * 60 * 1000, // 5 minutes (historical observation)
+    nwsProducts: 10 * 60 * 1000,   // 10 minutes (text products)
+    nwsAviation: 10 * 60 * 1000,   // 10 minutes (aviation data)
+    nwsRadar: 5 * 60 * 1000,       // 5 minutes (radar data)
+    nwsGrid: 10 * 60 * 1000,       // 10 minutes (raw gridpoint data)
+    nwsZone: 15 * 60 * 1000,       // 15 minutes (zone metadata)
+    nwsCounty: 15 * 60 * 1000,     // 15 minutes (county metadata)
+    nwsOffice: 15 * 60 * 1000,     // 15 minutes (office metadata)
+    nwsActiveAlerts: 2 * 60 * 1000, // 2 minutes (active alerts)
+    nwsAlertTypes: 60 * 60 * 1000,  // 60 minutes (alert type list)
+    nwsProductTypes: 60 * 60 * 1000, // 60 minutes (product type list)
+    nwsProductLocations: 60 * 60 * 1000, // 60 minutes (product location list)
+    nwsRadarServers: 60 * 60 * 1000, // 60 minutes (radar server list)
+    nwsRadarStations: 60 * 60 * 1000, // 60 minutes (radar station list)
+    nwsGlossary: 24 * 60 * 60 * 1000, // 24 hours (glossary)
+    nwsOffices: 15 * 60 * 1000,    // 15 minutes (office list)
   },
 
   // Round coordinates to 2 decimal places (~1km accuracy) for cache key grouping

@@ -91,16 +91,19 @@ function renderCityCard(data, suffix) {
 
   const current = w.current || {};
   const hourly = w.hourly || {};
-  const aqiData = aqiLabel(a.us_aqi);
+  const aqiData = aqiLabel(a?.us_aqi ?? null);
 
-  const curTemp = current?.temperature_2m != null ? convertTemp(current.temperature_2m) : '—';
-  const curWeatherCode = current?.weather_code ?? 0;
-  const humidity = current?.relative_humidity_2m ?? '—';
-  const windSpeed = current?.wind_speed_10m ?? '—';
-  const windDir = current?.wind_direction_10m ?? 0;
-  const pressure = current?.surface_pressure ?? '—';
+  // NWS data uses different field names than Open-Meteo
+  const isNws = data.source === 'nws';
+  const curTemp = current?.temperature_2m != null ? convertTemp(current.temperature_2m) :
+                  current?.temperature != null ? convertTemp(current.temperature) : '—';
+  const curWeatherCode = current?.weather_code ?? current?.weatherCode ?? 0;
+  const humidity = current?.relative_humidity_2m ?? current?.relativeHumidity ?? '—';
+  const windSpeed = current?.wind_speed_10m ?? current?.windSpeed ?? '—';
+  const windDir = current?.wind_direction_10m ?? current?.windDirection ?? 0;
+  const pressure = current?.surface_pressure ?? current?.pressure ?? '—';
   const uv = current?.uv_index ?? '—';
-  const vis = current?.visibility ? (current.visibility / 1609.34).toFixed(1) : '—';
+  const vis = current?.visibility ? (isNws && current.visibilityUnit === 'mi' ? current.visibility.toFixed(1) : (current.visibility / 1609.34).toFixed(1)) : '—';
   const pm25 = a.pm2_5 !== undefined && a.pm2_5 !== null ? a.pm2_5 : '—';
 
   const now = new Date();
@@ -125,14 +128,16 @@ function renderCityCard(data, suffix) {
     const hIdx = currentIdx >= 0 ? currentIdx + i : currentHour + i;
     if (hIdx < 0 || hIdx >= timeArr.length) break;
     const hTime = timeArr[hIdx]?.split('T')[1]?.split('+')[0]?.slice(0, 5);
-    const hTemp = hourly?.temperature_2m?.[hIdx] != null ? convertTemp(hourly.temperature_2m[hIdx]) : 0;
+    const hTemp = hourly?.temperature_2m?.[hIdx] != null ? convertTemp(hourly.temperature_2m[hIdx]) :
+                  hourly?.temperature?.[hIdx] != null ? convertTemp(hourly.temperature[hIdx]) : 0;
     const precipMM = hourly?.precipitation?.[hIdx] || 0;
     const hPrecip = precipMM > 0.1 ? `${Math.round(precipMM)}mm` : '';
-    const hCode = hourly?.weather_code?.[hIdx] ?? 0;
+    const hCode = hourly?.weather_code?.[hIdx] ?? hourly?.weatherCode?.[hIdx] ?? 0;
     const isCurrent = i === 0;
     const hHourDecimal = parseDecimalTime(hTime, 12);
     const hIsDay = isDaytime(hHourDecimal, sunriseTime, sunsetTime);
-    const hWind = hourly?.wind_speed_10m?.[hIdx] != null ? `${Math.round(hourly.wind_speed_10m[hIdx])} km/h` : '';
+    const hWind = hourly?.wind_speed_10m?.[hIdx] != null ? `${Math.round(hourly.wind_speed_10m[hIdx])} km/h` :
+                  hourly?.windSpeed?.[hIdx] != null ? `${Math.round(hourly.windSpeed[hIdx])} km/h` : '';
     hourlyHTML += `<div class="hour-slot${isCurrent ? ' current' : ''}">
       <div class="hour-time">${hTime}</div>
       <div class="hour-icon">${isCurrent ? curIcon : (hIsDay ? getWeatherIcon(hCode) : getMoonIcon(hCode))}</div>
@@ -142,16 +147,17 @@ function renderCityCard(data, suffix) {
     </div>`;
   }
 
+  const sourceBadge = data.source === 'nws' ? '<span class="source-badge nws">NWS</span>' : '<span class="source-badge open-meteo">OM</span>';
 
   const safeName = data.place_id || suffix;
   const mergedCanvasId = `chart-merged-${safeName}`;
   const combinedCanvasId = `chart-combined-${safeName}`;
 
   // Slice to 24 hours (current day only) for chart display
-  const temps = (hourly?.temperature_2m || []).slice(0, 24);
+  const temps = (hourly?.temperature_2m || hourly?.temperature || []).slice(0, 24);
   const rain = (hourly?.precipitation || []).slice(0, 24);
-  const hum = (hourly?.relative_humidity_2m || []).slice(0, 24);
-  const wind = (hourly?.wind_speed_10m || []).slice(0, 24);
+  const hum = (hourly?.relative_humidity_2m || hourly?.relativeHumidity || []).slice(0, 24);
+  const wind = (hourly?.wind_speed_10m || hourly?.windSpeed || []).slice(0, 24);
   const chartStats = (data) => data.length ? {
     min: Math.round(Math.min(...data)),
     max: Math.round(Math.max(...data)),
@@ -167,7 +173,7 @@ function renderCityCard(data, suffix) {
     <div style="position:relative;z-index:2;">
     <div class="city-header">
       <div class="city-name-wrap">
-        <span class="city-name">${escapeHTML(data.name)}${FavoritesManager.has(data.place_id, data.latitude, data.longitude) ? '<span class="fav-star">★</span>' : ''}</span>
+        <span class="city-name">${escapeHTML(data.name)}${FavoritesManager.has(data.place_id, data.latitude, data.longitude) ? '<span class="fav-star">★</span>' : ''}${sourceBadge}</span>
         <span class="city-state">${escapeHTML(data.state)}</span>
       </div>
       <span class="current-temp-inline">${Math.round(curTemp)}°</span>

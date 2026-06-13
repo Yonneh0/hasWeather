@@ -67,7 +67,16 @@ async function run() {
     return;
   }
 
-  weatherData = await fetchWeatherForCities(allCities);
+  // Fetch weather based on current source
+  if (currentSource === 'nws') {
+    weatherData = await fetchNwsForCities(allCities);
+  } else {
+    weatherData = await fetchWeatherForCities(allCities);
+  }
+  
+  // Update source toggle UI to reflect NWS availability
+  await updateSourceToggleUI();
+  
   renderAll();
 }
 
