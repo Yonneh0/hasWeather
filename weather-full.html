@@ -1938,14 +1938,6 @@ body.donkey-fullscreen .donkey-panel.donkey-hidden {
 </div>
 
 <script>
-
-// ===== API ENDPOINTS =====
-const WEATHER_API = 'https://api.open-meteo.com/v1/forecast';
-const AIR_QUALITY_API = 'https://air-quality-api.open-meteo.com/v1/air-quality';
-const OPEN_METEO_GEOCODING = 'https://geocoding-api.open-meteo.com/v1/search';
-const IP_API = 'https://ipinfo.io/json';
-const NOMINATIM = 'https://nominatim.openstreetmap.org/search';
-
 // ===== CURRENT DATA SOURCE =====
 // 'open-meteo' or 'nws' — controlled by source toggle button
 let currentSource = 'open-meteo';
@@ -1954,8 +1946,6 @@ let currentSource = 'open-meteo';
 const EARTH_RADIUS_MI = 3958.8;
 const GEOLOCATION_TIMEOUT_MS = 8000;
 const NEARBY_CACHE_TTL_MS = 600000;
-const NOMINATIM_CLOSE_RADIUS = 0.45;
-const NOMINATIM_WIDE_RADIUS = 1.0;
 const MAX_CITIES = 6;
 const MIN_CITY_DISTANCE_MI = 8;
 const HOURLY_FORECAST_SLOTS = 24;
@@ -2669,271 +2659,20 @@ function loudWeatherIcon(type, size) {
 
 </script>
 <script>
-// ===== WIND COMPASS =====
-function getWindCompass(deg) {
-  const arrow = ['⬆', '↗', '➡', '↘', '⬇', '↙', '⬅', '↖'][Math.round(deg / 45) % 8];
-  return `<span class="wind-compass"><span class="compass-dial">${arrow}</span> ${bearingToCompass(deg)} ${deg}°</span>`;
-}
+// ===== OPEN-METEO API CLIENT =====
+// Fetches weather data and air quality from Open-Meteo APIs.
 
-// ===== DAY/NIGHT CHECK =====
-function isDaytime(hour, sunrise, sunset) {
-  return hour >= sunrise && hour < sunset;
-}
+// ===== ENDPOINTS =====
+const WEATHER_API = 'https://api.open-meteo.com/v1/forecast';
+const AIR_QUALITY_API = 'https://air-quality-api.open-meteo.com/v1/air-quality';
 
-// ===== FIND NEARBY CITIES =====
-function scaleViewbox(lat, lon, radiusDeg) {
-  const south = (lat - radiusDeg).toFixed(4);
-  const north = (lat + radiusDeg).toFixed(4);
-  const west = (lon - radiusDeg).toFixed(4);
-  const east = (lon + radiusDeg).toFixed(4);
-  return `${west},${north},${east},${south}`;
-}
-
-async function findNearbyCities(lat, lon) {
-  // Handle _maxCities === 0
-  if (_maxCities === 0) return [];
-
-  // Check in-memory cache first
-  if (_nearbyCache && Date.now() - _nearbyCacheTime < NEARBY_CACHE_TTL_MS) {
-    return _nearbyCache;
-  }
-
-  // Check localStorage cache
-  const cacheKey = `nearby_${DataCache._roundCoord(lat)}_${DataCache._roundCoord(lon)}`;
-  const cached = DataCache.get(cacheKey, 'nearby');
-  if (cached) {
-    _nearbyCache = cached;
-    _nearbyCacheTime = Date.now();
-    return cached;
-  }
-
-  // Fetch a larger set first so we can filter and still have enough
-  let viewbox = scaleViewbox(lat, lon, NOMINATIM_CLOSE_RADIUS);
-  let url = `${NOMINATIM}?q=city&format=jsonv2&viewbox=${viewbox}&bounded=1&limit=30&addressdetails=1`;
-
-  let results;
-  try {
-    const resp = await fetch(url);
-    if (!resp.ok) throw new Error(`Nominatim ${resp.status}`);
-    results = await resp.json();
-  } catch {
-    results = [];
-  }
-
-  // Filter: keep only towns/cities/villages/hamlets/localities, reject boundary/fuel/street/country
-  if (results.length > 0) {
-    const acceptableTypes = ['city','town','village','hamlet','suburb','quarter','neighbourhood','locality','isolated_dwelling','farmhouse','county','administrative'];
-    results = results.filter(r => {
-      const type = (r.type || '').toLowerCase();
-      const cls = (r.class || '').toLowerCase();
-      // Reject known non-city types
-      if (cls === 'boundary' && r.place_rank >= 4) return false;
-      if (type === 'country' || type === 'state' || type === 'administrative') return false;
-      if (type === 'fuel' || type === 'street' || type === 'residential') return false;
-      // Accept if rank 10-16 (typical city/town/village)
-      if (r.place_rank >= 10 && r.place_rank <= 16) return true;
-      // Accept if type looks like a populated place
-      return acceptableTypes.includes(type);
-    });
-  }
-
-  if (results.length < _maxCities) {
-    viewbox = scaleViewbox(lat, lon, NOMINATIM_WIDE_RADIUS);
-    url = `${NOMINATIM}?q=city&format=jsonv2&viewbox=${viewbox}&bounded=1&limit=50&addressdetails=1`;
-    try {
-      const resp = await fetch(url);
-      if (resp.ok) {
-        const extra = await resp.json();
-        const existingIds = new Set(results.map(r => r.place_id));
-        const existingNames = new Set(results.map(r => (r.name || '').toLowerCase().trim()));
-        extra.forEach(r => {
-          // Skip if same place_id OR same name at same coordinates (dedup by name+coords)
-          if (existingIds.has(r.place_id)) return;
-          const latMatch = Math.abs(parseFloat(r.lat) - parseFloat(results[0]?.lat || 0)) < 0.01;
-          const sameName = existingNames.has((r.name || '').toLowerCase().trim()) && latMatch;
-          if (sameName) return;
-          const type = (r.type || '').toLowerCase();
-          const cls = (r.class || '').toLowerCase();
-          if (cls === 'boundary' && r.place_rank >= 4) return;
-          if (type === 'country' || type === 'state' || type === 'administrative') return;
-          if (type === 'fuel' || type === 'street' || type === 'residential') return;
-          if (r.place_rank >= 10 && r.place_rank <= 16) {
-            results.push(r);
-            existingIds.add(r.place_id);
-            existingNames.add((r.name || '').toLowerCase().trim());
-          }
-        });
-      }
-    } catch {
-      // silently ignore
-    }
-  }
-
-  if (results.length === 0) {
-    if (_maxCities > 0) showLocationPrompt();
-    return [];
-  }
-
-  const cities = results.map(item => {
-    const address = item.address || {};
-    let name = item.name || address.city || '';
-    // International region fallback chain
-    let state = address.state || address.state_district || address.region || address.county || '';
-    let country = address.country || '';
-    name = name.replace(/^City of\s+/i, '');
-
-    return {
-      place_id: String(item.place_id),
-      name,
-      latitude: parseFloat(item.lat),
-      longitude: parseFloat(item.lon),
-      state,
-      country,
-      distance: haversine(lat, lon, parseFloat(item.lat), parseFloat(item.lon)),
-      bearing: bearing(lat, lon, parseFloat(item.lat), parseFloat(item.lon)),
-    };
-  });
-
-  // Deduplicate by place_id AND by name+coordinate proximity
-  const seen = new Set();
-  const deduped = cities.filter(c => {
-    if (seen.has(c.place_id)) return false;
-    // Also check by name + coordinates (within 0.01° ≈ 1km)
-    const nameKey = c.name.toLowerCase().trim();
-    const coordKey = `${DataCache._roundCoord(c.latitude)},${DataCache._roundCoord(c.longitude)}`;
-    for (const existing of seen) {
-      if (existing.name === nameKey && existing.coordKey === coordKey) {
-        return false;
-      }
-    }
-    seen.add({ name: nameKey, coordKey, place_id: c.place_id });
-    return true;
-  });
-
-  deduped.sort((a, b) => a.distance - b.distance);
-
-  // Select cities with bearing diversity and min distance
-  const selected = [deduped[0]];
-  const used = new Set([0]);
-  const remaining = deduped.filter((_, i) => !used.has(i));
-  remaining.sort((a, b) => {
-    const aMinDiff = Math.min(...selected.map(s => {
-      let diff = Math.abs(a.bearing - s.bearing);
-      return diff > 180 ? 360 - diff : diff;
-    }));
-    const bMinDiff = Math.min(...selected.map(s => {
-      let diff = Math.abs(b.bearing - s.bearing);
-      return diff > 180 ? 360 - diff : diff;
-    }));
-    return bMinDiff - aMinDiff;
-  });
-
-  for (const city of remaining) {
-    if (selected.length >= _maxCities) break;
-    let tooClose = false;
-    for (const sel of selected) {
-      const dist = haversine(city.latitude, city.longitude, sel.latitude, sel.longitude);
-      if (dist < MIN_CITY_DISTANCE_MI) { tooClose = true; break; }
-    }
-    if (!tooClose) {
-      selected.push(city);
-      used.add(deduped.indexOf(city));
-    }
-  }
-
-  // Fill remaining slots if we still need more
-  for (let i = 0; i < deduped.length && selected.length < _maxCities; i++) {
-    if (!used.has(i)) selected.push(deduped[i]);
-  }
-
-  _nearbyCache = selected;
-  _nearbyCacheTime = Date.now();
-
-  // Store in localStorage cache
-  DataCache.set(cacheKey, selected, 'nearby');
-
-  return selected;
-}
-
-// ===== LOCATION =====
-async function getLocation() {
-  // Check in-memory cache
-  if (userLocation) return userLocation;
-
-  // Check localStorage cache for IP geolocation
-  const cachedIP = DataCache.get('ip_location', 'ipLocation');
-  if (cachedIP) {
-    return cachedIP;
-  }
-
-  try {
-    const pos = await new Promise((resolve, reject) => {
-      navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: GEOLOCATION_TIMEOUT_MS });
-    });
-    const { latitude, longitude } = pos.coords;
-    const loc = { lat: latitude, lon: longitude };
-    // Cache browser geolocation briefly (it's not reliable to cache long-term)
-    return loc;
-  } catch {
-    try {
-      const res = await fetch(IP_API);
-      const data = await res.json();
-      const lat = parseFloat(data.loc?.split(',')[0] ?? data.lat);
-      const lon = parseFloat(data.loc?.split(',')[1] ?? data.lon);
-      const loc = { lat, lon };
-      // Cache IP location for 24 hours
-      DataCache.set('ip_location', loc, 'ipLocation');
-      return loc;
-    } catch {
-      showLocationPrompt();
-      return { lat: 43.41947, lon: -83.95081 };
-    }
-  }
-}
-
-// ===== FETCH WEATHER =====
-
-</script>
-<script>
-// ===== FETCH WEATHER =====
-// Helper to build a unique cache key for weather per city
+// ===== CACHE KEY HELPERS =====
 function weatherCacheKey(lat, lon) {
   return `weather_${DataCache._roundCoord(lat)}_${DataCache._roundCoord(lon)}`;
 }
 
-// Helper to build a unique cache key for AQI per city
 function aqiCacheKey(lat, lon) {
   return `airQuality_${DataCache._roundCoord(lat)}_${DataCache._roundCoord(lon)}`;
-}
-
-// Cross-source cache lookup: try OM keys first, then NWS keys (and vice versa)
-// Returns { data, source } or null if nothing found
-function crossSourceGetWeather(lat, lon) {
-  // Try OM weather key
-  const omWeather = DataCache.get(weatherCacheKey(lat, lon), 'weather');
-  if (omWeather) return { data: omWeather, source: 'open-meteo' };
-
-  // Try NWS city data key (which contains full weather object)
-  const nwsCityData = DataCache.get(nwsCacheKey(lat, lon), 'nwsCityData');
-  if (nwsCityData && nwsCityData.weather) return { data: nwsCityData, source: 'nws' };
-
-  // Try NWS point cache key (which contains full weather object)
-  const nwsPoint = DataCache.get(nwsPointCacheKey(lat, lon), 'nwsPoint');
-  if (nwsPoint && nwsPoint.weather) return { data: nwsPoint, source: 'nws' };
-
-  return null;
-}
-
-function crossSourceGetAQI(lat, lon) {
-  // Try OM AQI key
-  const omAqi = DataCache.get(aqiCacheKey(lat, lon), 'airQuality');
-  if (omAqi) return { data: omAqi, source: 'open-meteo' };
-
-  // Try NWS city data key (which may have AQI)
-  const nwsCityData = DataCache.get(nwsCacheKey(lat, lon), 'nwsCityData');
-  if (nwsCityData && nwsCityData.aqi) return { data: nwsCityData.aqi, source: 'nws' };
-
-  return null;
 }
 
 // ===== RETRY HELPER =====
@@ -2952,6 +2691,7 @@ async function retryWithBackoff(fn, maxRetries = 3, baseDelay = 1000) {
   }
 }
 
+// ===== OPEN-METEO SPECIFIC HELPERS =====
 // Known keys that are NOT hourly variable data
 const KNOWN_NON_HOURLY_KEYS = new Set([
   'latitude', 'longitude', 'elevation',
@@ -2970,6 +2710,7 @@ function extractHourlyKeys(raw) {
   );
 }
 
+// ===== DEDUPLICATION =====
 // Deduplicate city results by coordinate pair (keep first entry per coordinate pair)
 // Prefer entries with a non-null place_id when there's a tie
 function deduplicateResults(results) {
@@ -3025,6 +2766,7 @@ function deduplicateCities(cities) {
   return deduped;
 }
 
+// ===== FETCH WEATHER FOR CITIES =====
 async function fetchWeatherForCities(cities) {
   // Check cache for each city individually — use cross-source lookup
   const cachedResults = [];
@@ -3201,8 +2943,236 @@ async function fetchWeatherForCities(cities) {
     return result;
   }
 }
+</script>
+<script>
+// ===== OPENSTREETMAP / NOMINATIM API CLIENT =====
+// Fetches nearby city data from Nominatim/OSM.
 
+// ===== ENDPOINT =====
+const NOMINATIM = 'https://nominatim.openstreetmap.org/search';
 
+// ===== NOMINATIM CONSTANTS =====
+const NOMINATIM_CLOSE_RADIUS = 0.45;
+const NOMINATIM_WIDE_RADIUS = 1.0;
+
+// ===== HELPER: Scale viewbox for Nominatim =====
+function scaleViewbox(lat, lon, radiusDeg) {
+  const south = (lat - radiusDeg).toFixed(4);
+  const north = (lat + radiusDeg).toFixed(4);
+  const west = (lon - radiusDeg).toFixed(4);
+  const east = (lon + radiusDeg).toFixed(4);
+  return `${west},${north},${east},${south}`;
+}
+
+// ===== FIND NEARBY CITIES =====
+async function findNearbyCities(lat, lon) {
+  // Handle _maxCities === 0
+  if (_maxCities === 0) return [];
+
+  // Check in-memory cache first
+  if (_nearbyCache && Date.now() - _nearbyCacheTime < NEARBY_CACHE_TTL_MS) {
+    return _nearbyCache;
+  }
+
+  // Check localStorage cache
+  const cacheKey = `nearby_${DataCache._roundCoord(lat)}_${DataCache._roundCoord(lon)}`;
+  const cached = DataCache.get(cacheKey, 'nearby');
+  if (cached) {
+    _nearbyCache = cached;
+    _nearbyCacheTime = Date.now();
+    return cached;
+  }
+
+  // Fetch a larger set first so we can filter and still have enough
+  let viewbox = scaleViewbox(lat, lon, NOMINATIM_CLOSE_RADIUS);
+  let url = `${NOMINATIM}?q=city&format=jsonv2&viewbox=${viewbox}&bounded=1&limit=30&addressdetails=1`;
+
+  let results;
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`Nominatim ${resp.status}`);
+    results = await resp.json();
+  } catch {
+    results = [];
+  }
+
+  // Filter: keep only towns/cities/villages/hamlets/localities, reject boundary/fuel/street/country
+  if (results.length > 0) {
+    const acceptableTypes = ['city','town','village','hamlet','suburb','quarter','neighbourhood','locality','isolated_dwelling','farmhouse','county','administrative'];
+    results = results.filter(r => {
+      const type = (r.type || '').toLowerCase();
+      const cls = (r.class || '').toLowerCase();
+      // Reject known non-city types
+      if (cls === 'boundary' && r.place_rank >= 4) return false;
+      if (type === 'country' || type === 'state' || type === 'administrative') return false;
+      if (type === 'fuel' || type === 'street' || type === 'residential') return false;
+      // Accept if rank 10-16 (typical city/town/village)
+      if (r.place_rank >= 10 && r.place_rank <= 16) return true;
+      // Accept if type looks like a populated place
+      return acceptableTypes.includes(type);
+    });
+  }
+
+  if (results.length < _maxCities) {
+    viewbox = scaleViewbox(lat, lon, NOMINATIM_WIDE_RADIUS);
+    url = `${NOMINATIM}?q=city&format=jsonv2&viewbox=${viewbox}&bounded=1&limit=50&addressdetails=1`;
+    try {
+      const resp = await fetch(url);
+      if (resp.ok) {
+        const extra = await resp.json();
+        const existingIds = new Set(results.map(r => r.place_id));
+        const existingNames = new Set(results.map(r => (r.name || '').toLowerCase().trim()));
+        extra.forEach(r => {
+          // Skip if same place_id OR same name at same coordinates (dedup by name+coords)
+          if (existingIds.has(r.place_id)) return;
+          const latMatch = Math.abs(parseFloat(r.lat) - parseFloat(results[0]?.lat || 0)) < 0.01;
+          const sameName = existingNames.has((r.name || '').toLowerCase().trim()) && latMatch;
+          if (sameName) return;
+          const type = (r.type || '').toLowerCase();
+          const cls = (r.class || '').toLowerCase();
+          if (cls === 'boundary' && r.place_rank >= 4) return;
+          if (type === 'country' || type === 'state' || type === 'administrative') return;
+          if (type === 'fuel' || type === 'street' || type === 'residential') return;
+          if (r.place_rank >= 10 && r.place_rank <= 16) {
+            results.push(r);
+            existingIds.add(r.place_id);
+            existingNames.add((r.name || '').toLowerCase().trim());
+          }
+        });
+      }
+    } catch {
+      // silently ignore
+    }
+  }
+
+  if (results.length === 0) {
+    if (_maxCities > 0) showLocationPrompt();
+    return [];
+  }
+
+  const cities = results.map(item => {
+    const address = item.address || {};
+    let name = item.name || address.city || '';
+    // International region fallback chain
+    let state = address.state || address.state_district || address.region || address.county || '';
+    let country = address.country || '';
+    name = name.replace(/^City of\s+/i, '');
+
+    return {
+      place_id: String(item.place_id),
+      name,
+      latitude: parseFloat(item.lat),
+      longitude: parseFloat(item.lon),
+      state,
+      country,
+      distance: haversine(lat, lon, parseFloat(item.lat), parseFloat(item.lon)),
+      bearing: bearing(lat, lon, parseFloat(item.lat), parseFloat(item.lon)),
+    };
+  });
+
+  // Deduplicate by place_id AND by name+coordinate proximity
+  const seen = new Set();
+  const deduped = cities.filter(c => {
+    if (seen.has(c.place_id)) return false;
+    // Also check by name + coordinates (within 0.01° ≈ 1km)
+    const nameKey = c.name.toLowerCase().trim();
+    const coordKey = `${DataCache._roundCoord(c.latitude)},${DataCache._roundCoord(c.longitude)}`;
+    for (const existing of seen) {
+      if (existing.name === nameKey && existing.coordKey === coordKey) {
+        return false;
+      }
+    }
+    seen.add({ name: nameKey, coordKey, place_id: c.place_id });
+    return true;
+  });
+
+  deduped.sort((a, b) => a.distance - b.distance);
+
+  // Select cities with bearing diversity and min distance
+  const selected = [deduped[0]];
+  const used = new Set([0]);
+  const remaining = deduped.filter((_, i) => !used.has(i));
+  remaining.sort((a, b) => {
+    const aMinDiff = Math.min(...selected.map(s => {
+      let diff = Math.abs(a.bearing - s.bearing);
+      return diff > 180 ? 360 - diff : diff;
+    }));
+    const bMinDiff = Math.min(...selected.map(s => {
+      let diff = Math.abs(b.bearing - s.bearing);
+      return diff > 180 ? 360 - diff : diff;
+    }));
+    return bMinDiff - aMinDiff;
+  });
+
+  for (const city of remaining) {
+    if (selected.length >= _maxCities) break;
+    let tooClose = false;
+    for (const sel of selected) {
+      const dist = haversine(city.latitude, city.longitude, sel.latitude, sel.longitude);
+      if (dist < MIN_CITY_DISTANCE_MI) { tooClose = true; break; }
+    }
+    if (!tooClose) {
+      selected.push(city);
+      used.add(deduped.indexOf(city));
+    }
+  }
+
+  // Fill remaining slots if we still need more
+  for (let i = 0; i < deduped.length && selected.length < _maxCities; i++) {
+    if (!used.has(i)) selected.push(deduped[i]);
+  }
+
+  _nearbyCache = selected;
+  _nearbyCacheTime = Date.now();
+
+  // Store in localStorage cache
+  DataCache.set(cacheKey, selected, 'nearby');
+
+  return selected;
+}
+</script>
+<script>
+// ===== IP-BASED LOCATION API CLIENT =====
+// Provides fallback geolocation via ipinfo.io.
+
+// ===== ENDPOINT =====
+const IP_API = 'https://ipinfo.io/json';
+
+// ===== GET LOCATION (Browser Geolocation + IP Fallback) =====
+async function getLocation() {
+  // Check in-memory cache
+  if (userLocation) return userLocation;
+
+  // Check localStorage cache for IP geolocation
+  const cachedIP = DataCache.get('ip_location', 'ipLocation');
+  if (cachedIP) {
+    return cachedIP;
+  }
+
+  try {
+    const pos = await new Promise((resolve, reject) => {
+      navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: GEOLOCATION_TIMEOUT_MS });
+    });
+    const { latitude, longitude } = pos.coords;
+    const loc = { lat: latitude, lon: longitude };
+    // Cache browser geolocation briefly (it's not reliable to cache long-term)
+    return loc;
+  } catch {
+    try {
+      const res = await fetch(IP_API);
+      const data = await res.json();
+      const lat = parseFloat(data.loc?.split(',')[0] ?? data.lat);
+      const lon = parseFloat(data.loc?.split(',')[1] ?? data.lon);
+      const loc = { lat, lon };
+      // Cache IP location for 24 hours
+      DataCache.set('ip_location', loc, 'ipLocation');
+      return loc;
+    } catch {
+      showLocationPrompt();
+      return { lat: 43.41947, lon: -83.95081 };
+    }
+  }
+}
 </script>
 <script>
 // ===== NWS API CLIENT =====
@@ -4368,6 +4338,18 @@ async function fetchWeatherForCitiesUnified(cities) {
   return nwsDeduplicateResults(mergedResults);
 }
 
+</script>
+<script>
+// ===== WIND COMPASS =====
+function getWindCompass(deg) {
+  const arrow = ['⬆', '↗', '➡', '↘', '⬇', '↙', '⬅', '↖'][Math.round(deg / 45) % 8];
+  return `<span class="wind-compass"><span class="compass-dial">${arrow}</span> ${bearingToCompass(deg)} ${deg}°</span>`;
+}
+
+// ===== DAY/NIGHT CHECK =====
+function isDaytime(hour, sunrise, sunset) {
+  return hour >= sunrise && hour < sunset;
+}
 </script>
 <script>
 // ===== RENDER =====
