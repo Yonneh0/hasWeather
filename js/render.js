@@ -91,7 +91,6 @@ function renderCityCard(data, suffix) {
 
   const current = w.current || {};
   const hourly = w.hourly || {};
-  const daily = w.daily || {};
   const aqiData = aqiLabel(a.us_aqi);
 
   const curTemp = current?.temperature_2m != null ? convertTemp(current.temperature_2m) : '—';
@@ -104,21 +103,11 @@ function renderCityCard(data, suffix) {
   const vis = current?.visibility ? (current.visibility / 1609.34).toFixed(1) : '—';
   const pm25 = a.pm2_5 !== undefined && a.pm2_5 !== null ? a.pm2_5 : '—';
 
-  const highTemp = daily?.temperature_2m_max?.[0] != null ? convertTemp(daily.temperature_2m_max[0]) : '—';
-  const lowTemp = daily?.temperature_2m_min?.[0] != null ? convertTemp(daily.temperature_2m_min[0]) : '—';
-
-  // Store high/low on data object so drawMergedChart can use them
-  data.highTemp = highTemp;
-  data.lowTemp = lowTemp;
-
-  const sunrise = daily?.sunrise?.[0]?.split('T')[1]?.split('+')[0];
-  const sunset = daily?.sunset?.[0]?.split('T')[1]?.split('+')[0];
-
   const now = new Date();
   const currentHour = now.getHours();
 
-  const sunriseTime = parseDecimalTime(sunrise, 6);
-  const sunsetTime = parseDecimalTime(sunset, 19);
+  const sunriseTime = current?.sunrise ? parseDecimalTime(current.sunrise.split('T')[1]?.split('+')[0], 6) : 6;
+  const sunsetTime = current?.sunset ? parseDecimalTime(current.sunset.split('T')[1]?.split('+')[0], 19) : 19;
   const isDay = isDaytime(currentHour, sunriseTime, sunsetTime);
 
   const curIcon = isDay ? getWeatherIcon(curWeatherCode) : getMoonIcon(curWeatherCode);
@@ -132,7 +121,7 @@ function renderCityCard(data, suffix) {
   });
 
   let hourlyHTML = '';
-  for (let i = 0; i < 12; i++) {
+  for (let i = 0; i < 24; i++) {
     const hIdx = currentIdx >= 0 ? currentIdx + i : currentHour + i;
     if (hIdx < 0 || hIdx >= timeArr.length) break;
     const hTime = timeArr[hIdx]?.split('T')[1]?.split('+')[0]?.slice(0, 5);
@@ -153,35 +142,6 @@ function renderCityCard(data, suffix) {
     </div>`;
   }
 
-  let dailyHTML = '';
-  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  const globalMin = -40, globalMax = 80;
-  const dailyArr = daily?.time || [];
-  const todayIdx = dailyArr.findIndex(d => d && d.split('T')[0] === currentDay);
-  const startIdx = todayIdx >= 0 ? todayIdx : 0;
-
-  for (let i = 0; i < 7; i++) {
-    const idx = startIdx + i;
-    if (idx >= dailyArr.length) break;
-    const d = dailyArr[idx];
-    const day = d ? dayNames[new Date(d).getDay()] : '';
-    const dCode = daily?.weather_code?.[idx] ?? 0;
-    const dHigh = daily?.temperature_2m_max?.[idx] != null ? convertTemp(daily.temperature_2m_max[idx]) : 0;
-    const dLow = daily?.temperature_2m_min?.[idx] != null ? convertTemp(daily.temperature_2m_min[idx]) : 0;
-    const dPrecip = daily?.precipitation_sum?.[idx] ? `${Math.round(daily.precipitation_sum[idx])}mm` : '';
-    const dWind = daily?.wind_speed_10m_max?.[idx] != null ? `${Math.round(daily.wind_speed_10m_max[idx])} km/h` : '';
-    const barLeft = ((dLow - globalMin) / (globalMax - globalMin)) * 100;
-    const barWidth = Math.max(10, ((dHigh - dLow) / (globalMax - globalMin)) * 100);
-    dailyHTML += `<div class="daily-row">
-      <span class="daily-day">${day}</span>
-      <span class="daily-icon">${getWeatherIcon(dCode)}</span>
-      <span class="daily-low-val">${Math.round(dLow)}°</span>
-      <span class="daily-bar"><span class="daily-bar-fill" style="width:${barWidth}%;left:${barLeft}%;"></span></span>
-      <span class="daily-high-val">${Math.round(dHigh)}°</span>
-      <span class="daily-precip">${dPrecip}</span>
-      <span class="daily-wind">${dWind}</span>
-    </div>`;
-  }
 
   const safeName = data.place_id || suffix;
   const mergedCanvasId = `chart-merged-${safeName}`;
@@ -216,24 +176,6 @@ function renderCityCard(data, suffix) {
     <div class="city-compass-row" style="display:flex;align-items:center;gap:0.4rem;margin-top:0.1rem;">
       <span class="compass-heading">${escapeHTML(bearingToCompass(data.bearing))}</span>
       <span class="compass-heading">${Math.round(data.distance)} mi</span>
-    </div>
-    <div class="info-row">
-      <div class="info-item">
-        <span class="info-label">HIGH</span>
-        <span class="info-val hot">${Math.round(highTemp)}°</span>
-      </div>
-      <div class="info-item">
-        <span class="info-label">LOW</span>
-        <span class="info-val cool">${Math.round(lowTemp)}°</span>
-      </div>
-      <div class="info-item">
-        <span class="info-label">☀️</span>
-        <span class="info-val">${sunrise || '—'}</span>
-      </div>
-      <div class="info-item">
-        <span class="info-label">🌙</span>
-        <span class="info-val">${sunset || '—'}</span>
-      </div>
     </div>
     <div class="combined-chart-row">
       <canvas class="combined-chart-canvas" id="${combinedCanvasId}"></canvas>
@@ -272,12 +214,8 @@ function renderCityCard(data, suffix) {
       <div class="detail-cell"><span class="detail-label">AQI (PM2.5)</span><span class="detail-value"><span class="aqi-badge ${aqiData.cls}">${aqiData.label}</span> ${pm25}</span></div>
     </div>
     <div class="hourly-section">
-      <div class="hourly-title">12-Hour Forecast</div>
+      <div class="hourly-title">24-Hour Forecast</div>
       <div class="hourly-row">${hourlyHTML}</div>
-    </div>
-    <div class="daily-section">
-      <div class="daily-title">7-Day Forecast</div>
-      ${dailyHTML}
     </div>
     </div>`;
 }

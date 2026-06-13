@@ -699,3 +699,42 @@
   color: #fb923c;
   text-shadow: 0 0 12px rgba(251, 146, 60, 0.6), 0 0 24px rgba(251, 146, 60, 0.3);
 }
+
+/* ===== FULLSCREEN MODE ===== */
+/* When game is in fullscreen, hide all other page content */
+body.donkey-fullscreen .header,
+body.donkey-fullscreen #city-grid,
+body.donkey-fullscreen #location-prompt,
+body.donkey-fullscreen #particle-canvas,
+body.donkey-fullscreen .fav-dropdown {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Fullscreen game panel - centered and scaled to fit viewport */
+.donkey-panel.fullscreen {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  width: 640px;
+  z-index: 9999;
+  border-radius: 12px;
+  box-shadow: 0 0 60px rgba(0, 0, 0, 0.8);
+  transform-origin: center center;
+  transition: none;
+}
+
+.donkey-panel.fullscreen .donkey-panel-body {
+  padding: 0 0.6rem 0.6rem;
+}
+
+.donkey-panel.fullscreen .donkey-play-area {
+  height: 180px;
+}
+
+/* When game is closed but body has fullscreen class, still hide content */
+body.donkey-fullscreen .donkey-panel.donkey-hidden {
+  display: none;
+}

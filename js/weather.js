@@ -25,7 +25,7 @@ const KNOWN_NON_HOURLY_KEYS = new Set([
   'latitude', 'longitude', 'elevation',
   'generationtime_ms', 'utc_offset_seconds',
   'timezone', 'timezone_abbreviation',
-  'current', 'daily', 'hourly'
+  'current', 'hourly'
 ]);
 
 // Helper: extract hourly variable keys from a raw response object
@@ -122,7 +122,7 @@ async function fetchWeatherForCities(cities) {
 
   // Build combined weather + AQI URL for deduplicated uncached cities only
   try {
-    const weatherUrl = `${WEATHER_API}?latitude=${dedupedUncached.map(c => c.latitude).join(',')}&longitude=${dedupedUncached.map(c => c.longitude).join(',')}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m,surface_pressure,uv_index,visibility&hourly=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,uv_index_max,precipitation_sum,wind_speed_10m_max&forecast_days=${FORECAST_DAYS}&temperature_unit=celsius&wind_speed_unit=kmh&precipitation_unit=mm&timezone=auto`;
+    const weatherUrl = `${WEATHER_API}?latitude=${dedupedUncached.map(c => c.latitude).join(',')}&longitude=${dedupedUncached.map(c => c.longitude).join(',')}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m,surface_pressure,uv_index,visibility&hourly=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m&forecast_days=2&temperature_unit=celsius&wind_speed_unit=kmh&precipitation_unit=mm&timezone=auto`;
 
     // ===== FIX #5: Retry logic for weather API =====
     const weatherRes = await retryWithBackoff(() => fetch(weatherUrl));
@@ -184,7 +184,6 @@ async function fetchWeatherForCities(cities) {
         cityWeather = {
           current: raw.current || {},
           hourly: mergedHourly,
-          daily: raw.daily || {},
         };
 
         // AQI from results array
@@ -206,7 +205,6 @@ async function fetchWeatherForCities(cities) {
         cityWeather = {
           current: raw.current || {},
           hourly: raw.hourly || { time: [] },
-          daily: raw.daily || {},
         };
         if (Array.isArray(aqiData)) {
           const aqiRaw = aqiData[i] || {};
@@ -224,7 +222,6 @@ async function fetchWeatherForCities(cities) {
         cityWeather = {
           current: raw.current || {},
           hourly: raw.hourly || { time: [] },
-          daily: raw.daily || {},
         };
         if (aqiData && !hasAqiResultsArray) {
           aqiResult = {

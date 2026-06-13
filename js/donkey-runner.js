@@ -152,6 +152,11 @@ const DONKEY_RUNNER = {
 
   nearMissActive: false,
 
+  // Fullscreen state
+  isFullscreen: false,
+  fullscreenScale: 1,
+  fullscreenBtnEl: null,
+
   // Snarky message system
   snarkyMessages: {
     start: ["Time to run for your life!", "May the odds be ever in your favor"],
@@ -215,6 +220,7 @@ const DONKEY_RUNNER = {
         <div class="donkey-header-highscore">
           <span class="donkey-highscore" id="donkey-highscore">HI ${String(this.highScore).padStart(5, '0')}</span>
         </div>
+        <button class="donkey-fullscreen-btn" id="donkey-fullscreen-btn" title="Toggle fullscreen">⛶</button>
         <button class="donkey-close-btn" title="Close game">✕</button>
       </div>
       <div class="donkey-panel-body">
@@ -335,6 +341,15 @@ const DONKEY_RUNNER = {
     const dsHighScoreVal = document.getElementById('ds-highscore-val');
     if (dsHighScoreVal) {
       dsHighScoreVal.textContent = String(this.highScore).padStart(5, '0');
+    }
+
+    // Fullscreen button handler
+    this.fullscreenBtnEl = document.getElementById('donkey-fullscreen-btn');
+    if (this.fullscreenBtnEl) {
+      this.fullscreenBtnEl.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.toggleFullscreen();
+      });
     }
 
     // Sound toggle button — check localStorage for saved preference
@@ -863,6 +878,10 @@ const DONKEY_RUNNER = {
     this.obstacles = [];
     this.gamePanel.classList.remove('donkey-visible');
     this.gamePanel.classList.add('donkey-hidden');
+    // Exit fullscreen if active
+    if (this.isFullscreen) {
+      this.closeFullscreen();
+    }
     if (typeof adjustOutagePosition === 'function') adjustOutagePosition();
   },
 
@@ -886,6 +905,59 @@ const DONKEY_RUNNER = {
       this.drawIdle();
       if (typeof adjustOutagePosition === 'function') adjustOutagePosition();
     }
+  },
+
+  toggleFullscreen() {
+    if (this.isFullscreen) {
+      this.closeFullscreen();
+    } else {
+      this.enterFullscreen();
+    }
+  },
+
+  enterFullscreen() {
+    if (this.isFullscreen) return;
+    this.isFullscreen = true;
+    this.gamePanel.classList.add('fullscreen');
+    document.body.classList.add('donkey-fullscreen');
+    this.updateFullscreenScale();
+    // Update button icon to "exit fullscreen"
+    if (this.fullscreenBtnEl) {
+      this.fullscreenBtnEl.textContent = '⛶';
+      this.fullscreenBtnEl.title = 'Exit fullscreen';
+    }
+    // Listen for window resize to recalculate scale
+    window.addEventListener('resize', this._resizeHandler || (this._resizeHandler = () => this.updateFullscreenScale()));
+  },
+
+  closeFullscreen() {
+    if (!this.isFullscreen) return;
+    this.isFullscreen = false;
+    this.gamePanel.classList.remove('fullscreen');
+    document.body.classList.remove('donkey-fullscreen');
+    this.gamePanel.style.removeProperty('--fullscreen-scale');
+    this.gamePanel.style.removeProperty('transform');
+    if (this.fullscreenBtnEl) {
+      this.fullscreenBtnEl.textContent = '⛶';
+      this.fullscreenBtnEl.title = 'Toggle fullscreen';
+    }
+    if (this._resizeHandler) {
+      window.removeEventListener('resize', this._resizeHandler);
+      this._resizeHandler = null;
+    }
+  },
+
+  updateFullscreenScale() {
+    if (!this.isFullscreen) return;
+    // Use full panel dimensions (including header) for scaling calculation
+    const panelWidth = this.gamePanel.offsetWidth;
+    const panelHeight = this.gamePanel.offsetHeight;
+    const padding = 20; // 10px padding on each side
+    const scaleX = (window.innerWidth - padding) / panelWidth;
+    const scaleY = (window.innerHeight - padding) / panelHeight;
+    this.fullscreenScale = Math.min(scaleX, scaleY);
+    this.gamePanel.style.setProperty('--fullscreen-scale', this.fullscreenScale);
+    this.gamePanel.style.transform = `scale(${this.fullscreenScale})`;
   },
 
   loop() {

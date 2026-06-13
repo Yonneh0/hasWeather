@@ -306,7 +306,7 @@ body {
 .hourly-row {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  grid-template-rows: repeat(3, auto);
+  grid-template-rows: repeat(6, auto);
   gap: 0.3rem;
 }
 .hour-slot {
@@ -356,80 +356,6 @@ body {
   font-size: 0.6rem;
   color: rgba(255,255,255,0.55);
   margin-top: 0.05rem;
-}/* 7-Day Forecast */
-.daily-section {
-  margin-bottom: 0.8rem;
-}
-.daily-title {
-  font-size: 0.7rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: rgba(255,255,255,0.45);
-  margin-bottom: 0.4rem;
-}
-.daily-row {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.3rem 0.6rem;
-  border-bottom: 1px solid rgba(255,255,255,0.04);
-  border-radius: 6px;
-}
-.daily-day {
-  font-size: 0.7rem;
-  width: 36px;
-  flex-shrink: 0;
-  color: rgba(255,255,255,0.7);
-}
-.daily-icon {
-  width: 32px;
-  height: 32px;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.daily-low-val {
-  font-size: 0.7rem;
-  color: rgba(255,255,255,0.5);
-  width: 32px;
-  text-align: right;
-  flex-shrink: 0;
-}
-.daily-high-val {
-  font-size: 0.7rem;
-  color: rgba(255,255,255,0.5);
-  width: 32px;
-  text-align: left;
-  flex-shrink: 0;
-}
-.daily-bar {
-  flex: 1;
-  height: 4px;
-  background: rgba(255,255,255,0.1);
-  border-radius: 2px;
-  position: relative;
-  overflow: hidden;
-}
-.daily-bar-fill {
-  position: absolute;
-  height: 100%;
-  border-radius: 2px;
-  background: linear-gradient(90deg, #6cb4ee, #ff8c42);
-}
-.daily-precip {
-  font-size: 0.6rem;
-  color: #6cb4ee;
-  width: 32px;
-  text-align: right;
-  flex-shrink: 0;
-}
-.daily-wind {
-  font-size: 0.6rem;
-  color: rgba(255,255,255,0.55);
-  width: 40px;
-  text-align: right;
-  flex-shrink: 0;
 }/* Canvas Charts */
 .charts-section {
   display: flex;
@@ -1856,6 +1782,45 @@ body {
   color: #fb923c;
   text-shadow: 0 0 12px rgba(251, 146, 60, 0.6), 0 0 24px rgba(251, 146, 60, 0.3);
 }
+
+/* ===== FULLSCREEN MODE ===== */
+/* When game is in fullscreen, hide all other page content */
+body.donkey-fullscreen .header,
+body.donkey-fullscreen #city-grid,
+body.donkey-fullscreen #location-prompt,
+body.donkey-fullscreen #particle-canvas,
+body.donkey-fullscreen .fav-dropdown {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Fullscreen game panel - centered and scaled to fit viewport */
+.donkey-panel.fullscreen {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  width: 640px;
+  z-index: 9999;
+  border-radius: 12px;
+  box-shadow: 0 0 60px rgba(0, 0, 0, 0.8);
+  transform-origin: center center;
+  transition: none;
+}
+
+.donkey-panel.fullscreen .donkey-panel-body {
+  padding: 0 0.6rem 0.6rem;
+}
+
+.donkey-panel.fullscreen .donkey-play-area {
+  height: 180px;
+}
+
+/* When game is closed but body has fullscreen class, still hide content */
+body.donkey-fullscreen .donkey-panel.donkey-hidden {
+  display: none;
+}
 /* Glow for header text */
 .city-name,
 .city-state,
@@ -1874,6 +1839,7 @@ body {
   <button id="unit-toggle" class="btn btn-small" title="Toggle °F/°C">°F</button>
    <button id="refresh-btn" class="btn btn-small" title="Refresh data">⟳</button>
    <button id="game-btn" class="btn btn-small" title="Donkey Runner Minigame">🫏</button>
+   <button id="fullscreen-btn" class="btn btn-small" title="Toggle fullscreen" style="display:none;">⛶</button>
    <div class="fav-wrapper">
     <button id="fav-btn" class="btn btn-small" title="Favorites">★</button>
     <div id="fav-dropdown" class="fav-dropdown">
@@ -1927,9 +1893,7 @@ const NOMINATIM_CLOSE_RADIUS = 0.45;
 const NOMINATIM_WIDE_RADIUS = 1.0;
 const MAX_CITIES = 6;
 const MIN_CITY_DISTANCE_MI = 8;
-const FORECAST_DAYS = 8;
-const HOURLY_FORECAST_SLOTS = 12;
-const DAILY_FORECAST_DAYS = 7;
+const HOURLY_FORECAST_SLOTS = 24;
 const CHART_DRAW_DELAY_MS = 400;
 const CHART_RESIZE_DEBOUNCE_MS = 250;
 const TOGGLE_DEBOUNCE_MS = 300;
@@ -2863,7 +2827,7 @@ const KNOWN_NON_HOURLY_KEYS = new Set([
   'latitude', 'longitude', 'elevation',
   'generationtime_ms', 'utc_offset_seconds',
   'timezone', 'timezone_abbreviation',
-  'current', 'daily', 'hourly'
+  'current', 'hourly'
 ]);
 
 // Helper: extract hourly variable keys from a raw response object
@@ -2960,7 +2924,7 @@ async function fetchWeatherForCities(cities) {
 
   // Build combined weather + AQI URL for deduplicated uncached cities only
   try {
-    const weatherUrl = `${WEATHER_API}?latitude=${dedupedUncached.map(c => c.latitude).join(',')}&longitude=${dedupedUncached.map(c => c.longitude).join(',')}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m,surface_pressure,uv_index,visibility&hourly=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,uv_index_max,precipitation_sum,wind_speed_10m_max&forecast_days=${FORECAST_DAYS}&temperature_unit=celsius&wind_speed_unit=kmh&precipitation_unit=mm&timezone=auto`;
+    const weatherUrl = `${WEATHER_API}?latitude=${dedupedUncached.map(c => c.latitude).join(',')}&longitude=${dedupedUncached.map(c => c.longitude).join(',')}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m,surface_pressure,uv_index,visibility&hourly=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m&forecast_days=2&temperature_unit=celsius&wind_speed_unit=kmh&precipitation_unit=mm&timezone=auto`;
 
     // ===== FIX #5: Retry logic for weather API =====
     const weatherRes = await retryWithBackoff(() => fetch(weatherUrl));
@@ -3022,7 +2986,6 @@ async function fetchWeatherForCities(cities) {
         cityWeather = {
           current: raw.current || {},
           hourly: mergedHourly,
-          daily: raw.daily || {},
         };
 
         // AQI from results array
@@ -3044,7 +3007,6 @@ async function fetchWeatherForCities(cities) {
         cityWeather = {
           current: raw.current || {},
           hourly: raw.hourly || { time: [] },
-          daily: raw.daily || {},
         };
         if (Array.isArray(aqiData)) {
           const aqiRaw = aqiData[i] || {};
@@ -3062,7 +3024,6 @@ async function fetchWeatherForCities(cities) {
         cityWeather = {
           current: raw.current || {},
           hourly: raw.hourly || { time: [] },
-          daily: raw.daily || {},
         };
         if (aqiData && !hasAqiResultsArray) {
           aqiResult = {
@@ -3197,7 +3158,6 @@ function renderCityCard(data, suffix) {
 
   const current = w.current || {};
   const hourly = w.hourly || {};
-  const daily = w.daily || {};
   const aqiData = aqiLabel(a.us_aqi);
 
   const curTemp = current?.temperature_2m != null ? convertTemp(current.temperature_2m) : '—';
@@ -3210,21 +3170,11 @@ function renderCityCard(data, suffix) {
   const vis = current?.visibility ? (current.visibility / 1609.34).toFixed(1) : '—';
   const pm25 = a.pm2_5 !== undefined && a.pm2_5 !== null ? a.pm2_5 : '—';
 
-  const highTemp = daily?.temperature_2m_max?.[0] != null ? convertTemp(daily.temperature_2m_max[0]) : '—';
-  const lowTemp = daily?.temperature_2m_min?.[0] != null ? convertTemp(daily.temperature_2m_min[0]) : '—';
-
-  // Store high/low on data object so drawMergedChart can use them
-  data.highTemp = highTemp;
-  data.lowTemp = lowTemp;
-
-  const sunrise = daily?.sunrise?.[0]?.split('T')[1]?.split('+')[0];
-  const sunset = daily?.sunset?.[0]?.split('T')[1]?.split('+')[0];
-
   const now = new Date();
   const currentHour = now.getHours();
 
-  const sunriseTime = parseDecimalTime(sunrise, 6);
-  const sunsetTime = parseDecimalTime(sunset, 19);
+  const sunriseTime = current?.sunrise ? parseDecimalTime(current.sunrise.split('T')[1]?.split('+')[0], 6) : 6;
+  const sunsetTime = current?.sunset ? parseDecimalTime(current.sunset.split('T')[1]?.split('+')[0], 19) : 19;
   const isDay = isDaytime(currentHour, sunriseTime, sunsetTime);
 
   const curIcon = isDay ? getWeatherIcon(curWeatherCode) : getMoonIcon(curWeatherCode);
@@ -3238,7 +3188,7 @@ function renderCityCard(data, suffix) {
   });
 
   let hourlyHTML = '';
-  for (let i = 0; i < 12; i++) {
+  for (let i = 0; i < 24; i++) {
     const hIdx = currentIdx >= 0 ? currentIdx + i : currentHour + i;
     if (hIdx < 0 || hIdx >= timeArr.length) break;
     const hTime = timeArr[hIdx]?.split('T')[1]?.split('+')[0]?.slice(0, 5);
@@ -3259,35 +3209,6 @@ function renderCityCard(data, suffix) {
     </div>`;
   }
 
-  let dailyHTML = '';
-  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  const globalMin = -40, globalMax = 80;
-  const dailyArr = daily?.time || [];
-  const todayIdx = dailyArr.findIndex(d => d && d.split('T')[0] === currentDay);
-  const startIdx = todayIdx >= 0 ? todayIdx : 0;
-
-  for (let i = 0; i < 7; i++) {
-    const idx = startIdx + i;
-    if (idx >= dailyArr.length) break;
-    const d = dailyArr[idx];
-    const day = d ? dayNames[new Date(d).getDay()] : '';
-    const dCode = daily?.weather_code?.[idx] ?? 0;
-    const dHigh = daily?.temperature_2m_max?.[idx] != null ? convertTemp(daily.temperature_2m_max[idx]) : 0;
-    const dLow = daily?.temperature_2m_min?.[idx] != null ? convertTemp(daily.temperature_2m_min[idx]) : 0;
-    const dPrecip = daily?.precipitation_sum?.[idx] ? `${Math.round(daily.precipitation_sum[idx])}mm` : '';
-    const dWind = daily?.wind_speed_10m_max?.[idx] != null ? `${Math.round(daily.wind_speed_10m_max[idx])} km/h` : '';
-    const barLeft = ((dLow - globalMin) / (globalMax - globalMin)) * 100;
-    const barWidth = Math.max(10, ((dHigh - dLow) / (globalMax - globalMin)) * 100);
-    dailyHTML += `<div class="daily-row">
-      <span class="daily-day">${day}</span>
-      <span class="daily-icon">${getWeatherIcon(dCode)}</span>
-      <span class="daily-low-val">${Math.round(dLow)}°</span>
-      <span class="daily-bar"><span class="daily-bar-fill" style="width:${barWidth}%;left:${barLeft}%;"></span></span>
-      <span class="daily-high-val">${Math.round(dHigh)}°</span>
-      <span class="daily-precip">${dPrecip}</span>
-      <span class="daily-wind">${dWind}</span>
-    </div>`;
-  }
 
   const safeName = data.place_id || suffix;
   const mergedCanvasId = `chart-merged-${safeName}`;
@@ -3322,24 +3243,6 @@ function renderCityCard(data, suffix) {
     <div class="city-compass-row" style="display:flex;align-items:center;gap:0.4rem;margin-top:0.1rem;">
       <span class="compass-heading">${escapeHTML(bearingToCompass(data.bearing))}</span>
       <span class="compass-heading">${Math.round(data.distance)} mi</span>
-    </div>
-    <div class="info-row">
-      <div class="info-item">
-        <span class="info-label">HIGH</span>
-        <span class="info-val hot">${Math.round(highTemp)}°</span>
-      </div>
-      <div class="info-item">
-        <span class="info-label">LOW</span>
-        <span class="info-val cool">${Math.round(lowTemp)}°</span>
-      </div>
-      <div class="info-item">
-        <span class="info-label">☀️</span>
-        <span class="info-val">${sunrise || '—'}</span>
-      </div>
-      <div class="info-item">
-        <span class="info-label">🌙</span>
-        <span class="info-val">${sunset || '—'}</span>
-      </div>
     </div>
     <div class="combined-chart-row">
       <canvas class="combined-chart-canvas" id="${combinedCanvasId}"></canvas>
@@ -3378,12 +3281,8 @@ function renderCityCard(data, suffix) {
       <div class="detail-cell"><span class="detail-label">AQI (PM2.5)</span><span class="detail-value"><span class="aqi-badge ${aqiData.cls}">${aqiData.label}</span> ${pm25}</span></div>
     </div>
     <div class="hourly-section">
-      <div class="hourly-title">12-Hour Forecast</div>
+      <div class="hourly-title">24-Hour Forecast</div>
       <div class="hourly-row">${hourlyHTML}</div>
-    </div>
-    <div class="daily-section">
-      <div class="daily-title">7-Day Forecast</div>
-      ${dailyHTML}
     </div>
     </div>`;
 }
@@ -4260,6 +4159,11 @@ const DONKEY_RUNNER = {
 
   nearMissActive: false,
 
+  // Fullscreen state
+  isFullscreen: false,
+  fullscreenScale: 1,
+  fullscreenBtnEl: null,
+
   // Snarky message system
   snarkyMessages: {
     start: ["Time to run for your life!", "May the odds be ever in your favor"],
@@ -4323,6 +4227,7 @@ const DONKEY_RUNNER = {
         <div class="donkey-header-highscore">
           <span class="donkey-highscore" id="donkey-highscore">HI ${String(this.highScore).padStart(5, '0')}</span>
         </div>
+        <button class="donkey-fullscreen-btn" id="donkey-fullscreen-btn" title="Toggle fullscreen">⛶</button>
         <button class="donkey-close-btn" title="Close game">✕</button>
       </div>
       <div class="donkey-panel-body">
@@ -4443,6 +4348,15 @@ const DONKEY_RUNNER = {
     const dsHighScoreVal = document.getElementById('ds-highscore-val');
     if (dsHighScoreVal) {
       dsHighScoreVal.textContent = String(this.highScore).padStart(5, '0');
+    }
+
+    // Fullscreen button handler
+    this.fullscreenBtnEl = document.getElementById('donkey-fullscreen-btn');
+    if (this.fullscreenBtnEl) {
+      this.fullscreenBtnEl.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.toggleFullscreen();
+      });
     }
 
     // Sound toggle button — check localStorage for saved preference
@@ -4971,6 +4885,10 @@ const DONKEY_RUNNER = {
     this.obstacles = [];
     this.gamePanel.classList.remove('donkey-visible');
     this.gamePanel.classList.add('donkey-hidden');
+    // Exit fullscreen if active
+    if (this.isFullscreen) {
+      this.closeFullscreen();
+    }
     if (typeof adjustOutagePosition === 'function') adjustOutagePosition();
   },
 
@@ -4994,6 +4912,59 @@ const DONKEY_RUNNER = {
       this.drawIdle();
       if (typeof adjustOutagePosition === 'function') adjustOutagePosition();
     }
+  },
+
+  toggleFullscreen() {
+    if (this.isFullscreen) {
+      this.closeFullscreen();
+    } else {
+      this.enterFullscreen();
+    }
+  },
+
+  enterFullscreen() {
+    if (this.isFullscreen) return;
+    this.isFullscreen = true;
+    this.gamePanel.classList.add('fullscreen');
+    document.body.classList.add('donkey-fullscreen');
+    this.updateFullscreenScale();
+    // Update button icon to "exit fullscreen"
+    if (this.fullscreenBtnEl) {
+      this.fullscreenBtnEl.textContent = '⛶';
+      this.fullscreenBtnEl.title = 'Exit fullscreen';
+    }
+    // Listen for window resize to recalculate scale
+    window.addEventListener('resize', this._resizeHandler || (this._resizeHandler = () => this.updateFullscreenScale()));
+  },
+
+  closeFullscreen() {
+    if (!this.isFullscreen) return;
+    this.isFullscreen = false;
+    this.gamePanel.classList.remove('fullscreen');
+    document.body.classList.remove('donkey-fullscreen');
+    this.gamePanel.style.removeProperty('--fullscreen-scale');
+    this.gamePanel.style.removeProperty('transform');
+    if (this.fullscreenBtnEl) {
+      this.fullscreenBtnEl.textContent = '⛶';
+      this.fullscreenBtnEl.title = 'Toggle fullscreen';
+    }
+    if (this._resizeHandler) {
+      window.removeEventListener('resize', this._resizeHandler);
+      this._resizeHandler = null;
+    }
+  },
+
+  updateFullscreenScale() {
+    if (!this.isFullscreen) return;
+    // Use full panel dimensions (including header) for scaling calculation
+    const panelWidth = this.gamePanel.offsetWidth;
+    const panelHeight = this.gamePanel.offsetHeight;
+    const padding = 20; // 10px padding on each side
+    const scaleX = (window.innerWidth - padding) / panelWidth;
+    const scaleY = (window.innerHeight - padding) / panelHeight;
+    this.fullscreenScale = Math.min(scaleX, scaleY);
+    this.gamePanel.style.setProperty('--fullscreen-scale', this.fullscreenScale);
+    this.gamePanel.style.transform = `scale(${this.fullscreenScale})`;
   },
 
   loop() {

@@ -12,7 +12,7 @@
 .hourly-row {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  grid-template-rows: repeat(3, auto);
+  grid-template-rows: repeat(6, auto);
   gap: 0.3rem;
 }
 .hour-slot {
