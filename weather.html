@@ -2138,14 +2138,16 @@ const DataCache = {
         return false;
       }
       const entry = JSON.parse(raw);
-      // Validate type matches
-      if (type && entry.type !== type) {
+      // Validate type matches (always check, even when type is falsy — skip only for backward compat)
+      if (type != null && entry.type !== type) {
         console.log(`[DataCache] MISS (type mismatch): ${key} (expected: ${type}, got: ${entry.type})`);
         return false;
       }
-      const expired = !entry || (Date.now() - entry.timestamp > this.TTL[type]);
+      // Use entry.type for TTL lookup when type is null, to avoid undefined TTL
+      const ttlKey = type != null ? type : entry.type;
+      const expired = !entry || (Date.now() - entry.timestamp > this.TTL[ttlKey]);
       if (expired) {
-        console.log(`[DataCache] MISS (expired): ${key} (type: ${type})`);
+        console.log(`[DataCache] MISS (expired): ${key} (type: ${ttlKey})`);
         return false;
       }
       console.log(`[DataCache] HIT: ${key} (type: ${type})`);
@@ -2165,13 +2167,15 @@ const DataCache = {
         return null;
       }
       const entry = JSON.parse(raw);
-      // Validate type matches
-      if (type && entry.type !== type) {
+      // Validate type matches (always check, even when type is falsy — skip only for backward compat)
+      if (type != null && entry.type !== type) {
         console.log(`[DataCache] MISS (type mismatch): ${key} (expected: ${type}, got: ${entry.type})`);
         return null;
       }
-      if (Date.now() - entry.timestamp > this.TTL[type]) {
-        console.log(`[DataCache] MISS (expired): ${key} (type: ${type}, age: ${Math.round((Date.now() - entry.timestamp) / 1000)}s, ttl: ${this.TTL[type] / 1000}s)`);
+      // Use entry.type for TTL lookup when type is null, to avoid undefined TTL
+      const ttlKey = type != null ? type : entry.type;
+      if (Date.now() - entry.timestamp > this.TTL[ttlKey]) {
+        console.log(`[DataCache] MISS (expired): ${key} (type: ${ttlKey}, age: ${Math.round((Date.now() - entry.timestamp) / 1000)}s, ttl: ${this.TTL[ttlKey] / 1000}s)`);
         localStorage.removeItem(`hasw_cache_${key}`);
         return null;
       }
@@ -3443,10 +3447,10 @@ async function fetchForecast(wfo, x, y) {
     dewpoint: p.dewpoint?.value != null ? convertObsTempToF(p.dewpoint.value, p.dewpoint.unitCode) : null,
     dewpointUnit: p.dewpoint?.unitCode == null ? 'F' : p.dewpoint.unitCode,
     // windSpeed is a string like "10 mph" - parse to number
-    windSpeed: parseWindSpeedStringToNum(p.windSpeed),
+    windSpeed: parseWindSpeedString(p.windSpeed),
     windSpeedUnit: 'mph',
     // windGust is a string like "20 mph" - parse to number
-    windGust: parseWindSpeedStringToNum(p.windGust),
+    windGust: parseWindSpeedString(p.windGust),
     windGustUnit: 'mph',
     windDirection: p.windDirection,
     shortForecast: p.shortForecast,
@@ -3478,10 +3482,10 @@ async function fetchHourlyForecast(wfo, x, y) {
     dewpoint: p.dewpoint?.value != null ? convertObsTempToF(p.dewpoint.value, p.dewpoint.unitCode) : null,
     dewpointUnit: p.dewpoint?.unitCode == null ? 'F' : p.dewpoint.unitCode,
     // windSpeed is a string like "10 mph" - parse to number
-    windSpeed: parseWindSpeedStringToNum(p.windSpeed),
+    windSpeed: parseWindSpeedString(p.windSpeed),
     windSpeedUnit: 'mph',
     // windGust is a string like "20 mph" - parse to number
-    windGust: parseWindSpeedStringToNum(p.windGust),
+    windGust: parseWindSpeedString(p.windGust),
     windGustUnit: 'mph',
     windDirection: p.windDirection,
     shortForecast: p.shortForecast,
@@ -3886,13 +3890,6 @@ function findCurrentNwsValue(values, now) {
   return best;
 }
 
-// Parse wind speed string like "10 mph" into a number
-function parseWindSpeedStringToNum(windSpeedStr) {
-  if (typeof windSpeedStr !== 'string') return windSpeedStr;
-  const match = windSpeedStr.match(/^(\d+)\s*mph$/);
-  return match ? parseInt(match[1], 10) : null;
-}
-
 // Convert Celsius to Fahrenheit for observation station data
 function convertObsTempToF(c, unitCode) {
   if (c == null) return null;
@@ -4212,8 +4209,9 @@ async function fetchNwsForCities(cities) {
   // Deduplicate BEFORE fetching
   const dedupedUncached = deduplicateCities(uncachedCities);
 
-  // Fetch NWS data for each unique city
+  // Fetch NWS data for each unique city, and fall back to OM for cities outside NWS coverage
   const nwsResults = [];
+  const omFallbackResults = [];
   for (const city of dedupedUncached) {
     const nwsData = await fetchForCity(city.latitude, city.longitude);
     if (nwsData) {
@@ -4221,6 +4219,9 @@ async function fetchNwsForCities(cities) {
       if (appData) {
         nwsResults.push(appData);
       }
+    } else {
+      // NWS doesn't cover this city — fall back to OM data
+      omFallbackResults.push(city);
     }
   }
 
@@ -4238,7 +4239,7 @@ async function fetchNwsForCities(cities) {
     }
   }
 
-  // Fill fetched results using coordinate-based matching instead of cache key string comparison
+  // Fill fetched NWS results using coordinate-based matching instead of cache key string comparison
   for (const nwsResult of nwsResults) {
     const ck = nwsCacheKey(nwsResult.latitude, nwsResult.longitude);
     DataCache.set(ck, nwsResult, 'nwsCityData');
@@ -4257,6 +4258,25 @@ async function fetchNwsForCities(cities) {
     }
   }
 
+  // Fill OM fallback results for cities outside NWS coverage
+  const omCities = await fetchWeatherForCities(omFallbackResults);
+  for (const omResult of omCities) {
+    // Find the city by matching coordinates
+    for (const idx of cityCacheMap) {
+      const cityLat = cities[idx].latitude;
+      const cityLon = cities[idx].longitude;
+      if (cityLat != null && cityLon != null) {
+        const resultLat = omResult.latitude;
+        const resultLon = omResult.longitude;
+        if (Math.abs(resultLat - cityLat) < 0.01 && Math.abs(resultLon - cityLon) < 0.01) {
+          // Use OM data for cities outside NWS coverage
+          result[idx] = { ...omResult, source: 'open-meteo' };
+          break;
+        }
+      }
+    }
+  }
+
   // Fill any uncached cities with null data
   for (const idx of cityCacheMap) {
     if (!result[idx]) {
@@ -4267,15 +4287,85 @@ async function fetchNwsForCities(cities) {
   return nwsDeduplicateResults(result);
 }
 
-// ===== SOURCE-DEPENDENT DATA FETCH =====
-// This is the unified entry point that the app uses to fetch weather data
-// It delegates to the appropriate source based on currentSource
-async function fetchWeatherForCitiesUnified(cities) {
-  if (currentSource === 'nws') {
-    return await fetchNwsForCities(cities);
-  } else {
-    return await fetchWeatherForCities(cities);
+// Merge NWS supplemental fields into OM base data
+// NWS current conditions replace OM current conditions (NWS is more accurate for current state)
+// NWS hourly replaces OM hourly (but keep OM precipitation since NWS hourly doesn't have it)
+function mergeNwsWithOM(omEntry, nwsEntry) {
+  const merged = { ...omEntry };
+
+  // Merge weather data
+  if (nwsEntry.weather && omEntry.weather) {
+    const nwsCurrent = nwsEntry.weather.current || {};
+    const omCurrent = omEntry.weather.current || {};
+
+    // Replace current conditions with NWS data (NWS is more accurate for current state)
+    merged.weather = {
+      current: {
+        ...omCurrent,
+        ...nwsCurrent,
+      },
+      hourly: nwsEntry.weather.hourly || omEntry.weather.hourly,
+    };
   }
+
+  // Update source to 'enhanced' (OM base + NWS supplemental)
+  merged.source = 'enhanced';
+
+  return merged;
+}
+
+// ===== SOURCE-DEPENDENT DATA FETCH =====
+// This is the unified entry point that the app uses to fetch weather data.
+// OM is always the base for all cities; NWS is fetched only where available as supplemental.
+async function fetchWeatherForCitiesUnified(cities) {
+  // Always fetch OM weather + AQI for ALL cities first
+  const omResults = await fetchWeatherForCities(cities);
+
+  // Check which cities have NWS coverage and fetch NWS data for those
+  const nwsFetches = [];
+
+  for (const city of cities) {
+    const hasNws = await checkNwsCoverage(city.latitude, city.longitude);
+    if (hasNws) {
+      const nwsData = await fetchForCity(city.latitude, city.longitude);
+      if (nwsData) {
+        nwsFetches.push({ city, nwsData });
+      }
+    }
+  }
+
+  // Merge NWS supplemental data into OM base data
+  const mergedResults = new Array(cities.length);
+
+  // First, fill with OM base data
+  for (let i = 0; i < cities.length; i++) {
+    const omEntry = omResults.find(r => r && Math.abs(r.latitude - cities[i].latitude) < 0.01 && Math.abs(r.longitude - cities[i].longitude) < 0.01);
+    if (omEntry) {
+      mergedResults[i] = { ...omEntry, source: 'open-meteo' };
+    } else {
+      mergedResults[i] = { ...cities[i], weather: null, aqi: {} };
+    }
+  }
+
+  // Then, merge NWS supplemental data into OM base data for cities with coverage
+  for (const { city, nwsData } of nwsFetches) {
+    const appData = nwsToAppData(city, nwsData);
+    if (!appData) continue;
+
+    // Find the OM entry for this city
+    const omEntryIdx = mergedResults.findIndex(r => r && Math.abs(r.latitude - city.latitude) < 0.01 && Math.abs(r.longitude - city.longitude) < 0.01);
+    if (omEntryIdx === -1) continue;
+
+    // Merge NWS supplemental fields into OM base data
+    const merged = mergeNwsWithOM(mergedResults[omEntryIdx], appData);
+    mergedResults[omEntryIdx] = merged;
+
+    // Cache the NWS city data for future use
+    const ck = nwsCacheKey(city.latitude, city.longitude);
+    DataCache.set(ck, appData, 'nwsCityData');
+  }
+
+  return nwsDeduplicateResults(mergedResults);
 }
 
 </script>
@@ -4451,8 +4541,8 @@ function renderCityCard(data, suffix) {
     </div>`;
   }
 
-  // Badge reflects CURRENT SOURCE (toggle state), not data source (where data came from)
-  const sourceBadge = isCurrentSourceNws ? '<span class="source-badge nws">NWS</span>' : '<span class="source-badge open-meteo">OM</span>';
+  // Badge reflects each city's actual data source (not toggle state)
+  const sourceBadge = data.source === 'nws' ? '<span class="source-badge nws">NWS</span>' : '<span class="source-badge open-meteo">OM</span>';
 
   const safeName = data.place_id || suffix;
   const mergedCanvasId = `chart-merged-${safeName}`;
@@ -4892,58 +4982,61 @@ async function updateSourceToggleUI() {
   const btn = document.getElementById('source-toggle');
   if (!btn) return;
   
-  // Check if NWS is available for any current city
-  let nwsAvailable = false;
-  let omAvailable = true; // OM is always available
+  // Check if ALL current cities have NWS coverage (not just any)
+  let allCitiesHaveNws = true;
+  let hasAnyCityWithNws = false;
   
   if (weatherData.length > 0) {
     for (const city of weatherData) {
       const key = `${DataCache._roundCoord(city.latitude)},${DataCache._roundCoord(city.longitude)}`;
       // Check cache first
-      if (key in _nwsAvailability && _nwsAvailability[key]) {
-        nwsAvailable = true;
-        break;
+      let nwsAvail = false;
+      if (key in _nwsAvailability) {
+        nwsAvail = _nwsAvailability[key];
+      } else {
+        // Check uncached
+        nwsAvail = await checkNwsCoverage(city.latitude, city.longitude);
+        _nwsAvailability[key] = nwsAvail;
       }
-      // Check uncached
-      const avail = await checkNwsCoverage(city.latitude, city.longitude);
-      _nwsAvailability[key] = avail;
-      if (avail) {
-        nwsAvailable = true;
-        break;
+      
+      if (nwsAvail) {
+        hasAnyCityWithNws = true;
+      } else {
+        allCitiesHaveNws = false;
       }
     }
   }
   
-  // Update button state
+  // Update button state - only enable toggle if ALL cities have NWS coverage
   const isNws = currentSource === 'nws';
-  const hasNws = nwsAvailable;
   
   btn.textContent = currentSource === 'open-meteo' ? 'OM' : 'NWS';
-  btn.classList.toggle('nws', isNws && hasNws);
+  btn.classList.toggle('nws', isNws && allCitiesHaveNws);
   
-  // Disable button if neither source is available
-  if (!hasNws && !omAvailable) {
+  // Disable button if not ALL cities have NWS coverage (toggle only works when all cities are in coverage)
+  if (!allCitiesHaveNws) {
     btn.disabled = true;
-    btn.title = 'No data source available for this location';
+    btn.title = 'Some cities outside NWS coverage — OM active';
     btn.classList.add('disabled');
-  } else if (isNws && !hasNws) {
-    // Currently on NWS but NWS not available - switch to OM
-    currentSource = 'open-meteo';
-    localStorage.setItem('hasW_source', 'open-meteo');
-    btn.textContent = 'OM';
-    btn.classList.remove('nws');
+    // Auto-switch to OM if currently on NWS but not all cities have NWS
+    if (isNws && !allCitiesHaveNws) {
+      currentSource = 'open-meteo';
+      localStorage.setItem('hasW_source', 'open-meteo');
+      btn.textContent = 'OM';
+      btn.classList.remove('nws');
+      btn.disabled = false;
+      btn.title = 'Some cities outside NWS coverage — OM active';
+      btn.classList.remove('disabled');
+    }
+  } else if (isNws && hasAnyCityWithNws) {
+    // Currently on NWS and at least one city has NWS - show toggle enabled
     btn.disabled = false;
-    btn.title = 'NWS not available for this location';
-    btn.classList.remove('disabled');
-  } else if (!isNws && hasNws) {
-    // Currently on OM and NWS is available - show toggle
-    btn.disabled = false;
-    btn.title = hasNws ? 'Switch to NWS' : 'NWS not available for this location';
+    btn.title = 'Switch to OM';
     btn.classList.remove('disabled');
   } else {
-    // Both available or neither available
+    // On OM, some cities have NWS - allow toggle
     btn.disabled = false;
-    btn.title = hasNws ? 'Switch to OM' : 'NWS not available for this location';
+    btn.title = hasAnyCityWithNws ? 'Switch to NWS' : 'No NWS coverage available';
     btn.classList.remove('disabled');
   }
 }
