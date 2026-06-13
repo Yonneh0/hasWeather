@@ -1,5 +1,40 @@
 # hasWeather (Under Development: Proceed with caution)
 
+## Changelog
+
+### 2026-06-13 — Per-City NWS Enhancement Toggle (Major Refactor)
+
+This release replaces the global source toggle (NWS vs OM for ALL cities) with per-city NWS enhancement toggles. The changes consolidate `favorites-ui.js` into `favorites.js`, restructure the CSS, and refactor the API fetching logic to always use OM as base data with optional NWS enhancement where available.
+
+**Changes:**
+- **Architecture**: Always fetch Open-Meteo as base for all cities; NWS is fetched only where available as supplemental enhancement (no global toggle)
+- **NWS Toggle Button**: Each city card now has a ⚡ toggle button that appears when NWS coverage is available for that city — users can selectively enhance individual cities with NWS data
+- **Visual Feedback**: Toggle buttons show green (success), red (error), amber (outside bounds), or blue (processing) feedback on click
+- **Cross-Session Persistence**: NWS toggle state is persisted to localStorage — user preferences are remembered across app reloads
+- **Cache Validation**: Stale cache entries are detected and cleaned up during cross-session restore
+- **Bounds Cache TTL**: NWS bounds cache now has a 1-hour TTL to prevent memory leak
+- **Source Badge Logic**: Enhanced cities always show "ENHANCED" badge; OM-only cities always show "OM" badge (no empty badges)
+- **Fullscreen Mode**: Game panel fullscreen restored to fill the viewport (was constrained to 640px centered)
+- **Dead CSS Removed**: Unused `.nws-toggle-btn.feedback-*` CSS classes removed
+- **HTML Entity Fix**: `escapeHTML()` now uses standard HTML entities instead of broken Unicode escapes
+- **File Consolidation**: `favorites-ui.js` deleted; its code merged into `favorites.js`
+- **Source Toggle Removed**: Global NWS/OM toggle button and related code removed from UI
+- **Background Refresh**: Conditional cache invalidation by source type (NWS-only vs OM cities)
+
+**Fixes:**
+1. Fixed contradictory `source`/`nwsActive` state in cross-source cached data
+2. Fixed enhanced city badge showing "OM" instead of "ENHANCED" when `nwsActive` is false
+3. Fixed fullscreen game panel no longer filling the viewport
+4. Removed dead CSS classes for NWS toggle feedback states
+5. Added TTL to NWS bounds cache to prevent memory leak
+6. Added processing feedback for rapid toggle clicks
+7. Added specific feedback for partial NWS data (not just generic error)
+8. Fixed `escapeHTML()` using broken Unicode escape sequences
+9. Added `place_id !== ''` check for empty placeId in event delegation
+10. Fixed source badge always showing "OM" for cities without NWS bounds
+11. Conditional cache invalidation by source type during background refresh
+
+
 single file weather app, by Half-Assed Solutions.
 completely self-contained single file weather app, that uses public sources, with proper local caching, to provide reliable comprehensive weather information, with 0 ads. Brought to you by `Carls' Jr`.
 
@@ -76,19 +111,12 @@ weather-full.html       GENERATED — complete single-file build output with com
 weather-prod.html       GENERATED — minimized/optimized production-ready single-file build output, without embedded favicon (179kb+)
 weather.html            GENERATED — complete single-file build output with comments, without embedded favicon (303kb+)
 css/
-  base.css              17 lines — reset & base styles (body, particle-canvas)
-  card.css             212 lines — city card styles (card base, header, details grid, AQI badge, sun times)
-  charts.css           153 lines — canvas charts, stat rows, combined charts
+  base.css              18 lines — reset & base styles (body, particle-canvas)
+  main.css               7 lines — entry point (imports all modular CSS)
+  layout.css           183 lines — core layout & structural styles (header, city grid, modal, loading, text glow)
+  card-components.css  436 lines — card display components (city card, hourly forecast, canvas charts)
+  interactive.css      528 lines — interactive elements (favorites dropdown, SVG weather icons, network outage panel)
   donkey-runner.css    740 lines — minigame panel styling & animations
-  favorites.css        166 lines — favorites dropdown, search, settings
-  grid.css              18 lines — city grid responsive layout
-  header.css           100 lines — header layout, logo, buttons, location display, game btn
-  hourly.css            64 lines — hourly forecast grid & slots
-  icons.css            121 lines — SVG weather icon styles & animations
-  main.css              14 lines — entry point (imports all modular CSS)
-  modal.css             51 lines — modal overlay, card styles, loading state
-  outage.css           234 lines — network outage panel styling with glitch animations
-  utilities.css          6 lines — glow/shadow text utilities
 js/
   api-nws.js          1162 lines — NWS API client (gridpoint data, observation stations, alerts) with rate limiting and cross-source lookup
   api-openmeteo.js     314 lines — Open-Meteo weather/AQI API client with deduplication and retry logic
@@ -97,8 +125,7 @@ js/
   charts.js            302 lines — canvas chart rendering (merged chart, combined chart, particles)
   constants.js          72 lines — shared constants (WMO codes & gradients)
   donkey-runner.js    2581 lines — Donkey Runner minigame engine (canvas-based runner)
-  favorites-ui.js      484 lines — favorites dropdown UI & city management
-  favorites.js         108 lines — FavoritesManager (place_id-based favorites)
+   favorites-ui.js      592 lines — favorites dropdown UI, city management & FavoritesManager
   icons.js             289 lines — animated SVG weather icons
   main.js              252 lines — entry point (state + DOM init + event bindings + game toggle + run orchestration)
   network-monitor.js   331 lines — network outage detection, animated error panel, auto-retry
