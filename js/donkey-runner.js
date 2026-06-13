@@ -1,6 +1,8 @@
 // ===== DONKEY RUNNER MINIGAME =====
 // A Chrome-dinosaur-style endless runner with a donkey character
 
+const NEAR_MISS_COOLDOWN = 600; // ms
+
 const DONKEY_RUNNER = {
   canvas: null,
   ctx: null,
@@ -80,9 +82,8 @@ const DONKEY_RUNNER = {
   // Stars (background decoration)
   stars: [],
 
-  // Day/night cycle (20 second cycle for more dynamic feel, was 60)
+  // Day/night cycle (60 second cycle)
   dayNightPhase: 0,
-  dayNightDuration: 20, // seconds for full cycle
 
   // Particle system
   particles: [],
@@ -92,7 +93,19 @@ const DONKEY_RUNNER = {
 
   // Property damage (obstacles destroyed while stumbling)
   propertyDamageCount: 0,
-  propertyDamageScore: 0,
+
+  // Obstacle count tracking (how many of each type were passed)
+  obstacleCounts: {
+    'cactus-small': 0,
+    'cactus-large': 0,
+    'rock': 0,
+    'car': 0,
+    'jet': 0,
+    'falling-rock': 0,
+    'drone': 0,
+  },
+  // Obstacle type that caused the game over (for red highlight)
+  gameOverObstacleType: null,
 
   // Post-game stats tracking
   maxSpeed: 0,
@@ -109,7 +122,6 @@ const DONKEY_RUNNER = {
 
   // Score breakdown
   nearMissScore: 0,
-  bonusScore: 0,
 
   // DOM elements
   scoreEl: null,
@@ -123,14 +135,12 @@ const DONKEY_RUNNER = {
 
   // Input
   keysDown: {},
-  jumpCooldownTimer: 0, // prevents double-jump from held key — cooldown in seconds
-  jumpCooldownDuration: 0.05, // 50ms cooldown between jump inputs
+  jumpCooldownTimer: 0,
+  jumpCooldownDuration: 0.05,
 
   // Game over cooldown to prevent rapid-fire restart glitches
   gameOverCooldown: false,
-  // Cooldown that blocks restart attempts regardless of input method (keyboard + touch/click)
   restartCooldown: false,
-  // Tracks whether game is in the "dead" state (game over screen visible, not playing)
   gameOverActive: false,
 
   // Pause state
@@ -140,16 +150,40 @@ const DONKEY_RUNNER = {
   audioCtx: null,
   soundEnabled: false,
 
-  // Near-miss tracking
   nearMissActive: false,
 
-  // Speed lines (ground effect lines)
+  // Snarky message system
+  snarkyMessages: {
+    start: ["Time to run for your life!", "May the odds be ever in your favor"],
+    jump: ["You call that a jump?", "Gravity is optional, apparently"],
+    "double-jump": ["Fart power engaged!", "Mid-air desperation activates"],
+    land: ["That was graceful", "404: Dignity not found"],
+    "speed-increase": ["Speed boost! Good luck!", "You're not getting faster, just more desperate"],
+    cactus: ["A cactus? Really?", "The simplest obstacle and you still can't dodge it"],
+    rock: ["Rock you are?", "Geology is not your friend"],
+    car: ["A car at this speed? Bold choice", "You're about to become roadkill"],
+    "near-miss": ["NEAR MISS! Your survival instincts are... minimal", "That was close! Too close for comfort"],
+    "property-damage": ["Property damage! +100 points for destruction", "You broke something! Good job"],
+    "game-over": ["GAME OVER! Your donkey's story ends here", "RIP dignity", "That's not a jump, that's a cry for help"],
+    "high-score": ["NEW HIGH SCORE! Shocking", "You broke your own record! Unbelievable"],
+    stumble: ["Stumble time! Good luck recovering", "Your donkey just tripped over its own feet"],
+    backflip: ["Backflip! Because regular jumping wasn't enough", "Oh look, a backflip! What a show-off"],
+    ceiling: ["CEILING! Your donkey hit the ceiling", "Up up and... OUCH"],
+    jet: ["A jet! Your donkey is not a bird", "Military aviation is not your ally today"],
+    "falling-rock": ["Falling rock! Look both ways before running", "Gravity: 1, Donkey: 0"],
+    drone: ["Drone incoming! Your donkey is not a spaceship", "Surveillance state meets incompetence"],
+    milestone: ["MILESTONE! You survived a while!", "Another thousand points! The donkey is proud"],
+    "ignored-jump": ["Jump ignored! Your donkey said no", "Not every jump is welcome here"],
+    restart: ["Round two! Why do you keep doing this?", "Again? Really?"]
+  },
+  messageIndex: {},  // tracks which message was last shown per event type
+  messageCooldown: 0,  // cooldown timer
+  snarkyMessageEl: null,
+
   speedLineX: 0,
   speedLines: [],
 
-  // Delta time tracking for frame-rate-independent game speed
   lastFrameTime: 0,
-  // Device pixel ratio for canvas scaling
   dpr: 1,
 
   init() {
@@ -184,11 +218,12 @@ const DONKEY_RUNNER = {
         <button class="donkey-close-btn" title="Close game">✕</button>
       </div>
       <div class="donkey-panel-body">
-        <div class="donkey-play-area">
+          <div class="donkey-play-area">
           <canvas id="donkey-canvas" width="600" height="180"></canvas>
           <div class="donkey-speed-lines" id="donkey-speed-lines"></div>
           <div class="donkey-near-miss" id="donkey-near-miss">NEAR MISS!</div>
           <div class="donkey-bonus-text" id="donkey-bonus-text"></div>
+          <div class="donkey-snarky-message" id="donkey-snarky-message"></div>
           <div class="donkey-startscreen" id="donkey-startscreen">
             <div class="ds-subtitle">dodge the crap, run the plains</div>
             <div class="ds-controls">
@@ -204,6 +239,8 @@ const DONKEY_RUNNER = {
           <div class="donkey-gameover hidden" id="donkey-gameover">
             <span class="donkey-gameover-text">GAME OVER</span>
             <span class="donkey-gameover-new hidden" id="donkey-gameover-new"><span class="donkey-gameover-new-label">NEW HIGH SCORE!</span><span class="donkey-gameover-new-score" id="donkey-gameover-new-score">00000</span></span>
+            <!-- Obstacle count table across the top -->
+            <div class="donkey-gameover-obstacle-table" id="donkey-gameover-obstacle-table"></div>
             <!-- Top-left stats — score-based block (4 items) -->
             <div class="donkey-gameover-stats-top-left" id="donkey-gameover-stats-top-left">
               <div class="donkey-gameover-stat-row">
@@ -282,11 +319,8 @@ const DONKEY_RUNNER = {
     this.ctx = this.canvas.getContext('2d');
     this.ctx.scale(this.dpr, this.dpr);
     this.GROUND_Y = this.canvas.height / this.dpr - 20;
-    // Store display dimensions for use in drawing
-    this.displayWidth = displayWidth;
-    this.displayHeight = displayHeight;
 
-    // Score elements
+    // Score and UI elements
     this.scoreEl = document.getElementById('donkey-score');
     this.highScoreEl = document.getElementById('donkey-highscore');
     this.startScreenEl = document.getElementById('donkey-startscreen');
@@ -295,6 +329,7 @@ const DONKEY_RUNNER = {
     this.bonusTextEl = document.getElementById('donkey-bonus-text');
     this.speedLinesEl = document.getElementById('donkey-speed-lines');
     this.soundBtnEl = document.getElementById('donkey-sound-btn');
+    this.snarkyMessageEl = document.getElementById('donkey-snarky-message');
 
     // High score on start screen
     const dsHighScoreVal = document.getElementById('ds-highscore-val');
@@ -685,9 +720,6 @@ const DONKEY_RUNNER = {
   },
 
   handleInput() {
-    // Block jump input during game over cooldown while game is still running
-    if (this.gameOverCooldown && this.gameRunning) return;
-
     // Initialize audio on first user interaction
     this.initAudio();
 
@@ -711,7 +743,9 @@ const DONKEY_RUNNER = {
       if (Math.random() < 0.08) {
         this.donkey.backflipping = true;
         this.donkey.backflipProgress = 0;
+        this.showSnarkyMessage('backflip');
       }
+      this.showSnarkyMessage('jump');
     } else if (!this.donkey.grounded && !this.donkey.stumbling && this.donkey.currentJumpCount < this.MAX_JUMPS && !this.gameOverActive) {
       // Only allow double jump if cooldown has expired (prevents held-key rapid-fire)
       if (this.jumpCooldownTimer <= 0) {
@@ -725,9 +759,11 @@ const DONKEY_RUNNER = {
         this.spawnDoubleJumpParticles();
         // Reset cooldown
         this.jumpCooldownTimer = this.jumpCooldownDuration;
+        this.showSnarkyMessage('double-jump');
       } else {
         // Cooldown still active — jump attempted but rejected
         this.ignoredJumps++;
+        this.showSnarkyMessage('ignored-jump');
       }
     } else if (!this.gameOverActive) {
       // Jump attempted but rejected for any reason:
@@ -735,6 +771,7 @@ const DONKEY_RUNNER = {
       // - Donkey is already airborne with both jumps used (currentJumpCount >= MAX_JUMPS)
       // - Jump cooldown still active while airborne
       this.ignoredJumps++;
+      this.showSnarkyMessage('ignored-jump');
     }
   },
 
@@ -746,6 +783,10 @@ const DONKEY_RUNNER = {
     this.resetGame();
     this.restartCooldown = false; // Ensure cooldown is cleared when starting from idle state
     this.loop();
+    // Show start message after a brief delay (so the overlay is gone first)
+    setTimeout(() => {
+      this.showSnarkyMessage('start');
+    }, 200);
   },
 
   restart() {
@@ -758,6 +799,10 @@ const DONKEY_RUNNER = {
     }
     this.resetGame();
     this.loop();
+    // Show restart message after a brief delay
+    setTimeout(() => {
+      this.showSnarkyMessage('restart');
+    }, 200);
   },
 
   resetGame() {
@@ -788,9 +833,7 @@ const DONKEY_RUNNER = {
     this.airTime = 0;
     this.runTime = 0;
     this.nearMissScore = 0;
-    this.bonusScore = 0;
     this.propertyDamageCount = 0;
-    this.propertyDamageScore = 0;
     this.obstacles = [];
     this.obstacleTimer = 0;
     this.groundX = 0;
@@ -870,6 +913,11 @@ const DONKEY_RUNNER = {
       this.jumpCooldownTimer -= deltaTime;
     }
 
+    // Decrease snarky message cooldown
+    if (this.messageCooldown > 0) {
+      this.messageCooldown -= deltaTime;
+    }
+
     // Accumulate run time (total play time)
     this.runTime += deltaTime;
 
@@ -878,23 +926,23 @@ const DONKEY_RUNNER = {
       this.airTime += deltaTime;
     }
 
-    // Increase speed over time (per-second)
     this.speed = Math.min(this.MAX_SPEED, this.speed + this.SPEED_INCREMENT * deltaTime * 60);
 
-    // Track max speed (per-second) — keep as float
+    // Keep max speed as float for display accuracy
     if (this.speed > this.maxSpeed) {
       this.maxSpeed = this.speed;
     }
 
-    // Update score (per-second) — 33% reduced rate while airborne
-    const airbornMultiplier = this.donkey.grounded ? 1.0 : 0.1;
-    this.distance += this.speed * 0.01 * deltaTime * 60 * airbornMultiplier;
+    // Reduce score rate while airborne to 10% of ground rate
+    const airborneMultiplier = this.donkey.grounded ? 1.0 : 0.1;
+    this.distance += this.speed * 0.01 * deltaTime * 60 * airborneMultiplier;
     this.score = Math.floor(this.distance * 100);
 
     // Score milestone flash check
     const currentMilestone = Math.floor(this.score / 1000) * 1000;
     if (currentMilestone > this.lastMilestoneScore && this.lastMilestoneScore > 0) {
       this.triggerMilestoneFlash();
+      this.showSnarkyMessage('milestone');
       this.lastMilestoneScore = currentMilestone;
     }
 
@@ -903,14 +951,12 @@ const DONKEY_RUNNER = {
       this.scoreEl.textContent = String(this.score).padStart(5, '0');
     }
 
-    // Update ground (per-second)
     this.groundX = (this.groundX - this.speed * deltaTime * 60) % 20;
 
     // Update speed lines visibility based on speed
     if (this.speedLinesEl) {
       if (this.speed > 7) {
         this.speedLinesEl.classList.add('visible');
-        // Animate speed line positions (per-second)
         this.speedLines.forEach((line, i) => {
           const offset = (this.frameCount * (0.5 + i * 0.15) * deltaTime * 60) % 700;
           line.style.left = `${-offset + (i * 120)}px`;
@@ -921,11 +967,9 @@ const DONKEY_RUNNER = {
       }
     }
 
-    // Update day/night cycle (60 second cycle, per-second)
     this.dayNightPhase += deltaTime / 60;
     if (this.dayNightPhase > 1) this.dayNightPhase -= 1;
 
-    // Update clouds (per-second)
     this.clouds.forEach(cloud => {
       cloud.x -= cloud.speed * (this.speed / this.INITIAL_SPEED) * 0.5 * deltaTime * 60;
       if (cloud.x + cloud.width < 0) {
@@ -934,19 +978,16 @@ const DONKEY_RUNNER = {
       }
     });
 
-    // Update stars twinkle (per-second)
     this.stars.forEach(star => {
       star.twinkle += deltaTime * 3;
     });
 
-    // Update donkey animation (frameTimer threshold at 60fps = 6 frames = 0.1s)
     this.donkey.frameTimer += deltaTime;
     if (this.donkey.frameTimer >= 0.1) {
       this.donkey.frame = (this.donkey.frame + 1) % 4;
       this.donkey.frameTimer = 0;
     }
 
-    // --- Backflip update (per-second) ---
     if (this.donkey.backflipping) {
       this.donkey.backflipProgress += deltaTime / this.donkey.backflipDuration;
       if (this.donkey.backflipProgress >= 1) {
@@ -955,10 +996,9 @@ const DONKEY_RUNNER = {
       }
     }
 
-    // Increment frame counter (per-frame, not per-second)
     this.frameCount++;
 
-    // --- Stumble update (per-second) ---
+    // Stumble state management
     if (this.donkey.stumbling) {
       this.donkey.stumbleTimer += deltaTime;
       this.donkey.stumbleWobble = Math.sin(this.donkey.stumbleTimer * 30) * 0.25;
@@ -975,10 +1015,10 @@ const DONKEY_RUNNER = {
         this.donkey.stumbling = true;
         this.donkey.stumbleTimer = 0;
         this.donkey.stumbleNextTrigger = this.frameCount + this.randomFrameRange(1800, 3600);
+        this.showSnarkyMessage('stumble');
       }
     }
 
-    // Donkey physics (per-second)
     if (!this.donkey.grounded) {
       this.donkey.vy += this.GRAVITY * deltaTime * 60;
       this.donkey.y += this.donkey.vy * deltaTime * 60;
@@ -996,6 +1036,7 @@ const DONKEY_RUNNER = {
           this.spawnCeilingParticles();
           this.playSound('ceiling');
         }
+        this.showSnarkyMessage('ceiling');
       }
 
       if (this.donkey.y >= this.GROUND_Y - this.donkey.height) {
@@ -1014,11 +1055,11 @@ const DONKEY_RUNNER = {
         if (this.donkey.wasGrounded === false) {
           this.spawnLandingParticles();
         }
+        this.showSnarkyMessage('land');
       }
     }
     this.donkey.wasGrounded = this.donkey.grounded;
 
-    // Spawn obstacles (obstacleTimer threshold at 60fps = 80 frames = ~1.33s)
     this.obstacleTimer += deltaTime * 60;
     const targetInterval = 35 + Math.round(45 * Math.pow((12 - this.speed) / 7, 2));
     if (this.obstacleTimer >= targetInterval) {
@@ -1026,18 +1067,16 @@ const DONKEY_RUNNER = {
       this.obstacleTimer = 0;
     }
 
-    // Update obstacles (per-second)
     for (let i = this.obstacles.length - 1; i >= 0; i--) {
       const obs = this.obstacles[i];
       obs.x -= this.speed * deltaTime * 60;
 
-      // Remove off-screen
       if (obs.x + obs.width < 0) {
+        this.obstacleCounts[obs.type]++;
         this.obstacles.splice(i, 1);
         continue;
       }
 
-      // Near-miss detection (only when donkey is airborne, not stumbling)
       if (this.donkey.grounded || this.donkey.stumbling || this.nearMissActive) {
         // skip: donkey is on ground, stumbling (intentional knock), or already triggered near-miss
       } else {
@@ -1051,56 +1090,62 @@ const DONKEY_RUNNER = {
             // Minimum obstacle height to avoid false positives from small cacti/rocks
             if (obs.height >= 30) {
               this.triggerNearMiss();
+              this.showSnarkyMessage('near-miss');
             }
           }
         }
       }
 
-      // Collision detection
       if (this.checkCollision(obs)) {
         if (this.donkey.stumbling) {
           // Knock aside: remove obstacle, spawn particles
           this.knockObstacle(obs, i);
+          this.showSnarkyMessage('property-damage');
         } else {
+          // Record the killer obstacle type for the table
+          this.gameOverObstacleType = obs.type;
           this.gameOver();
           return;
         }
       }
     }
 
-    // Update air-based obstacles (per-second)
     // Jet — moves across the screen
     if (this.jetActive) {
       this.jetX -= this.speed * deltaTime * 60;
       if (this.jetX + this.jetWidth < 0) {
+        this.obstacleCounts['jet']++;
         this.jetActive = false;
       } else {
-        // Collision with jet — fatal even during stumble
         if (this.checkAirCollision('jet')) {
+          this.gameOverObstacleType = 'jet';
           this.gameOver();
           return;
+        }
+        if (this.jetX > 600 - this.jetWidth - 30) {
+          this.showSnarkyMessage('jet');
         }
       }
     }
 
-    // Falling rock — drops from the sky
     if (this.fallingRockActive) {
       this.fallingRockY += this.fallingRockFallSpeed * deltaTime * 60;
-      // Stop falling when it hits the ground
       if (this.fallingRockY + this.fallingRockHeight >= this.GROUND_Y) {
+        this.obstacleCounts['falling-rock']++;
         this.fallingRockActive = false;
-        // Spawn dust particles where the rock landed
         this.spawnFallingRockLandingParticles(this.fallingRockX + this.fallingRockWidth / 2, this.GROUND_Y);
       } else {
-        // Collision with falling rock — fatal even during stumble
         if (this.checkAirCollision('falling-rock')) {
+          this.gameOverObstacleType = 'falling-rock';
           this.gameOver();
           return;
+        }
+        if (this.fallingRockY < -5) {
+          this.showSnarkyMessage('falling-rock');
         }
       }
     }
 
-    // Drone — moves in a wave pattern
     if (this.droneActive) {
       this.droneX -= this.speed * deltaTime * 60;
       this.droneWavePhase += deltaTime * 3;
@@ -1110,21 +1155,24 @@ const DONKEY_RUNNER = {
         this.droneDir *= -1;
       }
       if (this.droneX + this.droneWidth < 0) {
+        this.obstacleCounts['drone']++;
         this.droneActive = false;
       } else {
-        // Collision with drone — knockable during stumble
         if (this.checkAirCollision('drone')) {
           if (this.donkey.stumbling) {
             this.knockDrone();
           } else {
+            this.gameOverObstacleType = 'drone';
             this.gameOver();
             return;
           }
         }
+        if (this.droneX > 600 - this.droneWidth - 30) {
+          this.showSnarkyMessage('drone');
+        }
       }
     }
 
-    // Update particles — use swap-with-last for O(1) deletion (per-second)
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const p = this.particles[i];
       p.x += p.vx * deltaTime * 60;
@@ -1143,6 +1191,9 @@ const DONKEY_RUNNER = {
   },
 
   knockObstacle(obs, index) {
+    // Track obstacle count (donkey survived the knock)
+    this.obstacleCounts[obs.type]++;
+
     // Remove obstacle
     this.obstacles.splice(index, 1);
 
@@ -1152,10 +1203,8 @@ const DONKEY_RUNNER = {
 
     // Add +100 bonus points for property damage
     this.propertyDamageCount++;
-    this.propertyDamageScore += 100;
     const bonusScore = 100;
-    this.distance += bonusScore / 100;
-    this.score = Math.floor(this.distance * 100);
+    this.score += bonusScore;
 
     // Show +100 bonus text animation at obstacle position
     const bonusX = obs.x + obs.width / 2;
@@ -1250,24 +1299,17 @@ const DONKEY_RUNNER = {
     }
   },
 
-  // Spawn burst particles from donkey's butt during double-jump (fart particles)
   spawnDoubleJumpParticles() {
-    // Donkey butt position in canvas world coordinates
-    // Donkey faces right, butt is on the left side of the body
     const buttX = this.donkey.x + 6;
     const buttY = this.donkey.y + 26;
 
-    // Cone direction: facing slightly backwards (left) and slightly downward
-    // Center angle: ~185° (left and 5° down), spread: ±40° = 145° to 225°
-    const coneCenter = Math.PI + 0.087; // ~185 degrees in canvas radians (0 = right, π = left, π + 0.087 = slightly down)
-    const coneSpread = Math.PI * 0.44;   // ±40 degrees spread
+    // Particles shoot backward and downward from donkey's rear
+    const coneCenter = Math.PI + Math.PI / 18;  // ~190° (left + slightly down)
+    const coneSpread = Math.PI * 0.44;           // ±40° spread
 
     for (let i = 0; i < 12; i++) {
-      // Pick angle within the cone
       const angle = coneCenter + (Math.random() - 0.5) * coneSpread;
-      // Speed varies: some fast bursts, some slow drifts
       const speed = 0.5 + Math.random() * 3;
-      // Slight downward bias for the fart cloud
       const vyBias = 0.5;
       this.particles.push({
         x: buttX + (Math.random() - 0.5) * 8,
@@ -1275,7 +1317,7 @@ const DONKEY_RUNNER = {
         vx: Math.cos(angle) * speed,
         vy: Math.sin(angle) * speed + vyBias,
         size: 1.5 + Math.random() * 3,
-        color: ['#7a8a3a', '#5a6a2a', '#6a7a4a', '#8a9a5a'][Math.floor(Math.random() * 4)], // greenish-brown fart colors
+        color: ['#7a8a3a', '#5a6a2a', '#6a7a4a', '#8a9a5a'][Math.floor(Math.random() * 4)],
         life: 0.3 + Math.random() * 0.5,
       });
     }
@@ -1311,31 +1353,26 @@ const DONKEY_RUNNER = {
 
     // Show bonus text "+50"
     if (this.bonusTextEl) {
-      const bonusAmount = Math.floor(50);
-      this.bonusTextEl.textContent = `+${bonusAmount}`;
+      this.bonusTextEl.textContent = '+50';
       this.bonusTextEl.classList.remove('flash');
-      void this.bonusTextEl.offsetWidth; // Force reflow for re-trigger
+      void this.bonusTextEl.offsetWidth;
       this.bonusTextEl.classList.add('flash');
       setTimeout(() => this.bonusTextEl.classList.remove('flash'), 700);
     }
 
     // Add bonus score
-    const bonusScore = Math.floor(50);
-    this.distance += bonusScore / 100;
-    this.score = Math.floor(this.distance * 100);
+    this.score += 50;
 
     // Track score breakdown
-    this.nearMissScore += 50; // Base near miss bonus
+    this.nearMissScore += 50;
 
     this.nearMissCount++;
-    // Track ignored jumps — jumps made near obstacles
-    this.ignoredJumps++;
     this.playSound('nearmiss');
 
     // Reset near-miss flag after delay
     setTimeout(() => {
       this.nearMissActive = false;
-    }, 600);
+    }, NEAR_MISS_COOLDOWN);
   },
 
   triggerMilestoneFlash() {
@@ -1345,6 +1382,49 @@ const DONKEY_RUNNER = {
         this.scoreEl.classList.remove('milestone-flash');
       }, 300);
     }
+  },
+
+  // Show a snarky message for a given event type
+  showSnarkyMessage(eventType) {
+    if (this.messageCooldown > 0) return; // still cooling down
+
+    const messages = this.snarkyMessages[eventType];
+    if (!messages || messages.length === 0) return;
+
+    // Get next message (cycle through without repeating)
+    if (!this.messageIndex[eventType]) this.messageIndex[eventType] = 0;
+    this.messageIndex[eventType] = (this.messageIndex[eventType] + 1) % messages.length;
+
+    const messageEl = this.snarkyMessageEl;
+    if (!messageEl) return;
+
+    messageEl.textContent = messages[this.messageIndex[eventType]];
+
+    // Determine color variant based on event type
+    messageEl.className = 'donkey-snarky-message'; // reset
+    if (eventType === 'near-miss' || eventType === 'milestone') {
+      messageEl.classList.add('snarky-green');
+    } else if (eventType === 'game-over') {
+      messageEl.classList.add('snarky-red');
+    } else if (eventType === 'high-score') {
+      messageEl.classList.add('snarky-yellow');
+    } else if (eventType === 'jump' || eventType === 'double-jump' || eventType === 'ignored-jump') {
+      messageEl.classList.add('snarky-blue');
+    } else {
+      messageEl.classList.add('snarky-orange');
+    }
+
+    // Trigger animation
+    void messageEl.offsetWidth;
+    messageEl.classList.add('active');
+
+    // Set cooldown
+    this.messageCooldown = 3; // 3 seconds cooldown
+
+    // Remove after display
+    setTimeout(() => {
+      messageEl.classList.remove('active');
+    }, 2000);
   },
 
   spawnObstacle() {
@@ -1482,6 +1562,8 @@ const DONKEY_RUNNER = {
         ow = this.droneWidth;
         oh = this.droneHeight;
         break;
+      default:
+        return false;
     }
 
     const padding = 4;
@@ -1495,6 +1577,8 @@ const DONKEY_RUNNER = {
 
   // Knock aside the drone during stumble
   knockDrone() {
+    // Track obstacle count (donkey survived the knock)
+    this.obstacleCounts['drone']++;
     // Remove drone
     this.droneActive = false;
     // Spawn particles from drone position
@@ -1502,10 +1586,8 @@ const DONKEY_RUNNER = {
     this.playSound('knock');
     // Add +100 bonus points for property damage
     this.propertyDamageCount++;
-    this.propertyDamageScore += 100;
     const bonusScore = 100;
-    this.distance += bonusScore / 100;
-    this.score = Math.floor(this.distance * 100);
+    this.score += bonusScore;
     // Show +100 bonus text animation at drone position
     const bonusX = this.droneX + this.droneWidth / 2;
     const bonusY = this.droneY - 5;
@@ -1567,6 +1649,94 @@ const DONKEY_RUNNER = {
           newBadgeEl.classList.add('hidden');
         }
       }
+
+      // Populate obstacle count table
+      const obstacleTableEl = document.getElementById('donkey-gameover-obstacle-table');
+      if (obstacleTableEl) {
+        obstacleTableEl.innerHTML = '';
+        const obstacleLabels = {
+          'cactus-small': 'Cactus',
+          'cactus-large': 'L.Cactus',
+          'rock': 'Rock',
+          'car': 'Car',
+          'jet': 'Jet',
+          'falling-rock': 'F.Rock',
+          'drone': 'Drone',
+        };
+        // Inline SVG icons for each obstacle type
+        const obstacleIcons = {
+          'cactus-small': `<svg viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="11" y="4" width="6" height="20" rx="2" fill="#2D5A27" stroke="#1A3A16" stroke-width="0.5"/>
+            <rect x="4" y="8" width="8" height="3" rx="1.5" fill="#2D5A27" stroke="#1A3A16" stroke-width="0.5"/>
+            <rect x="4" y="5" width="3" height="8" rx="1.5" fill="#2D5A27" stroke="#1A3A16" stroke-width="0.5"/>
+            <rect x="16" y="12" width="8" height="3" rx="1.5" fill="#2D5A27" stroke="#1A3A16" stroke-width="0.5"/>
+            <rect x="21" y="9" width="3" height="8" rx="1.5" fill="#2D5A27" stroke="#1A3A16" stroke-width="0.5"/>
+          </svg>`,
+          'cactus-large': `<svg viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="10" y="3" width="8" height="22" rx="2" fill="#2D5A27" stroke="#1A3A16" stroke-width="0.5"/>
+            <rect x="2" y="8" width="10" height="3.5" rx="1.5" fill="#2D5A27" stroke="#1A3A16" stroke-width="0.5"/>
+            <rect x="2" y="4.5" width="3" height="10" rx="1.5" fill="#2D5A27" stroke="#1A3A16" stroke-width="0.5"/>
+            <rect x="16" y="12" width="10" height="3.5" rx="1.5" fill="#2D5A27" stroke="#1A3A16" stroke-width="0.5"/>
+            <rect x="23" y="9" width="3" height="10" rx="1.5" fill="#2D5A27" stroke="#1A3A16" stroke-width="0.5"/>
+          </svg>`,
+          'rock': `<svg viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M14 4 L24 10 L22 24 L6 24 L4 10 Z" fill="#6B6B6B" stroke="#4A4A4A" stroke-width="0.5"/>
+            <path d="M14 4 L24 10 L22 24 L6 24 L4 10 Z" fill="rgba(255,255,255,0.1)"/>
+          </svg>`,
+          'car': `<svg viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="3" y="13" width="22" height="10" rx="2" fill="#D44" stroke="#A33" stroke-width="0.5"/>
+            <rect x="7" y="7" width="14" height="8" rx="2" fill="#C33" stroke="#A33" stroke-width="0.5"/>
+            <rect x="9" y="9" width="6" height="4" rx="1" fill="rgba(150,200,255,0.4)"/>
+            <rect x="17" y="9" width="4" height="4" rx="1" fill="rgba(150,200,255,0.4)"/>
+            <circle cx="8" cy="25" r="3" fill="#222"/>
+            <circle cx="20" cy="25" r="3" fill="#222"/>
+          </svg>`,
+          'jet': `<svg viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M24 14 L18 11 L18 10 L8 10 L4 14 L8 18 L18 18 L18 17 L24 14Z" fill="#555" stroke="#333" stroke-width="0.5"/>
+            <path d="M18 11 L15 7 L18 10Z" fill="#666"/>
+            <path d="M18 17 L15 21 L18 18Z" fill="#666"/>
+            <path d="M8 10 L6 6 L8 10Z" fill="#555"/>
+            <path d="M8 18 L6 22 L8 18Z" fill="#555"/>
+            <ellipse cx="13" cy="14" rx="2" ry="1.5" fill="rgba(150,200,255,0.5)"/>
+          </svg>`,
+          'falling-rock': `<svg viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M10 4 L18 4 L22 10 L16 24 L8 24 L4 10 Z" fill="#6B6B6B" stroke="#4A4A4A" stroke-width="0.5"/>
+            <text x="14" y="18" text-anchor="middle" fill="#e8a838" font-size="8" font-weight="bold">!</text>
+          </svg>`,
+          'drone': `<svg viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="8" y="11" width="12" height="6" rx="3" fill="#444" stroke="#333" stroke-width="0.5"/>
+            <circle cx="14" cy="14" r="3" fill="#555" stroke="#333" stroke-width="0.5"/>
+            <line x1="10" y1="11" x2="10" y2="4" stroke="#555" stroke-width="0.5"/>
+            <line x1="18" y1="17" x2="18" y2="24" stroke="#555" stroke-width="0.5"/>
+            <circle cx="10" cy="4" r="2" fill="#666"/>
+            <circle cx="18" cy="24" r="2" fill="#666"/>
+            <circle cx="14" cy="14" r="1" fill="#e8a838"/>
+          </svg>`,
+        };
+        for (const [type, label] of Object.entries(obstacleLabels)) {
+          const itemEl = document.createElement('div');
+          itemEl.className = 'obstacle-count-item';
+          // Add red highlight if this was the obstacle that killed the donkey
+          if (type === this.gameOverObstacleType) {
+            itemEl.classList.add('obstacle-kill-highlight');
+          }
+          // Add obstacle icon
+          const iconEl = document.createElement('span');
+          iconEl.className = 'obstacle-count-icon';
+          iconEl.innerHTML = obstacleIcons[type] || '';
+          itemEl.appendChild(iconEl);
+          const labelEl = document.createElement('span');
+          labelEl.className = 'obstacle-count-label';
+          labelEl.textContent = label;
+          const valueEl = document.createElement('span');
+          valueEl.className = 'obstacle-count-value';
+          valueEl.textContent = String(this.obstacleCounts[type]);
+          itemEl.appendChild(labelEl);
+          itemEl.appendChild(valueEl);
+          obstacleTableEl.appendChild(itemEl);
+        }
+      }
+
       // Populate time-based stats (bottom-left)
       const runtimeDisplay = document.getElementById('donkey-gameover-runtime');
       if (runtimeDisplay) {

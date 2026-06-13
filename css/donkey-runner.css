@@ -195,18 +195,6 @@
   margin-bottom: 0.6rem;
 }
 
-.ds-quick-tip {
-  font-size: 0.6rem;
-  color: rgba(255, 255, 255, 0.25);
-  margin-bottom: 0.8rem;
-  font-style: italic;
-}
-
-.ds-highlight {
-  color: #f59e0b;
-  font-weight: 700;
-}
-
 .ds-objective {
   font-size: 0.65rem;
   color: rgba(255, 255, 255, 0.25);
@@ -441,11 +429,6 @@
   flex-shrink: 0;
 }
 
-.donkey-gameover-stat-value.highlight {
-  color: #f59e0b;
-  text-shadow: 0 0 10px rgba(245, 158, 11, 0.3);
-}
-
 /* Restart text — the other hero, big and inviting */
 .donkey-restart-text {
   font-size: 0.8rem;
@@ -576,14 +559,143 @@
   opacity: 1;
 }
 
-/* Speed line elements use transform for GPU-accelerated animation */
-.donkey-speed-line-el {
+/* ===== OBSTACLE COUNT TABLE ===== */
+.donkey-gameover-obstacle-table {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px;
+  padding: 0.3rem 0.5rem;
+  margin-bottom: 0.4rem;
+  width: 100%;
+}
+
+.obstacle-count-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.2rem 0.35rem;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 4px;
+  min-width: 40px;
+  transition: background 0.2s ease;
+}
+
+/* Obstacle icon styling */
+.obstacle-count-icon {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+}
+
+.obstacle-count-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.obstacle-count-item.obstacle-kill-highlight {
+  background: rgba(224, 85, 85, 0.25);
+  border: 1px solid rgba(224, 85, 85, 0.4);
+}
+
+.obstacle-count-label {
+  font-size: 0.3rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.35);
+  margin-bottom: 0.1rem;
+}
+
+.obstacle-count-item.obstacle-kill-highlight .obstacle-count-label {
+  color: rgba(224, 85, 85, 0.7);
+}
+
+.obstacle-count-value {
+  font-size: 0.55rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.7);
+  font-family: 'Courier New', 'Lucida Console', monospace;
+  text-shadow: 0 0 6px rgba(255, 255, 255, 0.1);
+}
+
+.obstacle-count-item.obstacle-kill-highlight .obstacle-count-value {
+  color: #e05555;
+  text-shadow: 0 0 8px rgba(224, 85, 85, 0.4);
+}
+
+/* ===== SNARKY MESSAGE OVERLAY ===== */
+.donkey-snarky-message {
   position: absolute;
-  bottom: var(--line-bottom, 5px);
-  width: var(--line-width, 50px);
-  height: 1px;
-  background: rgba(255, 255, 255, var(--line-alpha, 0.07));
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.8rem;
+  font-weight: 800;
+  font-family: 'Courier New', 'Lucida Console', monospace;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
   pointer-events: none;
-  will-change: transform;
-  transform: translateX(0);
+  opacity: 0;
+  transition: none;
+  z-index: 7;
+  text-shadow: 0 0 8px rgba(0, 0, 0, 0.5), 0 0 16px rgba(0, 0, 0, 0.3);
+  text-align: center;
+  white-space: nowrap;
+  max-width: 90%;
+}
+
+.donkey-snarky-message.active {
+  animation: snarkyMessageFlash 2s ease-out forwards;
+}
+
+@keyframes snarkyMessageFlash {
+  0% {
+    opacity: 1;
+    transform: translateX(-50%) scale(0.7);
+  }
+  15% {
+    opacity: 1;
+    transform: translateX(-50%) scale(1.15);
+  }
+  30% {
+    opacity: 1;
+    transform: translateX(-50%) scale(1);
+  }
+  70% {
+    opacity: 1;
+    transform: translateX(-50%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.85);
+  }
+}
+
+/* Color variants for snarky messages */
+.donkey-snarky-message.snarky-green {
+  color: #4ade80;
+  text-shadow: 0 0 12px rgba(74, 222, 128, 0.6), 0 0 24px rgba(74, 222, 128, 0.3);
+}
+
+.donkey-snarky-message.snarky-red {
+  color: #e05555;
+  text-shadow: 0 0 12px rgba(224, 85, 85, 0.6), 0 0 24px rgba(224, 85, 85, 0.3);
+}
+
+.donkey-snarky-message.snarky-yellow {
+  color: #f59e0b;
+  text-shadow: 0 0 12px rgba(245, 158, 11, 0.6), 0 0 24px rgba(245, 158, 11, 0.3);
+}
+
+.donkey-snarky-message.snarky-blue {
+  color: #60a5fa;
+  text-shadow: 0 0 12px rgba(96, 165, 250, 0.6), 0 0 24px rgba(96, 165, 250, 0.3);
+}
+
+.donkey-snarky-message.snarky-orange {
+  color: #fb923c;
+  text-shadow: 0 0 12px rgba(251, 146, 60, 0.6), 0 0 24px rgba(251, 146, 60, 0.3);
 }
