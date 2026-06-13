@@ -160,6 +160,7 @@ MIT. (google it yourself <3)
 
 `Half-Assed Solutions`™ is a project, ran by Yonneh, to release some "actually kinda useful" things that are developed during random hobby development. Yonneh wears most of the hats in this organization- in fact, he wears all of them; but that's only because he is the sole member. If literally ANYONE more competent was around- he'd be fired.
 This project, and any others tagged with `Half-Assed Solutions` are completely open-source, and MIT Licensed.
+If you found this project under a rock somewhere, and want to see if it was ever finished- it probably came from https://github.com/Yonneh0/hasWeather at some point.
 
 ---
 
