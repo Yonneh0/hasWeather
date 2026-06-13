@@ -411,17 +411,17 @@ body {
   border-radius: 8px;
 }
 
-/* Ghost high/low container (positioned inside combined-chart-row, above the chart stats) */
+/* Ghost high/low container (positioned inside details-grid which has position:relative) */
 .nws-ghost-high-low {
   position: absolute;
-  top: -2.5rem;
+  bottom: -2.5rem;
   left: 0;
   right: 0;
   z-index: 3;
 }
 
 /* Ghost high/low content styling (transparent overlay) */
-.nws-ghost-high-low > .high-low-section {
+.nws-ghost-high-low .high-low-row {
   padding: 0.35rem 0.45rem;
   background: rgba(0, 48, 135, 0.12);
   border-radius: 8px;
@@ -429,7 +429,7 @@ body {
 .high-low-row {
   display: flex;
   justify-content: space-between;
-  margin-bottom: 0.15rem;
+  margin-bottom: 0.3rem;
 }
 .high-label { color: #ff8c42; font-weight: 700; }
 .low-label  { color: #6cb4ee; font-weight: 700; }
@@ -437,7 +437,7 @@ body {
 .sun-row {
   display: flex;
   justify-content: space-between;
-  font-size: 0.65rem;
+  font-size: 0.75rem;
   color: rgba(255,255,255,0.55);
 }
 
@@ -445,7 +445,6 @@ body {
 .nws-ghost-high-low .high-label { color: #003087 !important; font-weight: 700; }
 .nws-ghost-high-low .low-label  { color: #003087 !important; font-weight: 700; }
 .nws-ghost-high-low .high-val, .nws-ghost-high-low .low-val { color: #003087 !important; font-weight: 700; }
-.nws-ghost-high-low .sun-row { color: rgba(0, 48, 135, 0.4) !important; }
 
 /* Hourly Forecast */
 .hourly-section {
@@ -4570,9 +4569,9 @@ function renderCityCard(data, suffix) {
   const windStats = chartStats(wind);
   const rainStats = chartStats(rain);
 
-  // Compute day high/low from current-day hourly data only
-  const dayHigh = temps.length ? Math.round(Math.max(...temps.filter(v => v != null))) : '—';
-  const dayLow = temps.length ? Math.round(Math.min(...temps.filter(v => v != null))) : '—';
+  // Compute day high/low from current-day hourly data only (convert to current unit)
+  const dayHigh = temps.length ? Math.round(convertTemp(Math.max(...temps.filter(v => v != null)))) : '—';
+  const dayLow = temps.length ? Math.round(convertTemp(Math.min(...temps.filter(v => v != null)))) : '—';
   const sunriseStr = current?.sunrise ? current.sunrise.split('T')[1]?.split('+')[0] : '';
   const sunsetStr = current?.sunset ? current.sunset.split('T')[1]?.split('+')[0] : '';
 
@@ -4685,25 +4684,20 @@ function renderCityCard(data, suffix) {
         </div>
       </div>`;
     
-    // Ghost high/low + sunrise/sunset
+    // Ghost high/low + sunrise/sunset (positioned relative to details-grid which has position:relative)
     const nwsTemps = (nwsHourly?.temperature_2m || nwsHourly?.temperature || []).slice(0, 24);
     const nwsValidTemps = nwsTemps.filter(v => v != null);
-    const nwsDayHigh = nwsValidTemps.length ? Math.round(Math.max(...nwsValidTemps)) : '—';
-    const nwsDayLow = nwsValidTemps.length ? Math.round(Math.min(...nwsValidTemps)) : '—';
-    const nwsSunriseStr = nwsCurrent?.sunrise ? nwsCurrent.sunrise.split('T')[1]?.split('+')[0] : '';
-    const nwsSunsetStr = nwsCurrent?.sunset ? nwsCurrent.sunset.split('T')[1]?.split('+')[0] : '';
+    const nwsDayHigh = nwsValidTemps.length ? Math.round(convertTemp(Math.max(...nwsValidTemps))) : '—';
+    const nwsDayLow = nwsValidTemps.length ? Math.round(convertTemp(Math.min(...nwsValidTemps))) : '—';
+    // NWS doesn't provide sunrise/sunset - use OM values for ghost
+    const nwsSunriseStr = '';
+    const nwsSunsetStr = '';
     
     ghostHighLowHTML = `
       <div class="nws-ghost nws-ghost-high-low">
-        <div class="high-low-section">
-          <div class="high-low-row">
-            <span class="high-label">HIGH</span><span class="high-val">${Math.round(nwsDayHigh)}°</span>
-            <span class="low-label">LOW</span><span class="low-val">${Math.round(nwsDayLow)}°</span>
-          </div>
-          <div class="sun-row">
-            <span>SUNRISE ${formatTime(nwsSunriseStr)}</span>
-            <span>SUNSET ${formatTime(nwsSunsetStr)}</span>
-          </div>
+        <div class="high-low-row">
+          <span class="high-label">HIGH</span><span class="high-val">${Math.round(nwsDayHigh)}°</span>
+          <span class="low-label">LOW</span><span class="low-val">${Math.round(nwsDayLow)}°</span>
         </div>
       </div>`;
     
