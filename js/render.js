@@ -61,9 +61,10 @@ function renderAll() {
     grid.appendChild(card);
   });
 
-  applyBackgrounds();
-  setTimeout(() => drawAllCharts(), 400);
-}
+   applyBackgrounds();
+   
+   setTimeout(() => drawAllCharts(), 400);
+ }
 
 function applyBackgrounds() {
   let style = document.getElementById('dynamic-bg');
@@ -93,8 +94,8 @@ function renderCityCard(data, suffix) {
   const hourly = w.hourly || {};
   const aqiData = aqiLabel(a?.us_aqi ?? null);
 
-  // Use currentSource (toggle state) for field lookup consistency with badge display
-  const isCurrentSourceNws = currentSource === 'nws';
+  // Check if this city has NWS data active (per-city toggle) — use data.nwsActive for consistency
+  const nwsActiveForCity = data.nwsActive === true;
   const curTemp = current?.temperature_2m != null ? convertTemp(current.temperature_2m) :
                   current?.temperature != null ? convertTemp(current.temperature) : '—';
   const curWeatherCode = current?.weather_code ?? current?.weatherCode ?? 0;
@@ -169,8 +170,18 @@ function renderCityCard(data, suffix) {
     </div>`;
   }
 
-  // Badge reflects each city's actual data source (not toggle state)
-  const sourceBadge = data.source === 'nws' ? '<span class="source-badge nws">NWS</span>' : '<span class="source-badge open-meteo">OM</span>';
+    // Badge reflects each city's actual data source (OM base, NWS-only, or NWS-enhanced)
+    // Always show a default "OM" badge for cities without NWS enhancement
+    const nwsBoundsAvailable = !!data.nwsBounds;
+    const sourceBadge = (data.source === 'enhanced')
+      ? '<span class="source-badge enhanced">ENHANCED</span>'
+      : (data.source === 'nws' && nwsActiveForCity)
+        ? '<span class="source-badge enhanced">ENHANCED</span>'
+        : '<span class="source-badge open-meteo">OM</span>';
+
+    // NWS toggle button HTML — show when NWS bounds are available or city already has NWS active from cross-session persistence
+    const nwsToggleBtn = ((nwsBoundsAvailable || nwsActiveForCity) && data.place_id !== '') 
+      ? `<span class="nws-toggle-btn" data-placeid="${escapeHTML(data.place_id)}" title="Toggle NWS enhancement">⚡</span>` : '';
 
   const safeName = data.place_id || suffix;
   const mergedCanvasId = `chart-merged-${safeName}`;
@@ -198,12 +209,13 @@ function renderCityCard(data, suffix) {
   return `
     <canvas class="chart-canvas chart-merged" id="${mergedCanvasId}" style="position:absolute;top:0;left:0;right:0;bottom:0;z-index:0;pointer-events:none;"></canvas>
     <div style="position:relative;z-index:2;">
-    <div class="city-header">
-      <div class="city-name-wrap">
-        <span class="city-name">${escapeHTML(data.name)}${FavoritesManager.has(data.place_id, data.latitude, data.longitude) ? '<span class="fav-star">★</span>' : ''}${sourceBadge}</span>
-        <span class="city-state">${escapeHTML(data.state)}</span>
-      </div>
-      <span class="current-temp-inline">${Math.round(curTemp)}°</span>
+   <div class="city-header">
+       <div class="city-name-wrap">
+         <span class="city-name">${escapeHTML(data.name)}${FavoritesManager.has(data.place_id, data.latitude, data.longitude) ? '<span class="fav-star">★</span>' : ''}${sourceBadge}</span>
+         <span class="city-state">${escapeHTML(data.state)}</span>
+       </div>
+       ${nwsToggleBtn}
+       <span class="current-temp-inline">${Math.round(curTemp)}°</span>
       <div class="current-weather-icon-inline">${curIconLarge}</div>
     </div>
     <div class="city-compass-row" style="display:flex;align-items:center;gap:0.4rem;margin-top:0.1rem;">
