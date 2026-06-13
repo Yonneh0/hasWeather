@@ -1,8 +1,3 @@
-// ===== CURRENT DATA SOURCE =====
-// 'open-meteo' or 'nws' — controlled by source toggle button
-let currentSource = 'open-meteo';
-
-// ===== CONSTANTS =====
 const EARTH_RADIUS_MI = 3958.8;
 const GEOLOCATION_TIMEOUT_MS = 8000;
 const NEARBY_CACHE_TTL_MS = 600000;
