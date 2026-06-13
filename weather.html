@@ -2143,12 +2143,12 @@ const DataCache = {
         console.log(`[DataCache] MISS (type mismatch): ${key} (expected: ${type}, got: ${entry.type})`);
         return false;
       }
-      const expired = !entry || (Date.now() - entry.timestamp > this.TTL[entry.type]);
+      const expired = !entry || (Date.now() - entry.timestamp > this.TTL[type]);
       if (expired) {
-        console.log(`[DataCache] MISS (expired): ${key} (type: ${entry.type})`);
+        console.log(`[DataCache] MISS (expired): ${key} (type: ${type})`);
         return false;
       }
-      console.log(`[DataCache] HIT: ${key} (type: ${entry.type})`);
+      console.log(`[DataCache] HIT: ${key} (type: ${type})`);
       return true;
     } catch (e) {
       console.log(`[DataCache] MISS (error): ${key}`);
@@ -2156,7 +2156,7 @@ const DataCache = {
     }
   },
 
-  // Get cached data (returns null if expired/missing)
+  // Get cached data (returns null if expired/missing/wrong type)
   get(key, type) {
     try {
       const raw = localStorage.getItem(`hasw_cache_${key}`);
@@ -2165,12 +2165,12 @@ const DataCache = {
         return null;
       }
       const entry = JSON.parse(raw);
-      // Validate type and expiration
-      if (entry.type !== type) {
+      // Validate type matches
+      if (type && entry.type !== type) {
         console.log(`[DataCache] MISS (type mismatch): ${key} (expected: ${type}, got: ${entry.type})`);
         return null;
       }
-      if (Date.now() - entry.timestamp > this.TTL[entry.type]) {
+      if (Date.now() - entry.timestamp > this.TTL[type]) {
         console.log(`[DataCache] MISS (expired): ${key} (type: ${type}, age: ${Math.round((Date.now() - entry.timestamp) / 1000)}s, ttl: ${this.TTL[type] / 1000}s)`);
         localStorage.removeItem(`hasw_cache_${key}`);
         return null;
@@ -2892,9 +2892,14 @@ async function getLocation() {
 </script>
 <script>
 // ===== FETCH WEATHER =====
-// Helper to build a unique cache key for weather+AQI per city
+// Helper to build a unique cache key for weather per city
 function weatherCacheKey(lat, lon) {
   return `weather_${DataCache._roundCoord(lat)}_${DataCache._roundCoord(lon)}`;
+}
+
+// Helper to build a unique cache key for AQI per city
+function aqiCacheKey(lat, lon) {
+  return `airQuality_${DataCache._roundCoord(lat)}_${DataCache._roundCoord(lon)}`;
 }
 
 // ===== RETRY HELPER =====
@@ -2993,9 +2998,10 @@ async function fetchWeatherForCities(cities) {
   const cityCacheMap = []; // map city index to its position in uncachedCities
 
   for (let i = 0; i < cities.length; i++) {
-    const ck = weatherCacheKey(cities[i].latitude, cities[i].longitude);
-    const cachedWeather = DataCache.get(ck, 'weather');
-    const cachedAqi = DataCache.get(ck, 'airQuality');
+    const weatherCk = weatherCacheKey(cities[i].latitude, cities[i].longitude);
+    const aqiCk = aqiCacheKey(cities[i].latitude, cities[i].longitude);
+    const cachedWeather = DataCache.get(weatherCk, 'weather');
+    const cachedAqi = DataCache.get(aqiCk, 'airQuality');
     if (cachedWeather) {
       cachedResults.push({ ...cities[i], weather: cachedWeather, aqi: cachedAqi || {} });
     } else {
@@ -3039,9 +3045,10 @@ async function fetchWeatherForCities(cities) {
 
     // First fill cached results (use get directly — it already handles expiration internally)
     for (let i = 0; i < cities.length; i++) {
-      const ck = weatherCacheKey(cities[i].latitude, cities[i].longitude);
-      const entryWeather = DataCache.get(ck, 'weather');
-      const entryAqi = DataCache.get(ck, 'airQuality');
+      const weatherCk = weatherCacheKey(cities[i].latitude, cities[i].longitude);
+      const aqiCk = aqiCacheKey(cities[i].latitude, cities[i].longitude);
+      const entryWeather = DataCache.get(weatherCk, 'weather');
+      const entryAqi = DataCache.get(aqiCk, 'airQuality');
       if (entryWeather) {
         result[i] = { ...cities[i], weather: entryWeather, aqi: entryAqi || {} };
       }
@@ -3127,10 +3134,11 @@ async function fetchWeatherForCities(cities) {
         }
       }
 
-      // ===== FIX #2: Use separate cache types for weather and AQI =====
-      const ck = weatherCacheKey(city.latitude, city.longitude);
-      DataCache.set(ck, cityWeather, 'weather');
-      DataCache.set(ck, aqiResult, 'airQuality');
+      // Use separate cache keys for weather and AQI
+      const weatherCk = weatherCacheKey(city.latitude, city.longitude);
+      const aqiCk = aqiCacheKey(city.latitude, city.longitude);
+      DataCache.set(weatherCk, cityWeather, 'weather');
+      DataCache.set(aqiCk, aqiResult, 'airQuality');
 
       result[i] = { ...city, weather: cityWeather, aqi: aqiResult };
     }
@@ -3140,10 +3148,11 @@ async function fetchWeatherForCities(cities) {
     // Fill uncached with null data
     const result = new Array(cities.length);
     for (let i = 0; i < cities.length; i++) {
-      const ck = weatherCacheKey(cities[i].latitude, cities[i].longitude);
-      if (DataCache.has(ck, 'weather')) {
-        const entryWeather = DataCache.get(ck, 'weather');
-        const entryAqi = DataCache.get(ck, 'airQuality');
+      const weatherCk = weatherCacheKey(cities[i].latitude, cities[i].longitude);
+      const aqiCk = aqiCacheKey(cities[i].latitude, cities[i].longitude);
+      if (DataCache.has(weatherCk, 'weather')) {
+        const entryWeather = DataCache.get(weatherCk, 'weather');
+        const entryAqi = DataCache.get(aqiCk, 'airQuality');
         result[i] = { ...cities[i], weather: entryWeather, aqi: entryAqi || {} };
       } else {
         result[i] = { ...cities[i], weather: null, aqi: {} };
@@ -3264,8 +3273,61 @@ function nwsGridCacheKey(wfo, x, y) {
   return `nws_grid_${wfo}_${x}_${y}`;
 }
 
-// Fetch with User-Agent header and retry logic
-async function nwsFetch(url) {
+// ===== NWS RATE LIMITER =====
+// NWS API limit: 1 request/second, burst of 3
+const _nwsRateLimiter = {
+  queue: [],
+  lastRequestTime: 0,
+  burstCount: 0,
+  burstWindow: 0,
+  maxBurst: 3,
+  burstWindowMs: 1000,
+  minIntervalMs: 1000,
+
+  _checkBurst() {
+    const now = Date.now();
+    if (now - this.burstWindow > this.burstWindowMs) {
+      this.burstCount = 0;
+      this.burstWindow = now;
+    }
+    return this.burstCount < this.maxBurst;
+  },
+
+  _waitForBurst() {
+    return new Promise(resolve => {
+      const check = () => {
+        if (this._checkBurst()) resolve();
+        else setTimeout(check, 50);
+      };
+      check();
+    });
+  },
+
+  async waitForSlot() {
+    const now = Date.now();
+    const timeSinceLast = now - this.lastRequestTime;
+
+    // If we're within the burst window and at max burst, wait
+    if (timeSinceLast < this.burstWindowMs && !this._checkBurst()) {
+      await this._waitForBurst();
+    }
+
+    // Ensure minimum interval between requests
+    if (timeSinceLast < this.minIntervalMs) {
+      await new Promise(r => setTimeout(r, this.minIntervalMs - timeSinceLast));
+    }
+
+    this.burstCount++;
+    this.burstWindow = Date.now();
+    this.lastRequestTime = Date.now();
+  },
+};
+
+// Fetch with User-Agent header, rate limiting, and retry logic
+async function nwsFetch(url, maxRetries = 3) {
+  // Rate limit: wait for available slot
+  await _nwsRateLimiter.waitForSlot();
+
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10000); // 10s timeout
 
@@ -3274,6 +3336,16 @@ async function nwsFetch(url) {
       headers: { 'User-Agent': NWS_USER_AGENT },
       signal: controller.signal,
     });
+
+    // Handle 429 rate limiting with exponential backoff
+    if (response.status === 429) {
+      if (maxRetries <= 0) throw new Error('NWS API rate limited (429)');
+      const waitMs = Math.pow(2, 3 - maxRetries) * 2000; // 16s, 8s, 4s
+      console.log(`[NWS] Rate limited, waiting ${waitMs}ms before retry`);
+      await new Promise(r => setTimeout(r, waitMs));
+      return await nwsFetch(url, maxRetries - 1);
+    }
+
     if (!response.ok) {
       throw new Error(`NWS API error: ${response.status}`);
     }
@@ -3331,10 +3403,15 @@ async function fetchForecast(wfo, x, y) {
     temperatureUnit: p.temperatureUnit,
     temperatureTrend: p.temperatureTrend,
     probabilityOfPrecipitation: p.probabilityOfPrecipitation?.value ?? null,
-    dewpoint: p.dewpoint?.value ?? null,
-    relativeHumidity: p.relativeHumidity?.value ?? null,
-    windSpeed: p.windSpeed,
-    windGust: p.windGust ?? null,
+    // NWS returns dewpoint in Celsius even with units=us
+    dewpoint: p.dewpoint?.value != null ? convertObsTempToF(p.dewpoint.value, p.dewpoint.unitCode) : null,
+    dewpointUnit: p.dewpoint?.unitCode == null ? 'F' : p.dewpoint.unitCode,
+    // windSpeed is a string like "10 mph" - parse to number
+    windSpeed: parseWindSpeedStringToNum(p.windSpeed),
+    windSpeedUnit: 'mph',
+    // windGust is a string like "20 mph" - parse to number
+    windGust: parseWindSpeedStringToNum(p.windGust),
+    windGustUnit: 'mph',
     windDirection: p.windDirection,
     shortForecast: p.shortForecast,
     detailedForecast: p.detailedForecast,
@@ -3361,10 +3438,15 @@ async function fetchHourlyForecast(wfo, x, y) {
     temperatureUnit: p.temperatureUnit,
     temperatureTrend: p.temperatureTrend,
     probabilityOfPrecipitation: p.probabilityOfPrecipitation?.value ?? null,
-    dewpoint: p.dewpoint?.value ?? null,
-    relativeHumidity: p.relativeHumidity?.value ?? null,
-    windSpeed: p.windSpeed,
-    windGust: p.windGust ?? null,
+    // NWS returns dewpoint in Celsius even with units=us
+    dewpoint: p.dewpoint?.value != null ? convertObsTempToF(p.dewpoint.value, p.dewpoint.unitCode) : null,
+    dewpointUnit: p.dewpoint?.unitCode == null ? 'F' : p.dewpoint.unitCode,
+    // windSpeed is a string like "10 mph" - parse to number
+    windSpeed: parseWindSpeedStringToNum(p.windSpeed),
+    windSpeedUnit: 'mph',
+    // windGust is a string like "20 mph" - parse to number
+    windGust: parseWindSpeedStringToNum(p.windGust),
+    windGustUnit: 'mph',
     windDirection: p.windDirection,
     shortForecast: p.shortForecast,
     detailedForecast: p.detailedForecast,
@@ -3384,32 +3466,111 @@ async function fetchCurrentConditions(wfo, x, y) {
   const data = await nwsFetch(url);
 
   const props = data?.properties || {};
+  const now = new Date();
+
+  // Find the value whose validTime covers the current time
+  const findCurrent = (propName) => {
+    const values = props[propName]?.values;
+    if (!values || !Array.isArray(values) || values.length === 0) return null;
+    const found = findCurrentNwsValue(values, now);
+    if (!found) return null;
+    return { value: found.value, uom: props[propName]?.uom };
+  };
+
+  const temp = findCurrent('temperature');
+  const dew = findCurrent('dewpoint');
+  const rh = findCurrent('relativeHumidity');
+  const ws = findCurrent('windSpeed');
+  const wg = findCurrent('windGust');
+  const wd = findCurrent('windDirection');
+  const vis = findCurrent('visibility');
+  const pr = findCurrent('pressure');
+  const ch = findCurrent('ceilingHeight');
+
+  // Weather and hazards have a different structure (array of objects)
+  const weatherValues = props.weather?.values;
+  const weather = weatherValues && weatherValues.length > 0 ? findCurrentNwsValue(weatherValues, now)?.value ?? [] : [];
+  const hazardsValues = props.hazards?.values;
+  const hazards = hazardsValues && hazardsValues.length > 0 ? findCurrentNwsValue(hazardsValues, now)?.value ?? [] : [];
+
+  // PoP has a different structure - find the closest value
+  const popValues = props.probabilityOfPrecipitation?.values;
+  let pop = null;
+  if (popValues && popValues.length > 0) {
+    const foundPop = findCurrentNwsValue(popValues, now);
+    pop = foundPop?.value ?? null;
+  }
+
+  // QPE has a different structure - find the closest value
+  const qpeValues = props.quantitativePrecipitation?.values;
+  let qpe = null;
+  let qpeUnit = null;
+  if (qpeValues && qpeValues.length > 0) {
+    const foundQpe = findCurrentNwsValue(qpeValues, now);
+    qpe = foundQpe?.value ?? null;
+    qpeUnit = props.quantitativePrecipitation?.uom ?? 'wmoUnit:mm';
+  }
+
+  // Ice accumulation - find the closest value
+  const iceValues = props.iceAccumulation?.values;
+  let ice = null;
+  let iceUnit = null;
+  if (iceValues && iceValues.length > 0) {
+    const foundIce = findCurrentNwsValue(iceValues, now);
+    ice = foundIce?.value ?? null;
+    iceUnit = props.iceAccumulation?.uom ?? 'wmoUnit:mm';
+  }
+
+  // Snowfall - find the closest value
+  const snowValues = props.snowfallAmount?.values;
+  let snow = null;
+  let snowUnit = null;
+  if (snowValues && snowValues.length > 0) {
+    const foundSnow = findCurrentNwsValue(snowValues, now);
+    snow = foundSnow?.value ?? null;
+    snowUnit = props.snowfallAmount?.uom ?? 'wmoUnit:mm';
+  }
+
+  // Sky cover - find the closest value
+  const skyCoverValues = props.skyCover?.values;
+  let skyCover = null;
+  let skyCoverUnit = null;
+  if (skyCoverValues && skyCoverValues.length > 0) {
+    const foundSky = findCurrentNwsValue(skyCoverValues, now);
+    skyCover = foundSky?.value ?? null;
+    skyCoverUnit = props.skyCover?.uom ?? 'wmoUnit:percent';
+  }
+
   const current = {
-    temperature: props.temperature?.values?.slice(-1)?.[0]?.value ?? null,
-    temperatureUnit: props.temperature?.uom ?? 'wmoUnit:degC',
-    dewpoint: props.dewpoint?.values?.slice(-1)?.[0]?.value ?? null,
-    dewpointUnit: props.dewpoint?.uom ?? 'wmoUnit:degC',
-    relativeHumidity: props.relativeHumidity?.values?.slice(-1)?.[0]?.value ?? null,
-    relativeHumidityUnit: props.relativeHumidity?.uom ?? 'wmoUnit:percent',
-    windSpeed: props.windSpeed?.values?.slice(-1)?.[0]?.value ?? null,
-    windSpeedUnit: props.windSpeed?.uom ?? 'wmoUnit:m/s',
-    windGust: props.windGust?.values?.slice(-1)?.[0]?.value ?? null,
-    windGustUnit: props.windGust?.uom ?? 'wmoUnit:m/s',
-    windDirection: props.windDirection?.values?.slice(-1)?.[0]?.value ?? null,
-    weather: props.weather?.values?.slice(-1)?.[0]?.value ?? [],
-    hazards: props.hazards?.values?.slice(-1)?.[0]?.value ?? [],
-    probabilityOfPrecipitation: props.probabilityOfPrecipitation?.values?.slice(-1)?.[0]?.value ?? null,
-    quantitativePrecipitation: props.quantitativePrecipitation?.values?.slice(-1)?.[0]?.value ?? null,
-    quantitativePrecipitationUnit: props.quantitativePrecipitation?.uom ?? 'wmoUnit:mm',
-    iceAccumulation: props.iceAccumulation?.values?.slice(-1)?.[0]?.value ?? null,
-    iceAccumulationUnit: props.iceAccumulation?.uom ?? 'wmoUnit:mm',
-    snowfallAmount: props.snowfallAmount?.values?.slice(-1)?.[0]?.value ?? null,
-    skyCover: props.skyCover?.values?.slice(-1)?.[0]?.value ?? null,
-    ceilingHeight: props.ceilingHeight?.values?.slice(-1)?.[0]?.value ?? null,
-    visibility: props.visibility?.values?.slice(-1)?.[0]?.value ?? null,
-    visibilityUnit: props.visibility?.uom ?? 'wmoUnit:m',
-    pressure: props.pressure?.values?.slice(-1)?.[0]?.value ?? null,
-    pressureUnit: props.pressure?.uom ?? 'nwsUnit:inHg',
+    temperature: temp?.value ?? null,
+    temperatureUnit: temp?.uom ?? 'wmoUnit:degC',
+    dewpoint: dew?.value ?? null,
+    dewpointUnit: dew?.uom ?? 'wmoUnit:degC',
+    relativeHumidity: rh?.value ?? null,
+    relativeHumidityUnit: rh?.uom ?? 'wmoUnit:percent',
+    windSpeed: ws?.value ?? null,
+    windSpeedUnit: ws?.uom ?? 'wmoUnit:m/s',
+    windGust: wg?.value ?? null,
+    windGustUnit: wg?.uom ?? 'wmoUnit:m/s',
+    windDirection: wd?.value ?? null,
+    windDirectionUnit: wd?.uom ?? 'wmoUnit:degree_(angle)',
+    weather: weather,
+    hazards: hazards,
+    probabilityOfPrecipitation: pop,
+    quantitativePrecipitation: qpe,
+    quantitativePrecipitationUnit: qpeUnit,
+    iceAccumulation: ice,
+    iceAccumulationUnit: iceUnit,
+    snowfallAmount: snow,
+    snowfallAmountUnit: snowUnit,
+    skyCover: skyCover,
+    skyCoverUnit: skyCoverUnit,
+    ceilingHeight: ch?.value ?? null,
+    ceilingHeightUnit: ch?.uom ?? 'wmoUnit:m',
+    visibility: vis?.value ?? null,
+    visibilityUnit: vis?.uom ?? 'wmoUnit:m',
+    pressure: pr?.value ?? null,
+    pressureUnit: pr?.uom ?? 'nwsUnit:inHg',
   };
 
   DataCache.set(cacheKey, current, 'nwsCurrent');
@@ -3434,27 +3595,35 @@ async function fetchLatestObservation(stationId) {
   const props = data?.properties || {};
 
   const obs = {
-    temperature: props.temperature?.value ?? null,
-    temperatureUnit: props.temperature?.units ?? 'F',
-    dewpoint: props.dewpoint?.value ?? null,
-    dewpointUnit: props.dewpoint?.units ?? 'F',
+    // Temperature is in Celsius (wmoUnit:degC), convert to Fahrenheit
+    temperature: props.temperature?.value != null ? convertObsTempToF(props.temperature.value, props.temperature.unitCode) : null,
+    temperatureUnit: props.temperature?.unitCode == null ? 'F' : props.temperature.unitCode,
+    // Dewpoint is in Celsius (wmoUnit:degC), convert to Fahrenheit
+    dewpoint: props.dewpoint?.value != null ? convertObsTempToF(props.dewpoint.value, props.dewpoint.unitCode) : null,
+    dewpointUnit: props.dewpoint?.unitCode == null ? 'F' : props.dewpoint.unitCode,
     windDirection: props.windDirection?.value ?? null,
-    windSpeed: props.windSpeed?.value ?? null,
-    windSpeedUnit: props.windSpeed?.units ?? 'mph',
-    windGust: props.windGust?.value ?? null,
-    windGustUnit: props.windGust?.units ?? 'mph',
-    barometricPressure: props.barometricPressure?.value ?? null,
-    barometricPressureUnit: props.barometricPressure?.units ?? 'hPa',
-    seaLevelPressure: props.seaLevelPressure?.value ?? null,
-    seaLevelPressureUnit: props.seaLevelPressure?.units ?? 'hPa',
-    visibility: props.visibility?.value ?? null,
-    visibilityUnit: props.visibility?.units ?? 'mi',
+    // Wind speed is in km/h (wmoUnit:km_h-1), convert to mph
+    windSpeed: props.windSpeed?.value != null ? convertObsWindToMph(props.windSpeed.value, props.windSpeed.unitCode) : null,
+    windSpeedUnit: props.windSpeed?.unitCode == null ? 'mph' : props.windSpeed.unitCode,
+    // Wind gust is in km/h (wmoUnit:km_h-1), convert to mph
+    windGust: props.windGust?.value != null ? convertObsWindToMph(props.windGust.value, props.windGust.unitCode) : null,
+    windGustUnit: props.windGust?.unitCode == null ? 'mph' : props.windGust.unitCode,
+    // Barometric pressure is in Pa (wmoUnit:Pa), convert to hPa
+    barometricPressure: props.barometricPressure?.value != null ? paToHpa(props.barometricPressure.value) : null,
+    barometricPressureUnit: props.barometricPressure?.unitCode == null ? 'hPa' : props.barometricPressure.unitCode,
+    seaLevelPressure: props.seaLevelPressure?.value != null ? paToHpa(props.seaLevelPressure.value) : null,
+    seaLevelPressureUnit: props.seaLevelPressure?.unitCode == null ? 'hPa' : props.seaLevelPressure.unitCode,
+    // Visibility is in meters (wmoUnit:m), convert to miles
+    visibility: props.visibility?.value != null ? metersToMiles(props.visibility.value) : null,
+    visibilityUnit: props.visibility?.unitCode == null ? 'mi' : props.visibility.unitCode,
     relativeHumidity: props.relativeHumidity?.value ?? null,
-    relativeHumidityUnit: props.relativeHumidity?.units ?? '%',
-    windChill: props.windChill?.value ?? null,
-    windChillUnit: props.windChill?.units ?? 'F',
-    heatIndex: props.heatIndex?.value ?? null,
-    heatIndexUnit: props.heatIndex?.units ?? 'F',
+    relativeHumidityUnit: props.relativeHumidity?.unitCode == null ? '%' : props.relativeHumidity.unitCode,
+    // Wind chill is in Celsius (wmoUnit:degC), convert to Fahrenheit
+    windChill: props.windChill?.value != null ? convertObsTempToF(props.windChill.value, props.windChill.unitCode) : null,
+    windChillUnit: props.windChill?.unitCode == null ? 'F' : props.windChill.unitCode,
+    // Heat index is in Celsius (wmoUnit:degC), convert to Fahrenheit
+    heatIndex: props.heatIndex?.value != null ? convertObsTempToF(props.heatIndex.value, props.heatIndex.unitCode) : null,
+    heatIndexUnit: props.heatIndex?.unitCode == null ? 'F' : props.heatIndex.unitCode,
     cloudLayers: props.cloudLayers || [],
     weather: props.presentWeather || [],
     rawMessage: props.rawMessage || '',
@@ -3625,6 +3794,83 @@ function mmToInchesSnow(mm) {
   return Math.round(mm / 25.4 * 10) / 10;
 }
 
+// Convert Pa to hPa
+function paToHpa(pa) {
+  if (pa == null) return null;
+  return Math.round(pa / 100);
+}
+
+// Convert meters to feet
+function metersToFeet(m) {
+  if (m == null) return null;
+  return Math.round(m * 3.28084);
+}
+
+// Parse a NWS validTime string like "2026-06-13T06:00:00+00:00/PT2H" into start/end timestamps
+function parseNwsValidTime(vt) {
+  if (!vt) return null;
+  const slashIdx = vt.indexOf('/');
+  if (slashIdx === -1) return null;
+  const startStr = vt.substring(0, slashIdx);
+  const durationStr = vt.substring(slashIdx + 1);
+  const start = new Date(startStr).getTime();
+  // Parse duration like PT2H, PT1H, P1DT6H etc.
+  let durationMs = 0;
+  const dMatch = durationStr.match(/P(?:(\d+)D)?(?:(\d+)H)?(?:(\d+)M)?/);
+  if (dMatch) {
+    if (dMatch[1]) durationMs += parseInt(dMatch[1]) * 86400000;
+    if (dMatch[2]) durationMs += parseInt(dMatch[2]) * 3600000;
+    if (dMatch[3]) durationMs += parseInt(dMatch[3]) * 60000;
+  }
+  return { start, end: start + durationMs };
+}
+
+// Find the value whose validTime covers the current time
+function findCurrentNwsValue(values, now) {
+  if (!values || !Array.isArray(values) || values.length === 0) return null;
+  const nowMs = now.getTime();
+  let best = null;
+  let bestDiff = Infinity;
+  for (const v of values) {
+    const range = parseNwsValidTime(v.validTime);
+    if (!range) continue;
+    // Check if current time falls within this range
+    if (nowMs >= range.start && nowMs < range.end) {
+      return v;
+    }
+    // If not within range, find the closest one
+    const diff = Math.min(Math.abs(nowMs - range.start), Math.abs(nowMs - range.end));
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      best = v;
+    }
+  }
+  return best;
+}
+
+// Parse wind speed string like "10 mph" into a number
+function parseWindSpeedStringToNum(windSpeedStr) {
+  if (typeof windSpeedStr !== 'string') return windSpeedStr;
+  const match = windSpeedStr.match(/^(\d+)\s*mph$/);
+  return match ? parseInt(match[1], 10) : null;
+}
+
+// Convert Celsius to Fahrenheit for observation station data
+function convertObsTempToF(c, unitCode) {
+  if (c == null) return null;
+  if (unitCode === NWS_UNIT_DEGC) return celsiusToFahrenheit(c);
+  return c;
+}
+
+// Convert observation station wind speed to mph based on unit code
+function convertObsWindToMph(speed, unitCode) {
+  if (speed == null) return null;
+  if (unitCode === NWS_UNIT_KM_H) return Math.round(speed * 0.621371);
+  if (unitCode === NWS_UNIT_MS) return Math.round(speed * 2.23694);
+  // Default: assume mph
+  return Math.round(speed);
+}
+
 // NWS hourly forecast windSpeed is a string like "2 mph" or "10 mph"
 // Extract the numeric value
 function parseWindSpeedString(windSpeedStr) {
@@ -3646,8 +3892,9 @@ function nwsToAppData(city, nwsData) {
   const needsPrecipConversion = current.quantitativePrecipitationUnit === NWS_UNIT_MM;
 
   // Build current conditions object
-  // Convert temperature from Celsius to Fahrenheit for the app
-  const temp = needsTempConversion ? celsiusToFahrenheit(current.temperature) : current.temperature;
+  // Temperature is already in Celsius (NWS gridpoint always returns Celsius)
+  // Store as Celsius so convertTemp() can convert to F or C based on user preference
+  const temp = current.temperature;
 
   // Convert wind speed to km/h for the app
   const windSpeed = convertWindSpeedToKmh(current.windSpeed, current.windSpeedUnit);
@@ -3664,9 +3911,16 @@ function nwsToAppData(city, nwsData) {
   // Convert snowfall from mm to inches for the app
   const snow = mmToInchesSnow(current.snowfallAmount);
 
+  // Dewpoint is already in Celsius (NWS gridpoint always returns Celsius)
+  // Store as Celsius so convertTemp() can convert to F or C based on user preference
+  const dewpoint = current.dewpoint;
+
+  // Convert wind gust from m/s to km/h for the app (same as wind speed conversion)
+  const windGust = convertWindSpeedToKmh(current.windGust, current.windGustUnit);
+
   const currentApp = {
     temperature_2m: temp,
-    temperatureUnit: 'F', // Always report Fahrenheit for US users
+    temperatureUnit: 'C', // Always store Celsius — convertTemp() converts from Celsius
     relative_humidity_2m: current.relativeHumidity,
     wind_speed_10m: windSpeed,
     wind_direction_10m: current.windDirection,
@@ -3676,8 +3930,8 @@ function nwsToAppData(city, nwsData) {
     skyCover: current.skyCover,
     visibility: vis,
     visibilityUnit: needsVisConversion ? 'mi' : current.visibilityUnit,
-    dewpoint: current.dewpoint,
-    windGust: current.windGust,
+    dewpoint: dewpoint,
+    windGust: windGust,
     shortForecast: current.weather?.[0]?.icon || '',
     detailedForecast: '',
     // Keep raw values for reference
@@ -3697,11 +3951,18 @@ function nwsToAppData(city, nwsData) {
 
   // Build hourly forecast array (NWS hourly is already in order)
   const hourlyTimes = hourly.map(p => p.startTime);
-  // NWS hourly with units=us returns temperature in Fahrenheit
-  const hourlyTemps = hourly.map(p => p.temperature);
+  // NWS hourly with units=us returns temperature in Fahrenheit — convert to Celsius
+  // convertTemp() always converts from Celsius, so we must store in Celsius
+  const hourlyTemps = hourly.map(p => {
+    const f = p.temperature;
+    return f != null ? (f - 32) * 5 / 9 : null;
+  });
   const hourlyHumidity = hourly.map(p => p.relativeHumidity);
-  // NWS hourly windSpeed is a string like "2 mph" - extract numeric value
-  const hourlyWind = hourly.map(p => parseWindSpeedString(p.windSpeed));
+  // NWS hourly windSpeed is a string like "2 mph" - extract numeric value and convert mph → km/h
+  const hourlyWind = hourly.map(p => {
+    const mphVal = parseWindSpeedString(p.windSpeed);
+    return mphVal != null ? mphToKmh(mphVal) : null;
+  });
   const hourlyWindDir = hourly.map(p => p.windDirection);
   const hourlyPoP = hourly.map(p => p.probabilityOfPrecipitation);
   const hourlyWeatherCodes = hourly.map(p => nwsForecastToWmo(p.shortForecast));
@@ -3751,17 +4012,39 @@ function nwsCacheKey(lat, lon) {
 }
 
 // ===== NWS AVALABILITY CHECK =====
-// Check if NWS covers a given lat/lon (without using cached point data)
+// Check if NWS covers a given lat/lon (cached)
+const _nwsCoverageCache = {}; // { lat,lon: boolean | Promise<boolean> }
+
 async function checkNwsCoverage(lat, lon) {
-  // Use direct fetch without caching to get fresh availability
-  const url = `${NWS_API}/points/${lat},${lon}`;
-  try {
-    const data = await nwsFetch(url);
-    const props = data?.properties || {};
-    return !!(props.gridId || props.cwa) && !!props.gridX && !!props.gridY;
-  } catch (e) {
-    return false;
+  const key = `${DataCache._roundCoord(lat)},${DataCache._roundCoord(lon)}`;
+  // Check cache first
+  if (key in _nwsCoverageCache) {
+    const cached = _nwsCoverageCache[key];
+    // If it's a Promise, return it (concurrent request dedup)
+    if (cached instanceof Promise) return cached;
+    return cached;
   }
+  // Check if we have a pending request for this key
+  if (_nwsCoverageCache[key] instanceof Promise) {
+    return _nwsCoverageCache[key];
+  }
+  // Create a promise and cache it to deduplicate concurrent requests
+  const promise = (async () => {
+    try {
+      const url = `${NWS_API}/points/${lat},${lon}`;
+      const data = await nwsFetch(url);
+      const props = data?.properties || {};
+      const result = !!(props.gridId || props.cwa) && !!props.gridX && !!props.gridY;
+      _nwsCoverageCache[key] = result;
+      return result;
+    } catch (e) {
+      delete _nwsCoverageCache[key];
+      return false;
+    }
+  })();
+  _nwsCoverageCache[key] = promise;
+  const result = await promise;
+  return result;
 }
 
 // Deduplicate city results by coordinate pair (keep first entry per coordinate pair)
@@ -3983,10 +4266,14 @@ function renderCityCard(data, suffix) {
   const humidity = current?.relative_humidity_2m ?? current?.relativeHumidity ?? '—';
   const windSpeed = current?.wind_speed_10m ?? current?.windSpeed ?? '—';
   const windDir = current?.wind_direction_10m ?? current?.windDirection ?? 0;
+  // NWS pressure is in hPa (same as Open-Meteo), but may be null if no data available
   const pressure = current?.surface_pressure ?? current?.pressure ?? '—';
+  // NWS doesn't provide UV Index — show N/A
   const uv = current?.uv_index ?? '—';
+  // Visibility: NWS may have null visibility
   const vis = current?.visibility ? (isNws && current.visibilityUnit === 'mi' ? current.visibility.toFixed(1) : (current.visibility / 1609.34).toFixed(1)) : '—';
-  const pm25 = a.pm2_5 !== undefined && a.pm2_5 !== null ? a.pm2_5 : '—';
+  // NWS doesn't provide AQI — show N/A
+  const pm25 = isNws ? '—' : (a && a.pm2_5 !== undefined && a.pm2_5 !== null ? a.pm2_5 : '—');
 
   const now = new Date();
   const currentHour = now.getHours();
@@ -4547,12 +4834,16 @@ function restoreSourcePreference() {
 // ===== BACKGROUND REFRESH =====
 let _bgRefreshTimer = null;
 
+// NWS minimum background refresh interval (10 minutes) — prevents 429s
+const NWS_MIN_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
+
 // Get the shortest remaining TTL for a city's data
 function getCityShortestTTL(city) {
   let shortest = Infinity;
   if (currentSource === 'open-meteo') {
-    // Weather and AQI share the same cache key but different types
+    // Weather and AQI have separate cache keys now
     const weatherKey = weatherCacheKey(city.latitude, city.longitude);
+    const aqiKey = aqiCacheKey(city.latitude, city.longitude);
     // Check weather cache
     const weatherEntry = localStorage.getItem(`hasw_cache_${weatherKey}`);
     if (weatherEntry) {
@@ -4561,8 +4852,8 @@ function getCityShortestTTL(city) {
       const remaining = ttl - (Date.now() - entry.timestamp);
       if (remaining < shortest) shortest = remaining;
     }
-    // Check AQI cache (same key but different type)
-    const airEntry = localStorage.getItem(`hasw_cache_${weatherKey}`);
+    // Check AQI cache (separate key)
+    const airEntry = localStorage.getItem(`hasw_cache_${aqiKey}`);
     if (airEntry) {
       const entry = JSON.parse(airEntry);
       const ttl = DataCache.TTL[entry.type] || DataCache.TTL.airQuality;
@@ -4570,12 +4861,27 @@ function getCityShortestTTL(city) {
       if (remaining < shortest) shortest = remaining;
     }
   } else {
-    // NWS: use the shortest TTL for all NWS data types
-    const pointKey = nwsPointCacheKey(city.latitude, city.longitude);
-    const pointEntry = localStorage.getItem(`hasw_cache_${pointKey}`);
+    // NWS: check ALL NWS cache keys for this city
+    const nwsCacheKeys = [
+      nwsPointCacheKey(city.latitude, city.longitude),
+      nwsGridCacheKey('DTX', 0, 0), // placeholder — check the cityData key instead
+    ];
+    const nwsCityCacheKey = nwsCacheKey(city.latitude, city.longitude);
+
+    // Check point cache
+    const pointEntry = localStorage.getItem(`hasw_cache_${nwsCacheKeys[0]}`);
     if (pointEntry) {
       const entry = JSON.parse(pointEntry);
-      const ttl = DataCache.TTL.nwsPoint;
+      const ttl = DataCache.TTL[entry.type] || DataCache.TTL.nwsPoint;
+      const remaining = ttl - (Date.now() - entry.timestamp);
+      if (remaining < shortest) shortest = remaining;
+    }
+
+    // Check cityData cache (the actual NWS city data)
+    const cityDataEntry = localStorage.getItem(`hasw_cache_${nwsCityCacheKey}`);
+    if (cityDataEntry) {
+      const entry = JSON.parse(cityDataEntry);
+      const ttl = DataCache.TTL[entry.type] || DataCache.TTL.nwsCityData;
       const remaining = ttl - (Date.now() - entry.timestamp);
       if (remaining < shortest) shortest = remaining;
     }
@@ -4596,8 +4902,14 @@ function startBackgroundRefresh() {
     }
   }
   
-  // Use 80% of the shortest TTL as the refresh interval (with a minimum of 1 minute)
-  const interval = Math.max(60 * 1000, shortestTTL * 0.8);
+  // For NWS: use a fixed 10-minute interval (never faster)
+  // For OM: use 80% of the shortest TTL as the refresh interval (with a minimum of 1 minute)
+  let interval;
+  if (currentSource === 'nws') {
+    interval = NWS_MIN_REFRESH_INTERVAL_MS;
+  } else {
+    interval = Math.max(60 * 1000, shortestTTL * 0.8);
+  }
   
   _bgRefreshTimer = setInterval(() => {
     if (isLoading) return;
@@ -4608,16 +4920,20 @@ function startBackgroundRefresh() {
     
     // Invalidate all caches for the current source
     if (currentSource === 'open-meteo') {
-      // Invalidate weather cache (weather and AQI share the same key but different types)
+      // Invalidate both weather and AQI caches (separate keys)
       for (const city of weatherData) {
-        const ck = weatherCacheKey(city.latitude, city.longitude);
-        DataCache.invalidate(ck);
+        const weatherCk = weatherCacheKey(city.latitude, city.longitude);
+        const aqiCk = aqiCacheKey(city.latitude, city.longitude);
+        DataCache.invalidate(weatherCk);
+        DataCache.invalidate(aqiCk);
       }
     } else {
-      // NWS: invalidate all NWS caches
+      // NWS: invalidate all NWS caches for this city
       for (const city of weatherData) {
         const ck = nwsPointCacheKey(city.latitude, city.longitude);
         DataCache.invalidate(ck);
+        const cityCk = nwsCacheKey(city.latitude, city.longitude);
+        DataCache.invalidate(cityCk);
       }
     }
     
