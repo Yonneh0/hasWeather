@@ -1,5 +1,87 @@
 // ===== DATA CACHE =====
 // Unified cache for ALL API calls with configurable TTL per type and LRU eviction
+
+// NWS cache key — used by cross-source lookups to check for cached NWS data.
+// Defined here (before utils.js) so it's available when the NWS toggle code runs.
+function nwsCacheKey(lat, lon) {
+  return `nws_${DataCache._roundCoord(lat)}_${DataCache._roundCoord(lon)}`;
+}
+
+// ===== NWS RATE LIMITER =====
+// NWS API limit: 1 request/second, burst of 3.
+// Moved here (before utils.js) so isNwsBoundsAvailable can use it during initial page load.
+const _nwsRateLimiter = {
+  lastRequestTime: 0,
+  burstCount: 0,
+  burstWindow: 0,
+  maxBurst: 3,
+  burstWindowMs: 1000,
+  minIntervalMs: 1000,
+
+  _checkBurst() {
+    const now = Date.now();
+    if (now - this.burstWindow > this.burstWindowMs) {
+      this.burstCount = 0;
+      this.burstWindow = now;
+    }
+    return this.burstCount < this.maxBurst;
+  },
+
+  _waitForBurst() {
+    return new Promise(resolve => {
+      const check = () => {
+        if (this._checkBurst()) resolve();
+        else setTimeout(check, 50);
+      };
+      check();
+    });
+  },
+
+  async waitForSlot() {
+    const now = Date.now();
+    const timeSinceLast = now - this.lastRequestTime;
+
+    // If we're within the burst window and at max burst, wait
+    if (timeSinceLast < this.burstWindowMs && !this._checkBurst()) {
+      await this._waitForBurst();
+    }
+
+    // Ensure minimum interval between requests
+    if (timeSinceLast < this.minIntervalMs) {
+      await new Promise(r => setTimeout(r, this.minIntervalMs - timeSinceLast));
+    }
+
+    this.burstCount++;
+    this.burstWindow = Date.now();
+    this.lastRequestTime = Date.now();
+  },
+};
+
+// ===== NWS TOGGLE STATE =====
+// Track which cities have NWS data actively displayed (per-city toggle).
+// The per-city toggle allows users to switch individual city cards from Open-Meteo (OM) base data
+// to NWS-enhanced data. The toggle state is persisted to localStorage for cross-session
+// persistence, so user preferences are remembered across app reloads.
+//
+// Note: _nwsActive entries are intentionally NOT cleaned up when cities are removed.
+// This preserves the user's preference when a city is removed and later re-added.
+// Over time this may result in stale entries, but the localStorage size impact is negligible
+// (a single entry is ~30 bytes; even 1000 cities would be < 32KB).
+const NWS_ACTIVE_STORAGE_KEY = 'hasW_nwsActive';
+let _nwsActive = {}; // { place_id: boolean }
+
+// Restore NWS toggle state from localStorage on load
+try {
+  const saved = localStorage.getItem(NWS_ACTIVE_STORAGE_KEY);
+  if (saved) _nwsActive = JSON.parse(saved);
+} catch { /* ignore corrupted data */ }
+
+function saveNwsActiveState() {
+  try {
+    localStorage.setItem(NWS_ACTIVE_STORAGE_KEY, JSON.stringify(_nwsActive));
+  } catch { /* ignore storage errors */ }
+}
+
 const DataCache = {
   // Default: max number of cache entries per type before LRU eviction kicks in
   MAX_ENTRIES_PER_TYPE: 500,
