@@ -4551,21 +4551,21 @@ let _bgRefreshTimer = null;
 function getCityShortestTTL(city) {
   let shortest = Infinity;
   if (currentSource === 'open-meteo') {
+    // Weather and AQI share the same cache key but different types
     const weatherKey = weatherCacheKey(city.latitude, city.longitude);
-    const airKey = airQualityCacheKey(city.latitude, city.longitude);
     // Check weather cache
     const weatherEntry = localStorage.getItem(`hasw_cache_${weatherKey}`);
     if (weatherEntry) {
       const entry = JSON.parse(weatherEntry);
-      const ttl = entry.type === 'weather' ? DataCache.TTL.weather : DataCache.TTL.airQuality;
+      const ttl = DataCache.TTL[entry.type] || DataCache.TTL.weather;
       const remaining = ttl - (Date.now() - entry.timestamp);
       if (remaining < shortest) shortest = remaining;
     }
-    // Check air quality cache
-    const airEntry = localStorage.getItem(`hasw_cache_${airKey}`);
+    // Check AQI cache (same key but different type)
+    const airEntry = localStorage.getItem(`hasw_cache_${weatherKey}`);
     if (airEntry) {
       const entry = JSON.parse(airEntry);
-      const ttl = entry.type === 'weather' ? DataCache.TTL.airQuality : DataCache.TTL.weather;
+      const ttl = DataCache.TTL[entry.type] || DataCache.TTL.airQuality;
       const remaining = ttl - (Date.now() - entry.timestamp);
       if (remaining < shortest) shortest = remaining;
     }
