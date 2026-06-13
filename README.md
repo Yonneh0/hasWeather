@@ -68,53 +68,47 @@ Output: `weather.html` — the one true file.
 
 ```
 build.js                249 lines — build script (inlines CSS/JS into weather.html)
-favicon.ico             — site favicon
-index.html              77 lines — development HTML template (linked CSS/JS)
-package.json            14 lines — project metadata + build script
-README.md               — you are here
-weather-prod.html       — production-ready single-file build output
+favicon.ico                       — site favicon
+index.html               74 lines — development HTML template (linked CSS/JS)
+package.json             14 lines — project metadata + build script
+README.md                         — you are here
+weather-full.html       GENERATED — complete single-file build output with comments, including embedded favicon (318kb+)
+weather-prod.html       GENERATED — minimized/optimized production-ready single-file build output, without embedded favicon (179kb+)
+weather.html            GENERATED — complete single-file build output with comments, without embedded favicon (303kb+)
 css/
-  main.css              16 lines — entry point (imports all modular CSS)
   base.css              17 lines — reset & base styles (body, particle-canvas)
-  header.css           100 lines — header layout, logo, buttons, location display, game btn
-  grid.css              18 lines — city grid responsive layout
-  card.css              30 lines — city card base styles, glass effect, animations
-  card-header.css       93 lines — card header (city name, temp, weather icon)
-  card-details.css      86 lines — info rows, details grid, AQI badge, sun times
-  hourly.css            64 lines — hourly forecast grid & slots
+  card.css             212 lines — city card styles (card base, header, details grid, AQI badge, sun times)
   charts.css           153 lines — canvas charts, stat rows, combined charts
-  icons.css           121 lines — SVG weather icon styles & animations
+  donkey-runner.css    740 lines — minigame panel styling & animations
+  favorites.css        166 lines — favorites dropdown, search, settings
+  grid.css              18 lines — city grid responsive layout
+  header.css           100 lines — header layout, logo, buttons, location display, game btn
+  hourly.css            64 lines — hourly forecast grid & slots
+  icons.css            121 lines — SVG weather icon styles & animations
+  main.css              14 lines — entry point (imports all modular CSS)
   modal.css             51 lines — modal overlay, card styles, loading state
-  favorites.css       166 lines — favorites dropdown, search, settings
-  outage.css          234 lines — network outage panel styling with glitch animations
-  donkey-runner.css   740 lines — minigame panel styling & animations
+  outage.css           234 lines — network outage panel styling with glitch animations
   utilities.css          6 lines — glow/shadow text utilities
 js/
-  main.js              171 lines — entry point (state + DOM init + event bindings + game toggle)
-  constants.js         72 lines — shared constants (WMO codes & gradients)
-  cache.js             189 lines — DataCache (localStorage caching with configurable TTLs and LRU eviction)
-  favorites.js         108 lines — FavoritesManager (place_id-based favorites)
-  utils.js              48 lines — utility functions (unit conversion, haversine, bearing, etc.)
-  icons.js             289 lines — animated SVG weather icons
-  geo.js                  9 lines — shared utilities (wind compass, day/night check)
+  api-nws.js          1162 lines — NWS API client (gridpoint data, observation stations, alerts) with rate limiting and cross-source lookup
   api-openmeteo.js     314 lines — Open-Meteo weather/AQI API client with deduplication and retry logic
   api-openstreetmap.js 184 lines — Nominatim/OSM nearby city discovery
-  api-misc.js           40 lines — IP-based location fallback (ipinfo.io)
-  api-nws.js          1162 lines — NWS API client (gridpoint data, observation stations, alerts) with rate limiting and cross-source lookup
-  weather.js              3 lines — cross-source cache lookup helpers
-  render.js            255 lines — DOM rendering (city cards, hourly forecast) with cross-source field mapping
+  cache.js             189 lines — DataCache (localStorage caching with configurable TTLs and LRU eviction)
   charts.js            302 lines — canvas chart rendering (merged chart, combined chart, particles)
-  location-prompt.js    32 lines — location prompt modal helpers
-  refresh-utils.js      38 lines — unit toggle & refresh button handlers
-  main-run.js           82 lines — main run() orchestration
-  favorites-ui.js     484 lines — favorites dropdown UI & city management
-  network-monitor.js   331 lines — network outage detection, animated error panel, auto-retry
+  constants.js          72 lines — shared constants (WMO codes & gradients)
   donkey-runner.js    2581 lines — Donkey Runner minigame engine (canvas-based runner)
+  favorites-ui.js      484 lines — favorites dropdown UI & city management
+  favorites.js         108 lines — FavoritesManager (place_id-based favorites)
+  icons.js             289 lines — animated SVG weather icons
+  main.js              252 lines — entry point (state + DOM init + event bindings + game toggle + run orchestration)
+  network-monitor.js   331 lines — network outage detection, animated error panel, auto-retry
+  render.js            255 lines — DOM rendering (city cards, hourly forecast) with cross-source field mapping
+  utils.js             375 lines — utility functions (unit conversion, haversine, bearing, wind compass, day/night check, location prompt, source toggle, refresh, background refresh, IP-based location fallback (ipinfo.io))
 rag-docs/
-  air-quality-api.md     167 lines — documentation for the air-quality endpoint
-  geocoding-api.md       137 lines — documentation for the geocoding endpoint
+  air-quality-api.md      167 lines — documentation for the air-quality endpoint
+  geocoding-api.md        137 lines — documentation for the geocoding endpoint
   weather-forecast-api.md 204 lines — documentation for the weather forecast endpoint
-  weather.gov-api.md    1200 lines — documentation for the NWS API endpoint
+  weather.gov-api.md     1200 lines — documentation for the NWS API endpoint
 ```
 
 ## Caching

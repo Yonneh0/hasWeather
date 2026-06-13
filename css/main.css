@@ -1,16 +1,7 @@
 /* ===== main.css - Entry Point ===== */
 /* This file imports all modular CSS components */
 @import 'base.css';
-@import 'header.css';
-@import 'grid.css';
-@import 'card.css';
-@import 'card-header.css';
-@import 'card-details.css';
-@import 'hourly.css';
-@import 'charts.css';
-@import 'icons.css';
-@import 'modal.css';
-@import 'favorites.css';
-@import 'outage.css';
+@import 'layout.css';
+@import 'card-components.css';
+@import 'interactive.css';
 @import 'donkey-runner.css';
-@import 'utilities.css';
