@@ -184,6 +184,7 @@ if (fs.existsSync(FAVICON_PATH)) {
   const faviconBase64 = faviconData.toString('base64');
 
   // Replace the favicon link tag with an inline data URI
+  // Match any <link> tag and check both conditions in the callback
   fullHtml = fullHtml.replace(
     /<link[^>]*>/gi,
     (match) => {
