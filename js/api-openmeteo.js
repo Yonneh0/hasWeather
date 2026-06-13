@@ -151,11 +151,13 @@ async function fetchWeatherForCities(cities) {
     // Cross-source: also check NWS keys for OM lookup
     const crossSource = crossSourceGetWeather(cities[i].latitude, cities[i].longitude);
     if (cachedWeather) {
-      cachedResults.push({ ...cities[i], source: 'open-meteo', weather: cachedWeather, aqi: cachedAqi || {} });
+      cachedResults.push({ ...cities[i], source: 'open-meteo', nwsActive: false, weather: cachedWeather, aqi: cachedAqi || {} });
     } else if (crossSource && crossSource.data.weather) {
       // NWS data can serve as OM weather data (it has the same structure)
       const crossAqi = crossSourceGetAQI(cities[i].latitude, cities[i].longitude);
-      cachedResults.push({ ...cities[i], source: crossSource.source, weather: crossSource.data.weather, aqi: crossAqi?.data || {} });
+      // Set source and nwsActive based on user preference — only show NWS if they toggled it on
+      const shouldShowNws = _nwsActive[cities[i].place_id] === true;
+      cachedResults.push({ ...cities[i], source: shouldShowNws ? 'nws' : crossSource.source, nwsActive: shouldShowNws, weather: crossSource.data.weather, aqi: crossAqi?.data || {} });
     } else {
       cityCacheMap.push(i);
       uncachedCities.push(cities[i]);
@@ -202,7 +204,7 @@ async function fetchWeatherForCities(cities) {
       const entryWeather = DataCache.get(weatherCk, 'weather');
       const entryAqi = DataCache.get(aqiCk, 'airQuality');
       if (entryWeather) {
-        result[i] = { ...cities[i], source: 'open-meteo', weather: entryWeather, aqi: entryAqi || {} };
+        result[i] = { ...cities[i], source: 'open-meteo', nwsActive: false, weather: entryWeather, aqi: entryAqi || {} };
       }
     }
 
@@ -292,7 +294,7 @@ async function fetchWeatherForCities(cities) {
       DataCache.set(weatherCk, cityWeather, 'weather');
       DataCache.set(aqiCk, aqiResult, 'airQuality');
 
-      result[i] = { ...city, source: 'open-meteo', weather: cityWeather, aqi: aqiResult };
+      result[i] = { ...city, source: 'open-meteo', nwsActive: false, weather: cityWeather, aqi: aqiResult };
     }
 
     return deduplicateResults(result);
@@ -305,9 +307,9 @@ async function fetchWeatherForCities(cities) {
       if (DataCache.has(weatherCk, 'weather')) {
         const entryWeather = DataCache.get(weatherCk, 'weather');
         const entryAqi = DataCache.get(aqiCk, 'airQuality');
-        result[i] = { ...cities[i], source: 'open-meteo', weather: entryWeather, aqi: entryAqi || {} };
+        result[i] = { ...cities[i], source: 'open-meteo', nwsActive: false, weather: entryWeather, aqi: entryAqi || {} };
       } else {
-        result[i] = { ...cities[i], source: 'open-meteo', weather: null, aqi: {} };
+        result[i] = { ...cities[i], source: 'open-meteo', nwsActive: false, weather: null, aqi: {} };
       }
     }
     return result;
