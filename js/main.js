@@ -12,10 +12,8 @@ let _maxCities = parseInt(localStorage.getItem('hasW_maxCities') ?? '6', 10);
 // ===== INIT =====
 document.addEventListener('DOMContentLoaded', () => {
   initParticles();
-  restoreSourcePreference();
 
   const unitBtn = document.getElementById('unit-toggle');
-  const sourceBtn = document.getElementById('source-toggle');
   const refreshBtn = document.getElementById('refresh-btn');
   const gameBtn = document.getElementById('game-btn');
   const favBtn = document.getElementById('fav-btn');
@@ -27,7 +25,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const cityInput = document.getElementById('city-input');
 
   if (unitBtn) unitBtn.addEventListener('click', toggleUnit);
-  if (sourceBtn) sourceBtn.addEventListener('click', toggleSource);
   if (refreshBtn) refreshBtn.addEventListener('click', refresh);
   if (gameBtn) gameBtn.addEventListener('click', toggleGame);
   if (searchBtn) searchBtn.addEventListener('click', handleCitySearch);
@@ -151,6 +148,15 @@ document.addEventListener('DOMContentLoaded', () => {
    // Toggle network outage retry when pressing the refresh button while offline
    // (already handled above in checkNetwork)
 
+   // Event delegation for NWS toggle buttons on city cards
+   document.getElementById('city-grid')?.addEventListener('click', (e) => {
+     const btn = e.target.closest('.nws-toggle-btn');
+     if (btn) {
+       const placeId = btn.dataset.placeid;
+       if (placeId) toggleCityNws(placeId);
+     }
+   });
+
    // Start the app with network check
    checkNetworkAndRun(run);
  });
@@ -224,17 +230,65 @@ async function run() {
     return;
   }
 
-  // Fetch weather based on current source
-  if (currentSource === 'nws') {
-    weatherData = await fetchNwsForCities(allCities);
-  } else {
-    weatherData = await fetchWeatherForCities(allCities);
-  }
-  
-  // Update source toggle UI to reflect NWS availability
-  await updateSourceToggleUI();
-  
-  renderAll();
+   // Always use OM as base for all cities
+   weatherData = await fetchWeatherForCities(allCities);
+
+   // Check NWS bounds for each city (set nwsBounds flag) — sequential to respect rate limits
+   for (const city of weatherData) {
+     if (city.latitude != null && city.longitude != null) {
+       // Quick bounds filter first (no API call for obvious non-NWS cities)
+       if (city.latitude >= 17 && city.latitude <= 71 && city.longitude >= -170 && city.longitude <= -65) {
+         city.nwsBounds = await isNwsBoundsAvailable(city.latitude, city.longitude);
+       } else {
+         city.nwsBounds = false;
+       }
+     } else {
+       city.nwsBounds = false;
+     }
+   }
+
+    // Restore _nwsActive state for cities currently in weatherData (cross-session persistence).
+    // Only restore NWS active state if the cached NWS data is still fresh.
+    const activePlaceIds = new Set();
+    for (const city of weatherData) {
+      if (_nwsActive[city.place_id] === true) {
+        // Verify cached NWS data exists and hasn't expired (Fix #4 / Fix #9: Validate cache before restoring)
+        const ck = nwsCacheKey(city.latitude, city.longitude);
+        const cachedNws = DataCache.get(ck, 'nwsCityData');
+        if (cachedNws && cachedNws.weather && cachedNws.weather.current) {
+          // Merge cached NWS data into the city object so toggle actually shows NWS data (Fix #9)
+          const nwsCurrent = cachedNws.weather.current || {};
+          const nwsHourly = cachedNws.weather.hourly || {};
+          // Preserve OM precipitation since NWS hourly doesn't have it
+          const omHourly = city.weather?.hourly || {};
+          city.source = 'nws';
+          city.nwsActive = true;
+          city.weather = {
+            current: { ...city.weather?.current, ...nwsCurrent },
+            hourly: {
+              time: nwsHourly.time || omHourly.time || [],
+              temperature: nwsHourly.temperature ?? omHourly.temperature_2m ?? [],
+              weather_code: nwsHourly.weather_code ?? omHourly.weather_code ?? [],
+              precipitation: omHourly.precipitation ?? omHourly.precipitation_mm ?? [],
+              wind_speed_10m: nwsHourly.wind_speed_10m ?? omHourly.wind_speed_10m ?? [],
+              wind_direction_10m: nwsHourly.wind_direction_10m ?? omHourly.wind_direction_10m ?? [],
+              relative_humidity_2m: nwsHourly.relative_humidity_2m ?? omHourly.relative_humidity_2m ?? [],
+            },
+          };
+          if (cachedNws.aqi) city.aqi = cachedNws.aqi;
+          activePlaceIds.add(city.place_id);
+        } else {
+          // Clear stale toggle preference — no valid NWS data available
+          delete _nwsActive[city.place_id];
+          saveNwsActiveState();
+        }
+      }
+    }
+   // Save updated state (only if there are active toggles) — do NOT delete stale entries
+   // to preserve user preference when cities are removed and re-added
+   if (activePlaceIds.size > 0) saveNwsActiveState();
+
+   renderAll();
 }
 
 // ===== GAME TOGGLE =====
