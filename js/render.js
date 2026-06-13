@@ -93,18 +93,40 @@ function renderCityCard(data, suffix) {
   const hourly = w.hourly || {};
   const aqiData = aqiLabel(a?.us_aqi ?? null);
 
-  // NWS data uses different field names than Open-Meteo
-  const isNws = data.source === 'nws';
+  // Use currentSource (toggle state) for field lookup consistency with badge display
+  const isCurrentSourceNws = currentSource === 'nws';
   const curTemp = current?.temperature_2m != null ? convertTemp(current.temperature_2m) :
                   current?.temperature != null ? convertTemp(current.temperature) : '—';
   const curWeatherCode = current?.weather_code ?? current?.weatherCode ?? 0;
+  // Field names: both sources use the same field names after nwsToAppData mapping
   const humidity = current?.relative_humidity_2m ?? current?.relativeHumidity ?? '—';
   const windSpeed = current?.wind_speed_10m ?? current?.windSpeed ?? '—';
   const windDir = current?.wind_direction_10m ?? current?.windDirection ?? 0;
-  const pressure = current?.surface_pressure ?? current?.pressure ?? '—';
-  const uv = current?.uv_index ?? '—';
-  const vis = current?.visibility ? (isNws && current.visibilityUnit === 'mi' ? current.visibility.toFixed(1) : (current.visibility / 1609.34).toFixed(1)) : '—';
-  const pm25 = a.pm2_5 !== undefined && a.pm2_5 !== null ? a.pm2_5 : '—';
+  
+  // Pressure: always in hPa (NWS converted from inHg, OM already in hPa)
+  let pressure = '—';
+  if (current?.surface_pressure != null) {
+    pressure = current.surface_pressure;
+  } else if (current?.pressure != null) {
+    pressure = current.pressure;
+  }
+  
+  // UV Index: cross-source from OM cache if available
+  const uv = current?.uv_index != null ? current.uv_index : '—';
+  
+  // Visibility: always in meters, convert to miles for display
+  let vis = '—';
+  if (current?.visibility != null) {
+    if (current.visibilityUnit === 'mi') {
+      vis = current.visibility.toFixed(1);
+    } else {
+      // meters to miles
+      vis = (current.visibility / 1609.34).toFixed(1);
+    }
+  }
+  
+  // PM2.5: cross-source from OM cache if available
+  const pm25 = a && a.pm2_5 !== undefined && a.pm2_5 !== null ? a.pm2_5 : '—';
 
   const now = new Date();
   const currentHour = now.getHours();
@@ -147,6 +169,7 @@ function renderCityCard(data, suffix) {
     </div>`;
   }
 
+  // Badge reflects each city's actual data source (not toggle state)
   const sourceBadge = data.source === 'nws' ? '<span class="source-badge nws">NWS</span>' : '<span class="source-badge open-meteo">OM</span>';
 
   const safeName = data.place_id || suffix;
@@ -158,11 +181,15 @@ function renderCityCard(data, suffix) {
   const rain = (hourly?.precipitation || []).slice(0, 24);
   const hum = (hourly?.relative_humidity_2m || hourly?.relativeHumidity || []).slice(0, 24);
   const wind = (hourly?.wind_speed_10m || hourly?.windSpeed || []).slice(0, 24);
-  const chartStats = (data) => data.length ? {
-    min: Math.round(Math.min(...data)),
-    max: Math.round(Math.max(...data)),
-    avg: Math.round(data.reduce((a, b) => a + b, 0) / data.length),
-  } : { min: '—', max: '—', avg: '—' };
+  const chartStats = (data) => {
+    // Filter out null values before computing stats
+    const valid = data.filter(v => v != null);
+    return valid.length ? {
+      min: Math.round(Math.min(...valid)),
+      max: Math.round(Math.max(...valid)),
+      avg: Math.round(valid.reduce((a, b) => a + b, 0) / valid.length),
+    } : { min: '—', max: '—', avg: '—' };
+  };
 
   const humStats = chartStats(hum);
   const windStats = chartStats(wind);

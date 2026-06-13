@@ -113,17 +113,19 @@ const DataCache = {
         return false;
       }
       const entry = JSON.parse(raw);
-      // Validate type matches
-      if (type && entry.type !== type) {
+      // Validate type matches (always check, even when type is falsy — skip only for backward compat)
+      if (type != null && entry.type !== type) {
         console.log(`[DataCache] MISS (type mismatch): ${key} (expected: ${type}, got: ${entry.type})`);
         return false;
       }
-      const expired = !entry || (Date.now() - entry.timestamp > this.TTL[entry.type]);
+      // Use entry.type for TTL lookup when type is null, to avoid undefined TTL
+      const ttlKey = type != null ? type : entry.type;
+      const expired = !entry || (Date.now() - entry.timestamp > this.TTL[ttlKey]);
       if (expired) {
-        console.log(`[DataCache] MISS (expired): ${key} (type: ${entry.type})`);
+        console.log(`[DataCache] MISS (expired): ${key} (type: ${ttlKey})`);
         return false;
       }
-      console.log(`[DataCache] HIT: ${key} (type: ${entry.type})`);
+      console.log(`[DataCache] HIT: ${key} (type: ${type})`);
       return true;
     } catch (e) {
       console.log(`[DataCache] MISS (error): ${key}`);
@@ -131,7 +133,7 @@ const DataCache = {
     }
   },
 
-  // Get cached data (returns null if expired/missing)
+  // Get cached data (returns null if expired/missing/wrong type)
   get(key, type) {
     try {
       const raw = localStorage.getItem(`hasw_cache_${key}`);
@@ -140,13 +142,15 @@ const DataCache = {
         return null;
       }
       const entry = JSON.parse(raw);
-      // Validate type and expiration
-      if (entry.type !== type) {
+      // Validate type matches (always check, even when type is falsy — skip only for backward compat)
+      if (type != null && entry.type !== type) {
         console.log(`[DataCache] MISS (type mismatch): ${key} (expected: ${type}, got: ${entry.type})`);
         return null;
       }
-      if (Date.now() - entry.timestamp > this.TTL[entry.type]) {
-        console.log(`[DataCache] MISS (expired): ${key} (type: ${type}, age: ${Math.round((Date.now() - entry.timestamp) / 1000)}s, ttl: ${this.TTL[type] / 1000}s)`);
+      // Use entry.type for TTL lookup when type is null, to avoid undefined TTL
+      const ttlKey = type != null ? type : entry.type;
+      if (Date.now() - entry.timestamp > this.TTL[ttlKey]) {
+        console.log(`[DataCache] MISS (expired): ${key} (type: ${ttlKey}, age: ${Math.round((Date.now() - entry.timestamp) / 1000)}s, ttl: ${this.TTL[ttlKey] / 1000}s)`);
         localStorage.removeItem(`hasw_cache_${key}`);
         return null;
       }

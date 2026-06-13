@@ -12,58 +12,61 @@ async function updateSourceToggleUI() {
   const btn = document.getElementById('source-toggle');
   if (!btn) return;
   
-  // Check if NWS is available for any current city
-  let nwsAvailable = false;
-  let omAvailable = true; // OM is always available
+  // Check if ALL current cities have NWS coverage (not just any)
+  let allCitiesHaveNws = true;
+  let hasAnyCityWithNws = false;
   
   if (weatherData.length > 0) {
     for (const city of weatherData) {
       const key = `${DataCache._roundCoord(city.latitude)},${DataCache._roundCoord(city.longitude)}`;
       // Check cache first
-      if (key in _nwsAvailability && _nwsAvailability[key]) {
-        nwsAvailable = true;
-        break;
+      let nwsAvail = false;
+      if (key in _nwsAvailability) {
+        nwsAvail = _nwsAvailability[key];
+      } else {
+        // Check uncached
+        nwsAvail = await checkNwsCoverage(city.latitude, city.longitude);
+        _nwsAvailability[key] = nwsAvail;
       }
-      // Check uncached
-      const avail = await checkNwsCoverage(city.latitude, city.longitude);
-      _nwsAvailability[key] = avail;
-      if (avail) {
-        nwsAvailable = true;
-        break;
+      
+      if (nwsAvail) {
+        hasAnyCityWithNws = true;
+      } else {
+        allCitiesHaveNws = false;
       }
     }
   }
   
-  // Update button state
+  // Update button state - only enable toggle if ALL cities have NWS coverage
   const isNws = currentSource === 'nws';
-  const hasNws = nwsAvailable;
   
   btn.textContent = currentSource === 'open-meteo' ? 'OM' : 'NWS';
-  btn.classList.toggle('nws', isNws && hasNws);
+  btn.classList.toggle('nws', isNws && allCitiesHaveNws);
   
-  // Disable button if neither source is available
-  if (!hasNws && !omAvailable) {
+  // Disable button if not ALL cities have NWS coverage (toggle only works when all cities are in coverage)
+  if (!allCitiesHaveNws) {
     btn.disabled = true;
-    btn.title = 'No data source available for this location';
+    btn.title = 'Some cities outside NWS coverage — OM active';
     btn.classList.add('disabled');
-  } else if (isNws && !hasNws) {
-    // Currently on NWS but NWS not available - switch to OM
-    currentSource = 'open-meteo';
-    localStorage.setItem('hasW_source', 'open-meteo');
-    btn.textContent = 'OM';
-    btn.classList.remove('nws');
+    // Auto-switch to OM if currently on NWS but not all cities have NWS
+    if (isNws && !allCitiesHaveNws) {
+      currentSource = 'open-meteo';
+      localStorage.setItem('hasW_source', 'open-meteo');
+      btn.textContent = 'OM';
+      btn.classList.remove('nws');
+      btn.disabled = false;
+      btn.title = 'Some cities outside NWS coverage — OM active';
+      btn.classList.remove('disabled');
+    }
+  } else if (isNws && hasAnyCityWithNws) {
+    // Currently on NWS and at least one city has NWS - show toggle enabled
     btn.disabled = false;
-    btn.title = 'NWS not available for this location';
-    btn.classList.remove('disabled');
-  } else if (!isNws && hasNws) {
-    // Currently on OM and NWS is available - show toggle
-    btn.disabled = false;
-    btn.title = hasNws ? 'Switch to NWS' : 'NWS not available for this location';
+    btn.title = 'Switch to OM';
     btn.classList.remove('disabled');
   } else {
-    // Both available or neither available
+    // On OM, some cities have NWS - allow toggle
     btn.disabled = false;
-    btn.title = hasNws ? 'Switch to OM' : 'NWS not available for this location';
+    btn.title = hasAnyCityWithNws ? 'Switch to NWS' : 'No NWS coverage available';
     btn.classList.remove('disabled');
   }
 }
@@ -94,12 +97,16 @@ function restoreSourcePreference() {
 // ===== BACKGROUND REFRESH =====
 let _bgRefreshTimer = null;
 
+// NWS minimum background refresh interval (10 minutes) — prevents 429s
+const NWS_MIN_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
+
 // Get the shortest remaining TTL for a city's data
 function getCityShortestTTL(city) {
   let shortest = Infinity;
   if (currentSource === 'open-meteo') {
-    // Weather and AQI share the same cache key but different types
+    // Weather and AQI have separate cache keys now
     const weatherKey = weatherCacheKey(city.latitude, city.longitude);
+    const aqiKey = aqiCacheKey(city.latitude, city.longitude);
     // Check weather cache
     const weatherEntry = localStorage.getItem(`hasw_cache_${weatherKey}`);
     if (weatherEntry) {
@@ -108,8 +115,8 @@ function getCityShortestTTL(city) {
       const remaining = ttl - (Date.now() - entry.timestamp);
       if (remaining < shortest) shortest = remaining;
     }
-    // Check AQI cache (same key but different type)
-    const airEntry = localStorage.getItem(`hasw_cache_${weatherKey}`);
+    // Check AQI cache (separate key)
+    const airEntry = localStorage.getItem(`hasw_cache_${aqiKey}`);
     if (airEntry) {
       const entry = JSON.parse(airEntry);
       const ttl = DataCache.TTL[entry.type] || DataCache.TTL.airQuality;
@@ -117,12 +124,27 @@ function getCityShortestTTL(city) {
       if (remaining < shortest) shortest = remaining;
     }
   } else {
-    // NWS: use the shortest TTL for all NWS data types
-    const pointKey = nwsPointCacheKey(city.latitude, city.longitude);
-    const pointEntry = localStorage.getItem(`hasw_cache_${pointKey}`);
+    // NWS: check ALL NWS cache keys for this city
+    const nwsCacheKeys = [
+      nwsPointCacheKey(city.latitude, city.longitude),
+      nwsGridCacheKey('DTX', 0, 0), // placeholder — check the cityData key instead
+    ];
+    const nwsCityCacheKey = nwsCacheKey(city.latitude, city.longitude);
+
+    // Check point cache
+    const pointEntry = localStorage.getItem(`hasw_cache_${nwsCacheKeys[0]}`);
     if (pointEntry) {
       const entry = JSON.parse(pointEntry);
-      const ttl = DataCache.TTL.nwsPoint;
+      const ttl = DataCache.TTL[entry.type] || DataCache.TTL.nwsPoint;
+      const remaining = ttl - (Date.now() - entry.timestamp);
+      if (remaining < shortest) shortest = remaining;
+    }
+
+    // Check cityData cache (the actual NWS city data)
+    const cityDataEntry = localStorage.getItem(`hasw_cache_${nwsCityCacheKey}`);
+    if (cityDataEntry) {
+      const entry = JSON.parse(cityDataEntry);
+      const ttl = DataCache.TTL[entry.type] || DataCache.TTL.nwsCityData;
       const remaining = ttl - (Date.now() - entry.timestamp);
       if (remaining < shortest) shortest = remaining;
     }
@@ -143,8 +165,14 @@ function startBackgroundRefresh() {
     }
   }
   
-  // Use 80% of the shortest TTL as the refresh interval (with a minimum of 1 minute)
-  const interval = Math.max(60 * 1000, shortestTTL * 0.8);
+  // For NWS: use a fixed 10-minute interval (never faster)
+  // For OM: use 80% of the shortest TTL as the refresh interval (with a minimum of 1 minute)
+  let interval;
+  if (currentSource === 'nws') {
+    interval = NWS_MIN_REFRESH_INTERVAL_MS;
+  } else {
+    interval = Math.max(60 * 1000, shortestTTL * 0.8);
+  }
   
   _bgRefreshTimer = setInterval(() => {
     if (isLoading) return;
@@ -155,16 +183,20 @@ function startBackgroundRefresh() {
     
     // Invalidate all caches for the current source
     if (currentSource === 'open-meteo') {
-      // Invalidate weather cache (weather and AQI share the same key but different types)
+      // Invalidate both weather and AQI caches (separate keys)
       for (const city of weatherData) {
-        const ck = weatherCacheKey(city.latitude, city.longitude);
-        DataCache.invalidate(ck);
+        const weatherCk = weatherCacheKey(city.latitude, city.longitude);
+        const aqiCk = aqiCacheKey(city.latitude, city.longitude);
+        DataCache.invalidate(weatherCk);
+        DataCache.invalidate(aqiCk);
       }
     } else {
-      // NWS: invalidate all NWS caches
+      // NWS: invalidate all NWS caches for this city
       for (const city of weatherData) {
         const ck = nwsPointCacheKey(city.latitude, city.longitude);
         DataCache.invalidate(ck);
+        const cityCk = nwsCacheKey(city.latitude, city.longitude);
+        DataCache.invalidate(cityCk);
       }
     }
     

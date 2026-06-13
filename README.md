@@ -6,7 +6,8 @@ completely self-contained single file weather app, that uses public sources, wit
 ## Features
 
 - Multiple city monitoring in a responsive grid layout (configurable 0–20 cities)
-- Weather data from Open-Meteo API (temperature, humidity, wind, precipitation, UV index, visibility, surface pressure, air quality, 24-hour hourly forecast)
+- Dual data source architecture: Open-Meteo as base for all cities, NWS as supplemental where available (enhanced mode)
+- Weather data from Open-Meteo API (temperature, humidity, wind, precipitation, UV index, visibility, surface pressure, air quality, 24-hour hourly forecast) + NWS API (current conditions, hourly forecast, alerts)
 - localStorage-based caching with configurable TTLs per data type (15 min for weather/AQI, 24h for geocoding/IP, 10 min for nearby cities) and LRU eviction (default: 500 entries per type)
 - Favorites system using place_id with deduplication and proximity checking — includes search, categorization by distance from user, and regional/state capital classification
 - °F/°C unit toggle with debouncing
@@ -28,7 +29,7 @@ completely self-contained single file weather app, that uses public sources, wit
 
 - **Frontend:** Vanilla HTML5, CSS3, JavaScript (ES6+)
 - **Build:** Node.js (no frameworks, no npm packages required at runtime)
-- **Weather Data:** [Open-Meteo API](https://open-meteo.com/) (forecast + current)
+- **Weather Data:** [Open-Meteo API](https://open-meteo.com/) (forecast + current) + [NWS API](https://api.weather.gov/) (current conditions, hourly forecast, alerts)
 - **Air Quality:** [Open-Meteo Air Quality API](https://open-meteo.com/air-quality-api)
 - **Geocoding:** [Open-Meteo Geocoding API](https://geocoding-api.open-meteo.com/) + [Nominatim/OSM](https://nominatim.openstreetmap.org/)
 - **Location:** Browser Geolocation API, [ipinfo.io](https://ipinfo.io/) (fallback)
@@ -95,8 +96,9 @@ js/
   utils.js              48 lines — utility functions (unit conversion, haversine, bearing, etc.)
   icons.js              289 lines — animated SVG weather icons
   geo.js                223 lines — geolocation, nearby city discovery, geocoding
-  weather.js            262 lines — weather/AQI API fetching with deduplication and retry logic
-  render.js             260 lines — DOM rendering (city cards, hourly forecast)
+  weather.js            262 lines — Open-Meteo weather/AQI API fetching with deduplication and retry logic
+  nws-api.js            350 lines — NWS API client (gridpoint data, observation stations, alerts) with rate limiting and cross-source lookup
+  render.js             260 lines — DOM rendering (city cards, hourly forecast) with cross-source field mapping
   charts.js             302 lines — canvas chart rendering (merged chart, combined chart, particles)
   location-prompt.js    32 lines — location prompt modal helpers
   refresh-utils.js      38 lines — unit toggle & refresh button handlers
@@ -114,15 +116,33 @@ rag-docs/
 
 All API responses are cached in `localStorage` with type-specific TTLs and LRU eviction:
 
-| Data Type      | TTL       | Cache Key Pattern            |
-|---------------|-----------|------------------------------|
-| Weather       | 15 min    | `hasw_cache_weather_X_Y`     |
-| Air Quality   | 15 min    | `hasw_cache_weather_X_Y`     |
-| Geocoding     | 24 hours  | `hasw_cache_geocode_X`       |
-| Nearby Cities | 10 min    | `hasw_cache_nearby_X_Y`      |
-| IP Location   | 24 hours  | `hasw_cache_ip_location`     |
+| Data Type        | TTL       | Cache Key Pattern                    |
+|------------------|-----------|--------------------------------------|
+| Weather          | 15 min    | `hasw_cache_weather_X_Y`            |
+| Air Quality      | 15 min    | `hasw_cache_airQuality_X_Y`         |
+| Geocoding        | 24 hours  | `hasw_cache_geocode_X`              |
+| Nearby Cities    | 10 min    | `hasw_cache_nearby_X_Y`             |
+| IP Location      | 24 hours  | `hasw_cache_ip_location`            |
+| NWS Point        | 15 min    | `hasw_cache_nws_point_X_Y`          |
+| NWS Gridpoint    | 15 min    | `hasw_cache_nws_grid_WFO_X_Y_type`  |
+| NWS City Data    | 15 min    | `hasw_cache_nws_X_Y`                |
+| NWS Observation  | 15 min    | `hasw_cache_nws_obs_STATION_ID`     |
+| NWS Alerts       | 10 min    | `hasw_cache_nws_alerts_ZONE_ID`     |
+| NWS Zone Forecast| 15 min    | `hasw_cache_nws_zoneforecast_ZONE`  |
 
-**Note:** Weather and AQI data share the same cache key but are stored as **separate cache entries** with distinct types (`'weather'` and `'airQuality'`). This prevents cache type conflicts and allows each to expire independently.
+**Note:** Weather and AQI data now use **separate cache keys** (`weather_X_Y` and `airQuality_X_Y`) instead of sharing the same key. This prevents cache type conflicts and allows each to expire independently.
+
+### Cross-Source Data Model
+
+The app uses a dual-source architecture: Open-Meteo is always the base for all cities, while NWS data is fetched where available as supplemental enhancement. The `source` field on each city's data indicates its effective source:
+
+| Source Value   | Meaning                                          |
+|--------------|--------------------------------------------------|
+| `'open-meteo'` | OM-only city (outside NWS coverage or no NWS data) |
+| `'nws'`        | NWS-only city (NWS coverage but no OM data)     |
+| `'enhanced'`   | OM base + NWS supplemental (merged data)        |
+
+When cross-sourcing, the app checks both source caches for missing fields. For example, if NWS doesn't provide UV index or visibility, those fields are filled from OM cache.
 
 ### LRU Eviction
 

@@ -1,7 +1,42 @@
 // ===== FETCH WEATHER =====
-// Helper to build a unique cache key for weather+AQI per city
+// Helper to build a unique cache key for weather per city
 function weatherCacheKey(lat, lon) {
   return `weather_${DataCache._roundCoord(lat)}_${DataCache._roundCoord(lon)}`;
+}
+
+// Helper to build a unique cache key for AQI per city
+function aqiCacheKey(lat, lon) {
+  return `airQuality_${DataCache._roundCoord(lat)}_${DataCache._roundCoord(lon)}`;
+}
+
+// Cross-source cache lookup: try OM keys first, then NWS keys (and vice versa)
+// Returns { data, source } or null if nothing found
+function crossSourceGetWeather(lat, lon) {
+  // Try OM weather key
+  const omWeather = DataCache.get(weatherCacheKey(lat, lon), 'weather');
+  if (omWeather) return { data: omWeather, source: 'open-meteo' };
+
+  // Try NWS city data key (which contains full weather object)
+  const nwsCityData = DataCache.get(nwsCacheKey(lat, lon), 'nwsCityData');
+  if (nwsCityData && nwsCityData.weather) return { data: nwsCityData, source: 'nws' };
+
+  // Try NWS point cache key (which contains full weather object)
+  const nwsPoint = DataCache.get(nwsPointCacheKey(lat, lon), 'nwsPoint');
+  if (nwsPoint && nwsPoint.weather) return { data: nwsPoint, source: 'nws' };
+
+  return null;
+}
+
+function crossSourceGetAQI(lat, lon) {
+  // Try OM AQI key
+  const omAqi = DataCache.get(aqiCacheKey(lat, lon), 'airQuality');
+  if (omAqi) return { data: omAqi, source: 'open-meteo' };
+
+  // Try NWS city data key (which may have AQI)
+  const nwsCityData = DataCache.get(nwsCacheKey(lat, lon), 'nwsCityData');
+  if (nwsCityData && nwsCityData.aqi) return { data: nwsCityData.aqi, source: 'nws' };
+
+  return null;
 }
 
 // ===== RETRY HELPER =====
@@ -94,17 +129,24 @@ function deduplicateCities(cities) {
 }
 
 async function fetchWeatherForCities(cities) {
-  // Check cache for each city individually
+  // Check cache for each city individually — use cross-source lookup
   const cachedResults = [];
   const uncachedCities = [];
   const cityCacheMap = []; // map city index to its position in uncachedCities
 
   for (let i = 0; i < cities.length; i++) {
-    const ck = weatherCacheKey(cities[i].latitude, cities[i].longitude);
-    const cachedWeather = DataCache.get(ck, 'weather');
-    const cachedAqi = DataCache.get(ck, 'airQuality');
+    const weatherCk = weatherCacheKey(cities[i].latitude, cities[i].longitude);
+    const aqiCk = aqiCacheKey(cities[i].latitude, cities[i].longitude);
+    const cachedWeather = DataCache.get(weatherCk, 'weather');
+    const cachedAqi = DataCache.get(aqiCk, 'airQuality');
+    // Cross-source: also check NWS keys for OM lookup
+    const crossSource = crossSourceGetWeather(cities[i].latitude, cities[i].longitude);
     if (cachedWeather) {
-      cachedResults.push({ ...cities[i], weather: cachedWeather, aqi: cachedAqi || {} });
+      cachedResults.push({ ...cities[i], source: 'open-meteo', weather: cachedWeather, aqi: cachedAqi || {} });
+    } else if (crossSource && crossSource.data.weather) {
+      // NWS data can serve as OM weather data (it has the same structure)
+      const crossAqi = crossSourceGetAQI(cities[i].latitude, cities[i].longitude);
+      cachedResults.push({ ...cities[i], source: crossSource.source, weather: crossSource.data.weather, aqi: crossAqi?.data || {} });
     } else {
       cityCacheMap.push(i);
       uncachedCities.push(cities[i]);
@@ -146,11 +188,12 @@ async function fetchWeatherForCities(cities) {
 
     // First fill cached results (use get directly — it already handles expiration internally)
     for (let i = 0; i < cities.length; i++) {
-      const ck = weatherCacheKey(cities[i].latitude, cities[i].longitude);
-      const entryWeather = DataCache.get(ck, 'weather');
-      const entryAqi = DataCache.get(ck, 'airQuality');
+      const weatherCk = weatherCacheKey(cities[i].latitude, cities[i].longitude);
+      const aqiCk = aqiCacheKey(cities[i].latitude, cities[i].longitude);
+      const entryWeather = DataCache.get(weatherCk, 'weather');
+      const entryAqi = DataCache.get(aqiCk, 'airQuality');
       if (entryWeather) {
-        result[i] = { ...cities[i], weather: entryWeather, aqi: entryAqi || {} };
+        result[i] = { ...cities[i], source: 'open-meteo', weather: entryWeather, aqi: entryAqi || {} };
       }
     }
 
@@ -234,12 +277,13 @@ async function fetchWeatherForCities(cities) {
         }
       }
 
-      // ===== FIX #2: Use separate cache types for weather and AQI =====
-      const ck = weatherCacheKey(city.latitude, city.longitude);
-      DataCache.set(ck, cityWeather, 'weather');
-      DataCache.set(ck, aqiResult, 'airQuality');
+      // Use separate cache keys for weather and AQI
+      const weatherCk = weatherCacheKey(city.latitude, city.longitude);
+      const aqiCk = aqiCacheKey(city.latitude, city.longitude);
+      DataCache.set(weatherCk, cityWeather, 'weather');
+      DataCache.set(aqiCk, aqiResult, 'airQuality');
 
-      result[i] = { ...city, weather: cityWeather, aqi: aqiResult };
+      result[i] = { ...city, source: 'open-meteo', weather: cityWeather, aqi: aqiResult };
     }
 
     return deduplicateResults(result);
@@ -247,13 +291,14 @@ async function fetchWeatherForCities(cities) {
     // Fill uncached with null data
     const result = new Array(cities.length);
     for (let i = 0; i < cities.length; i++) {
-      const ck = weatherCacheKey(cities[i].latitude, cities[i].longitude);
-      if (DataCache.has(ck, 'weather')) {
-        const entryWeather = DataCache.get(ck, 'weather');
-        const entryAqi = DataCache.get(ck, 'airQuality');
-        result[i] = { ...cities[i], weather: entryWeather, aqi: entryAqi || {} };
+      const weatherCk = weatherCacheKey(cities[i].latitude, cities[i].longitude);
+      const aqiCk = aqiCacheKey(cities[i].latitude, cities[i].longitude);
+      if (DataCache.has(weatherCk, 'weather')) {
+        const entryWeather = DataCache.get(weatherCk, 'weather');
+        const entryAqi = DataCache.get(aqiCk, 'airQuality');
+        result[i] = { ...cities[i], source: 'open-meteo', weather: entryWeather, aqi: entryAqi || {} };
       } else {
-        result[i] = { ...cities[i], weather: null, aqi: {} };
+        result[i] = { ...cities[i], source: 'open-meteo', weather: null, aqi: {} };
       }
     }
     return result;
