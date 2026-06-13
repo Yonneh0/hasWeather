@@ -25,7 +25,9 @@ body {
   width: 100%; height: 100%;
   pointer-events: none;
   z-index: 0;
-}/* ===== HEADER ===== */
+}/* ===== LAYOUT - Core layout and structural styles ===== */
+
+/* ===== HEADER ===== */
 .header {
   display: flex;
   align-items: center;
@@ -125,6 +127,7 @@ body {
 #source-toggle.disabled:active {
   transform: none;
 }
+
 /* ===== CITY GRID ===== */
 .city-grid {
   display: grid;
@@ -143,7 +146,70 @@ body {
 }
 @media (max-width: 600px) {
   .city-grid { grid-template-columns: 1fr; max-width: 400px; margin: 0 auto; }
-}/* ===== CITY CARD ===== */
+}
+
+/* ===== MODAL ===== */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  backdrop-filter: blur(4px);
+}
+.modal-overlay.hidden { display: none; }
+.modal-card {
+  background: rgba(255,255,255,0.06);
+  backdrop-filter: blur(16px) saturate(180%);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 16px;
+  padding: 2rem;
+  min-width: 320px;
+  animation: fadeInUp 0.3s ease;
+}
+.modal-card h2 {
+  font-size: 1.2rem;
+  margin-bottom: 1rem;
+}
+.modal-card input {
+  width: 100%;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 8px;
+  background: rgba(0,0,0,0.3);
+  color: #fff;
+  font-size: 1rem;
+  margin-bottom: 0.8rem;
+  outline: none;
+}
+.modal-card input:focus {
+  border-color: rgba(70,130,255,0.6);
+}
+.modal-card .btn {
+  width: 100%;
+}
+
+/* ===== LOADING ===== */
+.loading-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem;
+  color: rgba(255,255,255,0.5);
+  font-size: 1rem;
+}
+
+/* ===== GLOW FOR HEADER TEXT ===== */
+.city-name,
+.city-state,
+.current-temp-inline,
+.info-val {
+  text-shadow: 0 0 10px rgba(255,255,255,0.5), 0 0 20px rgba(255,255,255,0.2);
+}/* ===== CARD-COMPONENTS - Card-related display components ===== */
+
+/* ===== CITY CARD ===== */
 .city-card {
   position: relative;
   background: rgba(255,255,255,0.04);
@@ -173,7 +239,9 @@ body {
 @keyframes fadeInUp {
   from { opacity: 0; transform: translateY(10px); }
   to   { opacity: 1; transform: translateY(0); }
-}/* ===== CARD HEADER ===== */
+}
+
+/* ===== CARD HEADER ===== */
 .city-header {
   display: flex;
   align-items: flex-start;
@@ -266,6 +334,7 @@ body {
   color: rgba(255, 255, 255, 0.8);
   border: 1px solid rgba(100, 200, 100, 0.4);
 }
+
 /* Details row: HIGH / LOW / ☀️ / 🌙 */
 .info-row {
   display: flex;
@@ -352,7 +421,9 @@ body {
   justify-content: space-between;
   font-size: 0.75rem;
   color: rgba(255,255,255,0.55);
-}/* Hourly Forecast */
+}
+
+/* Hourly Forecast */
 .hourly-section {
   margin-bottom: 0.8rem;
 }
@@ -416,7 +487,9 @@ body {
   font-size: 0.6rem;
   color: rgba(255,255,255,0.55);
   margin-top: 0.05rem;
-}/* Canvas Charts */
+}
+
+/* Canvas Charts */
 .charts-section {
   display: flex;
   flex-direction: column;
@@ -569,179 +642,9 @@ body {
 .city-compass-row {
   font-size: 0.65rem;
   color: rgba(255,255,255,0.4);
-}/* ===== SVG WEATHER ICONS - LOUD & ANIMATED ===== */
-.weather-svg {
-  fill: none;
-  stroke: #fff;
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  display: block;
-}
-.weather-svg .sun { stroke: #ffd54f; fill: #ffd54f; }
-.weather-svg .moon { stroke: #e0e0e0; fill: #e0e0e0; }
-.weather-svg .cloud { stroke: #b0bec5; fill: rgba(176,190,197,0.3); }
-.weather-svg .rain { stroke: #64b5f6; fill: none; }
-.weather-svg .snow { stroke: #e0e0e0; fill: none; }
+}/* ===== INTERACTIVE - Interactive elements and visual effects ===== */
 
-/* Icon animation classes */
-.weather-icon-animated {
-  overflow: visible;
-}
-
-/* Sun: rotating rays + pulsing glow */
-.weather-icon-sun .icon-glow {
-  transform-origin: 32px 32px;
-}
-.weather-icon-sun .icon-rotate {
-  transform-origin: 32px 32px;
-  animation: icon-rotate 20s linear infinite;
-}
-
-@keyframes icon-rotate {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-/* Moon: bobbing + twinkling stars */
-.weather-icon-moon .icon-bob {
-  animation: icon-bob 4s ease-in-out infinite;
-}
-
-@keyframes icon-bob {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-3px); }
-}
-
-/* Cloud: drifting */
-.weather-icon-cloud .icon-drift,
-.weather-icon-cloud-sun .icon-drift,
-.weather-icon-rain .icon-drift,
-.weather-icon-snow .icon-drift,
-.weather-icon-fog .icon-drift {
-  animation: icon-drift 3s ease-in-out infinite;
-}
-
-@keyframes icon-drift {
-  0%, 100% { transform: translateX(0); }
-  50% { transform: translateX(2px); }
-}
-
-/* Thunderstorm: shaking + lightning flash */
-.weather-icon-thunder .icon-shake {
-  animation: icon-shake 2s ease-in-out infinite;
-}
-
-@keyframes icon-shake {
-  0%, 100% { transform: translateX(0) rotate(0deg); }
-  10% { transform: translateX(-1px) rotate(-1deg); }
-  20% { transform: translateX(1px) rotate(1deg); }
-  30% { transform: translateX(0); }
-  40% { transform: translateX(-1px) rotate(-0.5deg); }
-  50% { transform: translateX(0); }
-}
-
-.weather-icon-animated .icon-bolt {
-  animation: icon-flash 2s ease-in-out infinite;
-}
-
-@keyframes icon-flash {
-  0%, 100% { opacity: 1; }
-  48% { opacity: 1; }
-  50% { opacity: 0.3; }
-  52% { opacity: 1; }
-  70% { opacity: 1; }
-  72% { opacity: 0.4; }
-  74% { opacity: 1; }
-}
-
-/* Compass heading */
-.compass-heading {
-  display: inline-block;
-  font-size: 0.7rem;
-  color: rgba(255,255,255,0.6);
-  white-space: nowrap;
-}
-
-/* ===== WIND COMPASS ===== */
-.wind-compass {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: rgba(255,255,255,0.9);
-}
-.wind-compass .compass-dial {
-  display: inline-block;
-  width: 20px;
-  height: 20px;
-  position: relative;
-}
-.wind-compass .compass-dial svg {
-  width: 20px;
-  height: 20px;
-  display: block;
-}
-.wind-compass .compass-needle {
-  transform-origin: 10px 10px;
-  animation: needle-pulse 2s ease-in-out infinite;
-}
-@keyframes needle-pulse {
-  0%, 100% { opacity: 0.8; }
-  50% { opacity: 1; }
-}/* ===== MODAL ===== */
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 100;
-  backdrop-filter: blur(4px);
-}
-.modal-overlay.hidden { display: none; }
-.modal-card {
-  background: rgba(255,255,255,0.06);
-  backdrop-filter: blur(16px) saturate(180%);
-  border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 16px;
-  padding: 2rem;
-  min-width: 320px;
-  animation: fadeInUp 0.3s ease;
-}
-.modal-card h2 {
-  font-size: 1.2rem;
-  margin-bottom: 1rem;
-}
-.modal-card input {
-  width: 100%;
-  padding: 0.6rem 0.8rem;
-  border: 1px solid rgba(255,255,255,0.2);
-  border-radius: 8px;
-  background: rgba(0,0,0,0.3);
-  color: #fff;
-  font-size: 1rem;
-  margin-bottom: 0.8rem;
-  outline: none;
-}
-.modal-card input:focus {
-  border-color: rgba(70,130,255,0.6);
-}
-.modal-card .btn {
-  width: 100%;
-}
-
-/* ===== LOADING ===== */
-.loading-state {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 3rem;
-  color: rgba(255,255,255,0.5);
-  font-size: 1rem;
-}/* ===== FAVORITES ===== */
+/* ===== FAVORITES ===== */
 .fav-star {
   color: #ffd54f;
   font-size: 1rem;
@@ -907,7 +810,132 @@ body {
   color: #ffd54f;
   min-width: 12px;
   text-align: center;
-}/* ===== NETWORK OUTAGE PANEL ===== */
+}
+
+/* ===== SVG WEATHER ICONS - LOUD & ANIMATED ===== */
+.weather-svg {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  display: block;
+}
+.weather-svg .sun { stroke: #ffd54f; fill: #ffd54f; }
+.weather-svg .moon { stroke: #e0e0e0; fill: #e0e0e0; }
+.weather-svg .cloud { stroke: #b0bec5; fill: rgba(176,190,197,0.3); }
+.weather-svg .rain { stroke: #64b5f6; fill: none; }
+.weather-svg .snow { stroke: #e0e0e0; fill: none; }
+
+/* Icon animation classes */
+.weather-icon-animated {
+  overflow: visible;
+}
+
+/* Sun: rotating rays + pulsing glow */
+.weather-icon-sun .icon-glow {
+  transform-origin: 32px 32px;
+}
+.weather-icon-sun .icon-rotate {
+  transform-origin: 32px 32px;
+  animation: icon-rotate 20s linear infinite;
+}
+
+@keyframes icon-rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Moon: bobbing + twinkling stars */
+.weather-icon-moon .icon-bob {
+  animation: icon-bob 4s ease-in-out infinite;
+}
+
+@keyframes icon-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+
+/* Cloud: drifting */
+.weather-icon-cloud .icon-drift,
+.weather-icon-cloud-sun .icon-drift,
+.weather-icon-rain .icon-drift,
+.weather-icon-snow .icon-drift,
+.weather-icon-fog .icon-drift {
+  animation: icon-drift 3s ease-in-out infinite;
+}
+
+@keyframes icon-drift {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(2px); }
+}
+
+/* Thunderstorm: shaking + lightning flash */
+.weather-icon-thunder .icon-shake {
+  animation: icon-shake 2s ease-in-out infinite;
+}
+
+@keyframes icon-shake {
+  0%, 100% { transform: translateX(0) rotate(0deg); }
+  10% { transform: translateX(-1px) rotate(-1deg); }
+  20% { transform: translateX(1px) rotate(1deg); }
+  30% { transform: translateX(0); }
+  40% { transform: translateX(-1px) rotate(-0.5deg); }
+  50% { transform: translateX(0); }
+}
+
+.weather-icon-animated .icon-bolt {
+  animation: icon-flash 2s ease-in-out infinite;
+}
+
+@keyframes icon-flash {
+  0%, 100% { opacity: 1; }
+  48% { opacity: 1; }
+  50% { opacity: 0.3; }
+  52% { opacity: 1; }
+  70% { opacity: 1; }
+  72% { opacity: 0.4; }
+  74% { opacity: 1; }
+}
+
+/* Compass heading */
+.compass-heading {
+  display: inline-block;
+  font-size: 0.7rem;
+  color: rgba(255,255,255,0.6);
+  white-space: nowrap;
+}
+
+/* ===== WIND COMPASS ===== */
+.wind-compass {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: rgba(255,255,255,0.9);
+}
+.wind-compass .compass-dial {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  position: relative;
+}
+.wind-compass .compass-dial svg {
+  width: 20px;
+  height: 20px;
+  display: block;
+}
+.wind-compass .compass-needle {
+  transform-origin: 10px 10px;
+  animation: needle-pulse 2s ease-in-out infinite;
+}
+@keyframes needle-pulse {
+  0%, 100% { opacity: 0.8; }
+  50% { opacity: 1; }
+}
+
+/* ===== NETWORK OUTAGE PANEL ===== */
 .outage-panel {
   position: fixed;
   left: 50%;
@@ -1881,13 +1909,7 @@ body.donkey-fullscreen .fav-dropdown {
 body.donkey-fullscreen .donkey-panel.donkey-hidden {
   display: none;
 }
-/* Glow for header text */
-.city-name,
-.city-state,
-.current-temp-inline,
-.info-val {
-  text-shadow: 0 0 10px rgba(255,255,255,0.5), 0 0 20px rgba(255,255,255,0.2);
-}
+
 </style>
 </head>
 <body translate="no">
@@ -2364,7 +2386,334 @@ function aqiLabel(aqi) {
   return { label: 'Unhealthy', cls: 'aqi-unhealthy' };
 }
 
+// ===== WIND COMPASS =====
+function getWindCompass(deg) {
+  const arrow = ['⬆', '↗', '➡', '↘', '⬇', '↙', '⬅', '↖'][Math.round(deg / 45) % 8];
+  return `<span class="wind-compass"><span class="compass-dial">${arrow}</span> ${bearingToCompass(deg)} ${deg}°</span>`;
+}
 
+// ===== DAY/NIGHT CHECK =====
+function isDaytime(hour, sunrise, sunset) {
+  return hour >= sunrise && hour < sunset;
+}
+
+// ===== IP-BASED LOCATION API CLIENT =====
+// Provides fallback geolocation via ipinfo.io.
+
+// ===== ENDPOINT =====
+const IP_API = 'https://ipinfo.io/json';
+
+// ===== GET LOCATION (Browser Geolocation + IP Fallback) =====
+async function getLocation() {
+  // Check in-memory cache
+  if (userLocation) return userLocation;
+
+  // Check localStorage cache for IP geolocation
+  const cachedIP = DataCache.get('ip_location', 'ipLocation');
+  if (cachedIP) {
+    return cachedIP;
+  }
+
+  try {
+    const pos = await new Promise((resolve, reject) => {
+      navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: GEOLOCATION_TIMEOUT_MS });
+    });
+    const { latitude, longitude } = pos.coords;
+    const loc = { lat: latitude, lon: longitude };
+    // Cache browser geolocation briefly (it's not reliable to cache long-term)
+    return loc;
+  } catch {
+    try {
+      const res = await fetch(IP_API);
+      const data = await res.json();
+      const lat = parseFloat(data.loc?.split(',')[0] ?? data.lat);
+      const lon = parseFloat(data.loc?.split(',')[1] ?? data.lon);
+      const loc = { lat, lon };
+      // Cache IP location for 24 hours
+      DataCache.set('ip_location', loc, 'ipLocation');
+      return loc;
+    } catch {
+      showLocationPrompt();
+      return { lat: 43.41947, lon: -83.95081 };
+    }
+  }
+}
+
+// ===== LOCATION PROMPT =====
+function showLocationPrompt() {
+  document.getElementById('location-prompt').classList.remove('hidden');
+}
+
+function hideLocationPrompt() {
+  document.getElementById('location-prompt').classList.add('hidden');
+}
+
+async function handleCitySearch() {
+  const input = document.getElementById('city-input');
+  const city = input.value.trim();
+  if (!city) return;
+
+  hideLocationPrompt();
+  input.value = '';
+
+  try {
+    const url = `${NOMINATIM}?q=${encodeURIComponent(city)}&format=jsonv2&limit=1`;
+    const res = await fetch(url);
+    const data = await res.json();
+    if (data?.length > 0) {
+      userLocation = { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
+      document.getElementById('user-location').textContent = `\u{1F4CD} ${userLocation.lat.toFixed(2)}\u00B0N, ${Math.abs(userLocation.lon).toFixed(2)}\u00B0W`;
+      await run();
+    }
+  } catch {
+    // silently ignore search failures
+  }
+}
+
+// ===== REFRESH & UNIT TOGGLE =====
+// ===== SOURCE TOGGLE =====
+// Track NWS availability per location
+let _nwsAvailability = {}; // { lat,lon: boolean }
+
+function isNwsAvailableForLocation(lat, lon) {
+  const key = `${DataCache._roundCoord(lat)},${DataCache._roundCoord(lon)}`;
+  return !!_nwsAvailability[key];
+}
+
+// Update source toggle UI to reflect NWS availability
+async function updateSourceToggleUI() {
+  const btn = document.getElementById('source-toggle');
+  if (!btn) return;
+  
+  // Check if ALL current cities have NWS coverage (not just any)
+  let allCitiesHaveNws = true;
+  let hasAnyCityWithNws = false;
+  
+  if (weatherData.length > 0) {
+    for (const city of weatherData) {
+      const key = `${DataCache._roundCoord(city.latitude)},${DataCache._roundCoord(city.longitude)}`;
+      // Check cache first
+      let nwsAvail = false;
+      if (key in _nwsAvailability) {
+        nwsAvail = _nwsAvailability[key];
+      } else {
+        // Check uncached
+        nwsAvail = await checkNwsCoverage(city.latitude, city.longitude);
+        _nwsAvailability[key] = nwsAvail;
+      }
+      
+      if (nwsAvail) {
+        hasAnyCityWithNws = true;
+      } else {
+        allCitiesHaveNws = false;
+      }
+    }
+  }
+  
+  // Update button state - only enable toggle if ALL cities have NWS coverage
+  const isNws = currentSource === 'nws';
+  
+  btn.textContent = currentSource === 'open-meteo' ? 'OM' : 'NWS';
+  btn.classList.toggle('nws', isNws && allCitiesHaveNws);
+  
+  // Disable button if not ALL cities have NWS coverage (toggle only works when all cities are in coverage)
+  if (!allCitiesHaveNws) {
+    btn.disabled = true;
+    btn.title = 'Some cities outside NWS coverage — OM active';
+    btn.classList.add('disabled');
+    // Auto-switch to OM if currently on NWS but not all cities have NWS
+    if (isNws && !allCitiesHaveNws) {
+      currentSource = 'open-meteo';
+      localStorage.setItem('hasW_source', 'open-meteo');
+      btn.textContent = 'OM';
+      btn.classList.remove('nws');
+      btn.disabled = false;
+      btn.title = 'Some cities outside NWS coverage — OM active';
+      btn.classList.remove('disabled');
+    }
+  } else if (isNws && hasAnyCityWithNws) {
+    // Currently on NWS and at least one city has NWS - show toggle enabled
+    btn.disabled = false;
+    btn.title = 'Switch to OM';
+    btn.classList.remove('disabled');
+  } else {
+    // On OM, some cities have NWS - allow toggle
+    btn.disabled = false;
+    btn.title = hasAnyCityWithNws ? 'Switch to NWS' : 'No NWS coverage available';
+    btn.classList.remove('disabled');
+  }
+}
+
+function toggleSource() {
+  const btn = document.getElementById('source-toggle');
+  if (btn && btn.disabled) return;
+  
+  // Save preference
+  localStorage.setItem('hasW_source', currentSource === 'open-meteo' ? 'nws' : 'open-meteo');
+  currentSource = currentSource === 'open-meteo' ? 'nws' : 'open-meteo';
+  
+  // Update background refresh timers
+  startBackgroundRefresh();
+  
+  // Re-fetch data with new source
+  refresh();
+}
+
+// Restore saved source preference
+function restoreSourcePreference() {
+  const saved = localStorage.getItem('hasW_source');
+  if (saved === 'nws') {
+    currentSource = 'nws';
+  }
+}
+
+// ===== BACKGROUND REFRESH =====
+let _bgRefreshTimer = null;
+
+// NWS minimum background refresh interval (10 minutes) — prevents 429s
+const NWS_MIN_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
+
+// Get the shortest remaining TTL for a city's data
+function getCityShortestTTL(city) {
+  let shortest = Infinity;
+  if (currentSource === 'open-meteo') {
+    // Weather and AQI have separate cache keys now
+    const weatherKey = weatherCacheKey(city.latitude, city.longitude);
+    const aqiKey = aqiCacheKey(city.latitude, city.longitude);
+    // Check weather cache
+    const weatherEntry = localStorage.getItem(`hasw_cache_${weatherKey}`);
+    if (weatherEntry) {
+      const entry = JSON.parse(weatherEntry);
+      const ttl = DataCache.TTL[entry.type] || DataCache.TTL.weather;
+      const remaining = ttl - (Date.now() - entry.timestamp);
+      if (remaining < shortest) shortest = remaining;
+    }
+    // Check AQI cache (separate key)
+    const airEntry = localStorage.getItem(`hasw_cache_${aqiKey}`);
+    if (airEntry) {
+      const entry = JSON.parse(airEntry);
+      const ttl = DataCache.TTL[entry.type] || DataCache.TTL.airQuality;
+      const remaining = ttl - (Date.now() - entry.timestamp);
+      if (remaining < shortest) shortest = remaining;
+    }
+  } else {
+    // NWS: check ALL NWS cache keys for this city
+    const nwsCacheKeys = [
+      nwsPointCacheKey(city.latitude, city.longitude),
+      nwsGridCacheKey('DTX', 0, 0), // placeholder — check the cityData key instead
+    ];
+    const nwsCityCacheKey = nwsCacheKey(city.latitude, city.longitude);
+
+    // Check point cache
+    const pointEntry = localStorage.getItem(`hasw_cache_${nwsCacheKeys[0]}`);
+    if (pointEntry) {
+      const entry = JSON.parse(pointEntry);
+      const ttl = DataCache.TTL[entry.type] || DataCache.TTL.nwsPoint;
+      const remaining = ttl - (Date.now() - entry.timestamp);
+      if (remaining < shortest) shortest = remaining;
+    }
+
+    // Check cityData cache (the actual NWS city data)
+    const cityDataEntry = localStorage.getItem(`hasw_cache_${nwsCityCacheKey}`);
+    if (cityDataEntry) {
+      const entry = JSON.parse(cityDataEntry);
+      const ttl = DataCache.TTL[entry.type] || DataCache.TTL.nwsCityData;
+      const remaining = ttl - (Date.now() - entry.timestamp);
+      if (remaining < shortest) shortest = remaining;
+    }
+  }
+  return shortest === Infinity ? 10 * 60 * 1000 : shortest; // Default to 10 minutes if no cache
+}
+
+function startBackgroundRefresh() {
+  // Clear existing timer
+  if (_bgRefreshTimer) clearInterval(_bgRefreshTimer);
+  
+  // Calculate the shortest remaining TTL across all cities
+  let shortestTTL = Infinity;
+  if (weatherData.length > 0) {
+    for (const city of weatherData) {
+      const ttl = getCityShortestTTL(city);
+      if (ttl < shortestTTL) shortestTTL = ttl;
+    }
+  }
+  
+  // For NWS: use a fixed 10-minute interval (never faster)
+  // For OM: use 80% of the shortest TTL as the refresh interval (with a minimum of 1 minute)
+  let interval;
+  if (currentSource === 'nws') {
+    interval = NWS_MIN_REFRESH_INTERVAL_MS;
+  } else {
+    interval = Math.max(60 * 1000, shortestTTL * 0.8);
+  }
+  
+  _bgRefreshTimer = setInterval(() => {
+    if (isLoading) return;
+    if (!userLocation) return;
+    
+    // Only refresh if we have weather data
+    if (weatherData.length === 0) return;
+    
+    // Invalidate all caches for the current source
+    if (currentSource === 'open-meteo') {
+      // Invalidate both weather and AQI caches (separate keys)
+      for (const city of weatherData) {
+        const weatherCk = weatherCacheKey(city.latitude, city.longitude);
+        const aqiCk = aqiCacheKey(city.latitude, city.longitude);
+        DataCache.invalidate(weatherCk);
+        DataCache.invalidate(aqiCk);
+      }
+    } else {
+      // NWS: invalidate all NWS caches for this city
+      for (const city of weatherData) {
+        const ck = nwsPointCacheKey(city.latitude, city.longitude);
+        DataCache.invalidate(ck);
+        const cityCk = nwsCacheKey(city.latitude, city.longitude);
+        DataCache.invalidate(cityCk);
+      }
+    }
+    
+    // Re-fetch data silently
+    run();
+  }, interval);
+}
+
+// ===== REFRESH & UNIT TOGGLE =====
+function toggleUnit() {
+  if (_toggleDebounceTimer) return;
+  _toggleDebounceTimer = setTimeout(() => {
+    _toggleDebounceTimer = null;
+    unit = unit === 'F' ? 'C' : 'F';
+    const btn = document.getElementById('unit-toggle');
+    if (btn) btn.textContent = `°${unit}`;
+    renderAll();
+  }, TOGGLE_DEBOUNCE_MS);
+}
+
+async function refresh() {
+  if (isLoading) return;
+  isLoading = true;
+  const btn = document.getElementById('refresh-btn');
+  btn.classList.add('spinning');
+  btn.disabled = true;
+
+  // Clear weather, nearby, and ip caches on refresh
+  DataCache.invalidate('ip_location');
+  _nearbyCache = null;
+  _nearbyCacheTime = 0;
+  _allNearbyCities = [];
+  // Also invalidate nearby DataCache entry
+  if (userLocation) {
+    const nearbyKey = `nearby_${DataCache._roundCoord(userLocation.lat)}_${DataCache._roundCoord(userLocation.lon)}`;
+    DataCache.invalidate(nearbyKey);
+  }
+
+  await run();
+
+  btn.classList.remove('spinning');
+  btn.disabled = false;
+  isLoading = false;
+}
 </script>
 <script>
 // ===== SVG WEATHER ICONS - LOUD & ANIMATED =====
@@ -3160,49 +3509,6 @@ async function findNearbyCities(lat, lon) {
   DataCache.set(cacheKey, selected, 'nearby');
 
   return selected;
-}
-</script>
-<script>
-// ===== IP-BASED LOCATION API CLIENT =====
-// Provides fallback geolocation via ipinfo.io.
-
-// ===== ENDPOINT =====
-const IP_API = 'https://ipinfo.io/json';
-
-// ===== GET LOCATION (Browser Geolocation + IP Fallback) =====
-async function getLocation() {
-  // Check in-memory cache
-  if (userLocation) return userLocation;
-
-  // Check localStorage cache for IP geolocation
-  const cachedIP = DataCache.get('ip_location', 'ipLocation');
-  if (cachedIP) {
-    return cachedIP;
-  }
-
-  try {
-    const pos = await new Promise((resolve, reject) => {
-      navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: GEOLOCATION_TIMEOUT_MS });
-    });
-    const { latitude, longitude } = pos.coords;
-    const loc = { lat: latitude, lon: longitude };
-    // Cache browser geolocation briefly (it's not reliable to cache long-term)
-    return loc;
-  } catch {
-    try {
-      const res = await fetch(IP_API);
-      const data = await res.json();
-      const lat = parseFloat(data.loc?.split(',')[0] ?? data.lat);
-      const lon = parseFloat(data.loc?.split(',')[1] ?? data.lon);
-      const loc = { lat, lon };
-      // Cache IP location for 24 hours
-      DataCache.set('ip_location', loc, 'ipLocation');
-      return loc;
-    } catch {
-      showLocationPrompt();
-      return { lat: 43.41947, lon: -83.95081 };
-    }
-  }
 }
 </script>
 <script>
@@ -4371,18 +4677,6 @@ async function fetchWeatherForCitiesUnified(cities) {
 
 </script>
 <script>
-// ===== WIND COMPASS =====
-function getWindCompass(deg) {
-  const arrow = ['⬆', '↗', '➡', '↘', '⬇', '↙', '⬅', '↖'][Math.round(deg / 45) % 8];
-  return `<span class="wind-compass"><span class="compass-dial">${arrow}</span> ${bearingToCompass(deg)} ${deg}°</span>`;
-}
-
-// ===== DAY/NIGHT CHECK =====
-function isDaytime(hour, sunrise, sunset) {
-  return hour >= sunrise && hour < sunset;
-}
-</script>
-<script>
 // ===== RENDER =====
 
 // Parse time string as decimal hours so minutes are accounted for (e.g., "18:45" → 18.75)
@@ -4945,290 +5239,7 @@ function initParticles() {
 // ===== LOCATION PROMPT =====
 
 </script>
-<script>
-// ===== LOCATION PROMPT =====
-function showLocationPrompt() {
-  document.getElementById('location-prompt').classList.remove('hidden');
-}
-
-function hideLocationPrompt() {
-  document.getElementById('location-prompt').classList.add('hidden');
-}
-
-async function handleCitySearch() {
-  const input = document.getElementById('city-input');
-  const city = input.value.trim();
-  if (!city) return;
-
-  hideLocationPrompt();
-  input.value = '';
-
-  try {
-    const url = `${NOMINATIM}?q=${encodeURIComponent(city)}&format=jsonv2&limit=1`;
-    const res = await fetch(url);
-    const data = await res.json();
-    if (data?.length > 0) {
-      userLocation = { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
-      document.getElementById('user-location').textContent = `\u{1F4CD} ${userLocation.lat.toFixed(2)}\u00B0N, ${Math.abs(userLocation.lon).toFixed(2)}\u00B0W`;
-      await run();
-    }
-  } catch {
-    // silently ignore search failures
-  }
-}
-
-// ===== REFRESH & UNIT TOGGLE =====
-
-</script>
-<script>
-// ===== SOURCE TOGGLE =====
-// Track NWS availability per location
-let _nwsAvailability = {}; // { lat,lon: boolean }
-
-function isNwsAvailableForLocation(lat, lon) {
-  const key = `${DataCache._roundCoord(lat)},${DataCache._roundCoord(lon)}`;
-  return !!_nwsAvailability[key];
-}
-
-// Update source toggle UI to reflect NWS availability
-async function updateSourceToggleUI() {
-  const btn = document.getElementById('source-toggle');
-  if (!btn) return;
-  
-  // Check if ALL current cities have NWS coverage (not just any)
-  let allCitiesHaveNws = true;
-  let hasAnyCityWithNws = false;
-  
-  if (weatherData.length > 0) {
-    for (const city of weatherData) {
-      const key = `${DataCache._roundCoord(city.latitude)},${DataCache._roundCoord(city.longitude)}`;
-      // Check cache first
-      let nwsAvail = false;
-      if (key in _nwsAvailability) {
-        nwsAvail = _nwsAvailability[key];
-      } else {
-        // Check uncached
-        nwsAvail = await checkNwsCoverage(city.latitude, city.longitude);
-        _nwsAvailability[key] = nwsAvail;
-      }
-      
-      if (nwsAvail) {
-        hasAnyCityWithNws = true;
-      } else {
-        allCitiesHaveNws = false;
-      }
-    }
-  }
-  
-  // Update button state - only enable toggle if ALL cities have NWS coverage
-  const isNws = currentSource === 'nws';
-  
-  btn.textContent = currentSource === 'open-meteo' ? 'OM' : 'NWS';
-  btn.classList.toggle('nws', isNws && allCitiesHaveNws);
-  
-  // Disable button if not ALL cities have NWS coverage (toggle only works when all cities are in coverage)
-  if (!allCitiesHaveNws) {
-    btn.disabled = true;
-    btn.title = 'Some cities outside NWS coverage — OM active';
-    btn.classList.add('disabled');
-    // Auto-switch to OM if currently on NWS but not all cities have NWS
-    if (isNws && !allCitiesHaveNws) {
-      currentSource = 'open-meteo';
-      localStorage.setItem('hasW_source', 'open-meteo');
-      btn.textContent = 'OM';
-      btn.classList.remove('nws');
-      btn.disabled = false;
-      btn.title = 'Some cities outside NWS coverage — OM active';
-      btn.classList.remove('disabled');
-    }
-  } else if (isNws && hasAnyCityWithNws) {
-    // Currently on NWS and at least one city has NWS - show toggle enabled
-    btn.disabled = false;
-    btn.title = 'Switch to OM';
-    btn.classList.remove('disabled');
-  } else {
-    // On OM, some cities have NWS - allow toggle
-    btn.disabled = false;
-    btn.title = hasAnyCityWithNws ? 'Switch to NWS' : 'No NWS coverage available';
-    btn.classList.remove('disabled');
-  }
-}
-
-function toggleSource() {
-  const btn = document.getElementById('source-toggle');
-  if (btn && btn.disabled) return;
-  
-  // Save preference
-  localStorage.setItem('hasW_source', currentSource === 'open-meteo' ? 'nws' : 'open-meteo');
-  currentSource = currentSource === 'open-meteo' ? 'nws' : 'open-meteo';
-  
-  // Update background refresh timers
-  startBackgroundRefresh();
-  
-  // Re-fetch data with new source
-  refresh();
-}
-
-// Restore saved source preference
-function restoreSourcePreference() {
-  const saved = localStorage.getItem('hasW_source');
-  if (saved === 'nws') {
-    currentSource = 'nws';
-  }
-}
-
-// ===== BACKGROUND REFRESH =====
-let _bgRefreshTimer = null;
-
-// NWS minimum background refresh interval (10 minutes) — prevents 429s
-const NWS_MIN_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
-
-// Get the shortest remaining TTL for a city's data
-function getCityShortestTTL(city) {
-  let shortest = Infinity;
-  if (currentSource === 'open-meteo') {
-    // Weather and AQI have separate cache keys now
-    const weatherKey = weatherCacheKey(city.latitude, city.longitude);
-    const aqiKey = aqiCacheKey(city.latitude, city.longitude);
-    // Check weather cache
-    const weatherEntry = localStorage.getItem(`hasw_cache_${weatherKey}`);
-    if (weatherEntry) {
-      const entry = JSON.parse(weatherEntry);
-      const ttl = DataCache.TTL[entry.type] || DataCache.TTL.weather;
-      const remaining = ttl - (Date.now() - entry.timestamp);
-      if (remaining < shortest) shortest = remaining;
-    }
-    // Check AQI cache (separate key)
-    const airEntry = localStorage.getItem(`hasw_cache_${aqiKey}`);
-    if (airEntry) {
-      const entry = JSON.parse(airEntry);
-      const ttl = DataCache.TTL[entry.type] || DataCache.TTL.airQuality;
-      const remaining = ttl - (Date.now() - entry.timestamp);
-      if (remaining < shortest) shortest = remaining;
-    }
-  } else {
-    // NWS: check ALL NWS cache keys for this city
-    const nwsCacheKeys = [
-      nwsPointCacheKey(city.latitude, city.longitude),
-      nwsGridCacheKey('DTX', 0, 0), // placeholder — check the cityData key instead
-    ];
-    const nwsCityCacheKey = nwsCacheKey(city.latitude, city.longitude);
-
-    // Check point cache
-    const pointEntry = localStorage.getItem(`hasw_cache_${nwsCacheKeys[0]}`);
-    if (pointEntry) {
-      const entry = JSON.parse(pointEntry);
-      const ttl = DataCache.TTL[entry.type] || DataCache.TTL.nwsPoint;
-      const remaining = ttl - (Date.now() - entry.timestamp);
-      if (remaining < shortest) shortest = remaining;
-    }
-
-    // Check cityData cache (the actual NWS city data)
-    const cityDataEntry = localStorage.getItem(`hasw_cache_${nwsCityCacheKey}`);
-    if (cityDataEntry) {
-      const entry = JSON.parse(cityDataEntry);
-      const ttl = DataCache.TTL[entry.type] || DataCache.TTL.nwsCityData;
-      const remaining = ttl - (Date.now() - entry.timestamp);
-      if (remaining < shortest) shortest = remaining;
-    }
-  }
-  return shortest === Infinity ? 10 * 60 * 1000 : shortest; // Default to 10 minutes if no cache
-}
-
-function startBackgroundRefresh() {
-  // Clear existing timer
-  if (_bgRefreshTimer) clearInterval(_bgRefreshTimer);
-  
-  // Calculate the shortest remaining TTL across all cities
-  let shortestTTL = Infinity;
-  if (weatherData.length > 0) {
-    for (const city of weatherData) {
-      const ttl = getCityShortestTTL(city);
-      if (ttl < shortestTTL) shortestTTL = ttl;
-    }
-  }
-  
-  // For NWS: use a fixed 10-minute interval (never faster)
-  // For OM: use 80% of the shortest TTL as the refresh interval (with a minimum of 1 minute)
-  let interval;
-  if (currentSource === 'nws') {
-    interval = NWS_MIN_REFRESH_INTERVAL_MS;
-  } else {
-    interval = Math.max(60 * 1000, shortestTTL * 0.8);
-  }
-  
-  _bgRefreshTimer = setInterval(() => {
-    if (isLoading) return;
-    if (!userLocation) return;
-    
-    // Only refresh if we have weather data
-    if (weatherData.length === 0) return;
-    
-    // Invalidate all caches for the current source
-    if (currentSource === 'open-meteo') {
-      // Invalidate both weather and AQI caches (separate keys)
-      for (const city of weatherData) {
-        const weatherCk = weatherCacheKey(city.latitude, city.longitude);
-        const aqiCk = aqiCacheKey(city.latitude, city.longitude);
-        DataCache.invalidate(weatherCk);
-        DataCache.invalidate(aqiCk);
-      }
-    } else {
-      // NWS: invalidate all NWS caches for this city
-      for (const city of weatherData) {
-        const ck = nwsPointCacheKey(city.latitude, city.longitude);
-        DataCache.invalidate(ck);
-        const cityCk = nwsCacheKey(city.latitude, city.longitude);
-        DataCache.invalidate(cityCk);
-      }
-    }
-    
-    // Re-fetch data silently
-    run();
-  }, interval);
-}
-
-// ===== REFRESH & UNIT TOGGLE =====
-function toggleUnit() {
-  if (_toggleDebounceTimer) return;
-  _toggleDebounceTimer = setTimeout(() => {
-    _toggleDebounceTimer = null;
-    unit = unit === 'F' ? 'C' : 'F';
-    const btn = document.getElementById('unit-toggle');
-    if (btn) btn.textContent = `°${unit}`;
-    renderAll();
-  }, TOGGLE_DEBOUNCE_MS);
-}
-
-async function refresh() {
-  if (isLoading) return;
-  isLoading = true;
-  const btn = document.getElementById('refresh-btn');
-  btn.classList.add('spinning');
-  btn.disabled = true;
-
-  // Clear weather, nearby, and ip caches on refresh
-  DataCache.invalidate('ip_location');
-  _nearbyCache = null;
-  _nearbyCacheTime = 0;
-  _allNearbyCities = [];
-  // Also invalidate nearby DataCache entry
-  if (userLocation) {
-    const nearbyKey = `nearby_${DataCache._roundCoord(userLocation.lat)}_${DataCache._roundCoord(userLocation.lon)}`;
-    DataCache.invalidate(nearbyKey);
-  }
-
-  await run();
-
-  btn.classList.remove('spinning');
-  btn.disabled = false;
-  isLoading = false;
-}
-
-// ===== MAIN RUN =====
-
-</script>
- <script>
+  <script>
 // ===== NETWORK MONITOR =====
 const OUTAGE_MESSAGES = [
   "🦓 The network has left the building.",
@@ -5562,7 +5573,7 @@ function checkNetworkAndRun(runFn) {
   });
 }
 </script>
- <script>
+  <script>
 // ===== DONKEY RUNNER MINIGAME =====
 // A Chrome-dinosaur-style endless runner with a donkey character
 
@@ -8147,91 +8158,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
 </script>
  <script>
-// ===== MAIN RUN =====
-async function run() {
-  if (!userLocation) {
-    userLocation = await getLocation();
-  }
-
-  const locEl = document.getElementById('user-location');
-  if (locEl) locEl.textContent = `\u{1F4CD} ${userLocation.lat.toFixed(2)}\u00B0N, ${Math.abs(userLocation.lon).toFixed(2)}\u00B0W`;
-
-  _nearbyCache = null;
-  _nearbyCacheTime = 0;
-
-  // Load nearby cities + favorites, then render both
-  const nearby = await findNearbyCities(userLocation.lat, userLocation.lon);
-  const favAll = FavoritesManager.getAll();
-
-  // Combine: nearby cities first, then favorites that aren't already in nearby
-  // Use BOTH place_id AND coordinate proximity matching to prevent duplicates
-  const allCities = [...nearby];
-  const seenPlaceIds = new Set(nearby.map(c => String(c.place_id)));
-  const seenCoords = new Set(nearby.map(c => {
-    const lat = c.latitude != null ? DataCache._roundCoord(c.latitude) : null;
-    const lon = c.longitude != null ? DataCache._roundCoord(c.longitude) : null;
-    return lat != null && lon != null ? `${lat},${lon}` : null;
-  }).filter(Boolean));
-
-  for (const fav of favAll) {
-    const favPlaceId = String(fav.place_id);
-    const favLat = fav.latitude != null ? DataCache._roundCoord(fav.latitude) : null;
-    const favLon = fav.longitude != null ? DataCache._roundCoord(fav.longitude) : null;
-
-    // Skip if place_id already seen (same physical city from same source)
-    if (seenPlaceIds.has(favPlaceId)) continue;
-
-    // Skip if coordinate proximity match (same physical city from different source)
-    const favCoordKey = favLat != null && favLon != null ? `${favLat},${favLon}` : null;
-    if (favCoordKey != null) {
-      let isCoordDuplicate = false;
-      for (const existingCoord of seenCoords) {
-        const [exLat, exLon] = existingCoord.split(',').map(Number);
-        // 0.01° tolerance (≈1km)
-        if (Math.abs(favLat - exLat) < 0.01 && Math.abs(favLon - exLon) < 0.01) {
-          isCoordDuplicate = true;
-          break;
-        }
-      }
-      if (isCoordDuplicate) continue;
-    }
-
-    allCities.push({
-      place_id: favPlaceId,
-      name: fav.name,
-      state: fav.state,
-      latitude: fav.latitude,
-      longitude: fav.longitude,
-      distance: haversine(userLocation.lat, userLocation.lon, fav.latitude, fav.longitude),
-      bearing: bearing(userLocation.lat, userLocation.lon, fav.latitude, fav.longitude),
-    });
-    seenPlaceIds.add(favPlaceId);
-    if (favCoordKey != null) seenCoords.add(favCoordKey);
-  }
-
-  // Sort all cities by distance from user (closest first)
-  allCities.sort((a, b) => a.distance - b.distance);
-
-  if (allCities.length === 0) {
-    return;
-  }
-
-  // Fetch weather based on current source
-  if (currentSource === 'nws') {
-    weatherData = await fetchNwsForCities(allCities);
-  } else {
-    weatherData = await fetchWeatherForCities(allCities);
-  }
-  
-  // Update source toggle UI to reflect NWS availability
-  await updateSourceToggleUI();
-  
-  renderAll();
-}
-
-
-</script>
- <script>
 // ===== FAVORITES DROPDOWN =====
 let _allNearbyCities = []; // 20 nearest cities for dropdown (with place_id)
 
@@ -8876,6 +8802,88 @@ document.addEventListener('DOMContentLoaded', () => {
    checkNetworkAndRun(run);
  });
 
+// ===== MAIN RUN =====
+async function run() {
+  if (!userLocation) {
+    userLocation = await getLocation();
+  }
+
+  const locEl = document.getElementById('user-location');
+  if (locEl) locEl.textContent = `\u{1F4CD} ${userLocation.lat.toFixed(2)}\u00B0N, ${Math.abs(userLocation.lon).toFixed(2)}\u00B0W`;
+
+  _nearbyCache = null;
+  _nearbyCacheTime = 0;
+
+  // Load nearby cities + favorites, then render both
+  const nearby = await findNearbyCities(userLocation.lat, userLocation.lon);
+  const favAll = FavoritesManager.getAll();
+
+  // Combine: nearby cities first, then favorites that aren't already in nearby
+  // Use BOTH place_id AND coordinate proximity matching to prevent duplicates
+  const allCities = [...nearby];
+  const seenPlaceIds = new Set(nearby.map(c => String(c.place_id)));
+  const seenCoords = new Set(nearby.map(c => {
+    const lat = c.latitude != null ? DataCache._roundCoord(c.latitude) : null;
+    const lon = c.longitude != null ? DataCache._roundCoord(c.longitude) : null;
+    return lat != null && lon != null ? `${lat},${lon}` : null;
+  }).filter(Boolean));
+
+  for (const fav of favAll) {
+    const favPlaceId = String(fav.place_id);
+    const favLat = fav.latitude != null ? DataCache._roundCoord(fav.latitude) : null;
+    const favLon = fav.longitude != null ? DataCache._roundCoord(fav.longitude) : null;
+
+    // Skip if place_id already seen (same physical city from same source)
+    if (seenPlaceIds.has(favPlaceId)) continue;
+
+    // Skip if coordinate proximity match (same physical city from different source)
+    const favCoordKey = favLat != null && favLon != null ? `${favLat},${favLon}` : null;
+    if (favCoordKey != null) {
+      let isCoordDuplicate = false;
+      for (const existingCoord of seenCoords) {
+        const [exLat, exLon] = existingCoord.split(',').map(Number);
+        // 0.01° tolerance (≈1km)
+        if (Math.abs(favLat - exLat) < 0.01 && Math.abs(favLon - exLon) < 0.01) {
+          isCoordDuplicate = true;
+          break;
+        }
+      }
+      if (isCoordDuplicate) continue;
+    }
+
+    allCities.push({
+      place_id: favPlaceId,
+      name: fav.name,
+      state: fav.state,
+      latitude: fav.latitude,
+      longitude: fav.longitude,
+      distance: haversine(userLocation.lat, userLocation.lon, fav.latitude, fav.longitude),
+      bearing: bearing(userLocation.lat, userLocation.lon, fav.latitude, fav.longitude),
+    });
+    seenPlaceIds.add(favPlaceId);
+    if (favCoordKey != null) seenCoords.add(favCoordKey);
+  }
+
+  // Sort all cities by distance from user (closest first)
+  allCities.sort((a, b) => a.distance - b.distance);
+
+  if (allCities.length === 0) {
+    return;
+  }
+
+  // Fetch weather based on current source
+  if (currentSource === 'nws') {
+    weatherData = await fetchNwsForCities(allCities);
+  } else {
+    weatherData = await fetchWeatherForCities(allCities);
+  }
+  
+  // Update source toggle UI to reflect NWS availability
+  await updateSourceToggleUI();
+  
+  renderAll();
+}
+
 // ===== GAME TOGGLE =====
 function toggleGame() {
   const gameBtn = document.getElementById('game-btn');
@@ -8890,7 +8898,6 @@ function toggleGame() {
     gameBtn.classList.add('active');
   }
 }
-
 </script>
 </body>
 </html>
