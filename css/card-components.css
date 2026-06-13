@@ -115,7 +115,7 @@
   vertical-align: middle;
   line-height: 1;
 }
-.source-badge.nws {
+.source-badge.enhanced {
   background: rgba(70, 130, 255, 0.3);
   color: rgba(255, 255, 255, 0.8);
   border: 1px solid rgba(70, 130, 255, 0.4);
@@ -124,6 +124,34 @@
   background: rgba(100, 200, 100, 0.3);
   color: rgba(255, 255, 255, 0.8);
   border: 1px solid rgba(100, 200, 100, 0.4);
+}
+
+/* NWS toggle button */
+.nws-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(128, 128, 128, 0.3);
+  border: 1px solid rgba(128, 128, 128, 0.4);
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  font-size: 0.85rem;
+  margin-left: 0.3rem;
+  vertical-align: middle;
+  transition: background 0.2s, border-color 0.2s, color 0.2s;
+}
+.nws-toggle-btn:hover {
+  background: rgba(70, 130, 255, 0.3);
+  border-color: rgba(70, 130, 255, 0.4);
+  color: rgba(255, 255, 255, 0.9);
+}
+.nws-toggle-btn.active {
+  background: rgba(70, 130, 255, 0.4);
+  border-color: rgba(70, 130, 255, 0.6);
+  color: #fff;
 }
 
 /* Details row: HIGH / LOW / ☀️ / 🌙 */
