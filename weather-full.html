@@ -2504,6 +2504,68 @@ body.donkey-fullscreen .donkey-panel.donkey-hidden {
   opacity: 1;
 }
 
+/* ===== COORDINATE READOUT OVERLAY ===== */
+.radar-coord-readout {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  background: rgba(13, 13, 26, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 0.6rem;
+  color: rgba(255, 255, 255, 0.7);
+  font-family: monospace;
+  z-index: 5;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.radar-coord-readout .coord-format-select {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.55rem;
+  padding: 1px 3px;
+  cursor: pointer;
+  height: 20px;
+  min-width: 48px;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.radar-coord-readout .coord-format-select:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.radar-coord-readout .zoom-level {
+  color: #4a9eff;
+  font-weight: bold;
+  font-size: 0.6rem;
+  min-width: 36px;
+  text-align: center;
+}
+
+/* Mouseover coordinate tooltip */
+.radar-mouse-coord-tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: rgba(13, 13, 26, 0.9);
+  border: 1px solid rgba(74, 158, 255, 0.3);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 0.6rem;
+  color: #4a9eff;
+  font-family: monospace;
+  z-index: 10;
+  white-space: nowrap;
+  display: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
 /* ===== ANIMATIONS ===== */
 @keyframes radar-spinner {
   to { transform: rotate(360deg); }
@@ -2539,6 +2601,43 @@ body.donkey-fullscreen .donkey-panel.donkey-hidden {
 .radar-timeline-container.playing .radar-timeline-progress {
   background: linear-gradient(90deg, #4a9eff, #7cc4f8);
   box-shadow: 0 0 8px rgba(74, 158, 255, 0.3);
+}
+
+/* ===== COORDINATE FORMAT SELECT (header version) ===== */
+.coord-format-select {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(74, 158, 255, 0.3);
+  border-radius: 3px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.5rem;
+  padding: 1px 2px;
+  cursor: pointer;
+  height: 20px;
+  min-width: 36px;
+}
+
+.coord-format-select:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* ===== COORDINATE READOUT (header version) ===== */
+.radar-header-coord-readout {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.55rem;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.radar-header-coord-readout span {
+  font-family: monospace;
+  white-space: nowrap;
+}
+
+.radar-header-coord-readout .zoom-level {
+  color: #4a9eff;
+  font-weight: 600;
+  margin-left: 2px;
 }
 
 /* ===== RESPONSIVE ===== */
@@ -5702,6 +5801,191 @@ async function areFramesCachedInRange(lat, lon, layer, startIdx, endIdx) {
   return true;
 }
 
+// ===== COORDINATE FORMAT OPTIONS =====
+const COORD_FORMATS = [
+  { value: 'mgrs', label: 'MGRS' },
+  { value: 'latlng', label: 'Lat/Lng' },
+  { value: 'utm', label: 'UTM' },
+  { value: 'dms', label: 'DMS' },
+  { value: 'geohash', label: 'Geohash' },
+];
+
+// ===== MGRS CONVERSION =====
+const MGRS_ZONE_ROWS = 'CDEFGHJKLMNPQRSTUVWX'; // excludes I and O
+const MGRS_100K_SQUARES = [
+  'ABCDEFGH', 'JKLMNPQR', 'STUVWXYZ', // 0-2 (even zone, even hemisphere)
+  'BCDEFGH', 'CDEFGH', 'DEFGH',       // shifted for odd zones
+];
+
+// MGRS 100km square lookup by zone and hemisphere
+const MGRS_100K_SQUARES_TABLE = [
+  ['ABCDEFGH', 'JKLMNPQR', 'STUVWXYZ'], // Zone even, Hemisphere N
+  ['BCDEFGH', 'CDEFGH', 'DEFGH'],       // Zone odd, Hemisphere N (shifted)
+  ['JKLMNOPQ', 'RSTUVWXY', 'ABCDEFGH'], // Zone even, Hemisphere S
+  ['KLMNPQR', 'MNOPQR', 'NOPQR'],       // Zone odd, Hemisphere S (shifted)
+];
+
+// MGRS column letter by 100km index
+const MGRS_COL_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'; // skips I
+
+function latLonToMGRS(lat, lon) {
+  const zone = getUTMZone(lat, lon);
+  const hemisphere = lat >= 0 ? 'N' : 'S';
+  
+  // Get UTM easting and northing
+  const utm = latLonToUTMLatLon(lat, lon);
+  const [easting, northing] = utm;
+  
+  // Determine 100km square
+  const zoneOdd = (zone % 2) !== 0;
+  const colIndex = Math.floor((easting % 5000000) / 100000);
+  const rowIndex = Math.floor(((hemisphere === 'N' ? northing : northing - 1000000) % 4000000) / 100000);
+  
+  // Get column letter (A-Z excluding I)
+  const colLetter = MGRS_COL_LETTERS[colIndex];
+  
+  // Get row letter (A-H, excluding I)
+  const rowLetters = 'ABCDEFGH';
+  const rowLetter = rowLetters[rowIndex % 8];
+  
+  // 100km square identifier
+  const hundredKmSquare = `${colLetter}${rowLetter}`;
+  
+  // Determine precision (5 digits = ~1m accuracy)
+  const precisionDigits = 5;
+  const precisionFactor = Math.pow(10, precisionDigits);
+  
+  const eastingStr = String(Math.round(((easting % 100000) / 100000) * precisionFactor)).padStart(precisionDigits, '0');
+  const northingStr = String(Math.round(((northing % 100000) / 100000) * precisionFactor)).padStart(precisionDigits, '0');
+  
+  return `${zone}${hemisphere} ${hundredKmSquare} ${eastingStr} ${northingStr}`;
+}
+
+function getUTMZone(lat, lon) {
+  // Zone number: (floor((lon + 180) / 6)) + 1
+  const zoneNum = Math.floor((lon + 180) / 6) + 1;
+  
+  // Special cases for Norway and Svalbard
+  if (lat >= 56 && lat < 64 && lon >= 3 && lon < 12) return 32;
+  if (lat >= 72 && lat < 84 && lon >= 0 && lon < 42) {
+    if (lon < 9) return 31;
+    if (lon < 21) return 32;
+    if (lon < 33) return 33;
+    return 35;
+  }
+  
+  return zoneNum;
+}
+
+// ===== UTM CONVERSION =====
+function latLonToUTMLatLon(lat, lon) {
+  const zone = getUTMZone(lat, lon);
+  const hemisphere = lat >= 0 ? 'N' : 'S';
+  
+  // UTM constants
+  const k0 = 0.9996; // scale factor
+  const a = 6378137; // semi-major axis (WGS84)
+  const e2 = 0.00669437999014; // eccentricity squared
+  
+  // Central meridian of zone
+  const lonOrigin = (zone - 1) * 6 - 180 + 3;
+  
+  // Convert to radians
+  const phi = lat * Math.PI / 180;
+  const lam = (lon - lonOrigin) * Math.PI / 180;
+  
+  // Radius of curvature
+  const N = a / Math.sqrt(1 - e2 * Math.sin(phi) * Math.sin(phi));
+  
+  // Northing and easting
+  const A = lam * Math.cos(phi);
+  
+  const M = a * (
+    (1 - e2/4 - 3*e2*e2/64 - 5*e2*e2*e2/256) * phi
+    - (3*e2/8 + 3*e2*e2/32 + 45*e2*e2*e2/1024) * Math.sin(2*phi)
+    + (15*e2*e2/256 + 45*e2*e2*e2/1024) * Math.sin(4*phi)
+    - (35*e2*e2*e2/3072) * Math.sin(6*phi)
+  );
+  
+  const T = Math.tan(phi) * Math.tan(phi);
+  const C = e2 / (1 - e2) * Math.cos(phi) * Math.cos(phi);
+  const R = a * (1 - e2) / Math.pow(1 - e2 * Math.sin(phi) * Math.sin(phi), 1.5);
+  
+  let easting = k0 * N * (A + (1 - T + C) * A*A*A/6 + (5 - 18*T + T*T + 72*C - 58*e2/(1-e2)) * A*A*A*A*A/120) + 500000;
+  
+  let northing;
+  if (hemisphere === 'N') {
+    northing = k0 * (M + N * Math.tan(phi) * (A*A/2 + (5 - T + 9*C + 4*C*C) * A*A*A*A/24 + (61 - 58*T + T*T + 600*C - 330*e2/(1-e2)) * A*A*A*A*A*A/720));
+  } else {
+    northing = k0 * (M + N * Math.tan(phi) * (A*A/2 + (5 - T + 9*C + 4*C*C) * A*A*A*A/24 + (61 - 58*T + T*T + 600*C - 330*e2/(1-e2)) * A*A*A*A*A*A/720)) + 10000000;
+  }
+  
+  return [easting, northing];
+}
+
+// ===== DMS CONVERSION =====
+function latLngToDMS(lat, lng) {
+  const latDMS = toDMSType(lat, 'lat');
+  const lngDMS = toDMSType(lng, 'lng');
+  return `${latDMS}, ${lngDMS}`;
+}
+
+function toDMSType(value, type) {
+  const direction = value < 0 ? (type === 'lat' ? 'S' : 'W') : (type === 'lat' ? 'N' : 'E');
+  const absValue = Math.abs(value);
+  
+  const degrees = Math.floor(absValue);
+  const minutesFloat = (absValue - degrees) * 60;
+  const minutes = Math.floor(minutesFloat);
+  const seconds = Math.round((minutesFloat - minutes) * 60);
+  
+  return `${degrees}°${String(minutes).padStart(2, '0')}'${String(seconds).padStart(2, '0')}\"${direction}`;
+}
+
+// ===== GEOHASH CONVERSION =====
+function latLngToGeohash(lat, lon, precision = 6) {
+  const base32 = '0123456789bcdefghjkmnpqrstuvwxyz';
+  let latRange = [-90, 90];
+  let lonRange = [-180, 180];
+  let isLon = true;
+  let charIndex = 0;
+  let bit = 0;
+  let geohash = '';
+  
+  while (geohash.length < precision) {
+    let mid;
+    
+    if (isLon) {
+      mid = (lonRange[0] + lonRange[1]) / 2;
+      if (lon > mid) {
+        charIndex |= (1 << (4 - bit));
+        lonRange[0] = mid;
+      } else {
+        lonRange[1] = mid;
+      }
+    } else {
+      mid = (latRange[0] + latRange[1]) / 2;
+      if (lat > mid) {
+        charIndex |= (1 << (4 - bit));
+        latRange[0] = mid;
+      } else {
+        latRange[1] = mid;
+      }
+    }
+    
+    isLon = !isLon;
+    bit++;
+    
+    if (bit === 5) {
+      geohash += base32[charIndex];
+      charIndex = 0;
+      bit = 0;
+    }
+  }
+  
+  return geohash;
+}
+
 // ===== GLOBAL EXPORTS =====
 // Make all radar functions and constants available globally for non-module scripts
 window.RADAR_DEFAULT_LAYER = RADAR_DEFAULT_LAYER;
@@ -5723,6 +6007,30 @@ window.invalidateRadarCache = invalidateRadarCache;
 window.getRadarMeta = getRadarMeta;
 window.getRadarCacheSize = getRadarCacheSize;
 window.getRadarTimestampsForLayer = getRadarTimestampsForLayer;
+// Coordinate conversion exports
+window.COORD_FORMATS = COORD_FORMATS;
+window.latLonToMGRS = latLonToMGRS;
+window.latLonToUTMLatLon = latLonToUTMLatLon;
+window.latLngToDMS = latLngToDMS;
+window.latLngToGeohash = latLngToGeohash;
+
+// ===== COORDINATE FORMATTER =====
+function formatCoordinate(lat, lon, format) {
+  switch (format) {
+    case 'mgrs': return latLonToMGRS(lat, lon);
+    case 'latlng': return `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+    case 'utm': {
+      const utm = latLonToUTMLatLon(lat, lon);
+      const [easting, northing] = utm;
+      const zone = getUTMZone(lat, lon);
+      const hemisphere = lat >= 0 ? 'N' : 'S';
+      return `Zone ${zone}${hemisphere} ${easting.toFixed(1)}E ${northing.toFixed(1)}N`;
+    }
+    case 'dms': return latLngToDMS(lat, lon);
+    case 'geohash': return latLngToGeohash(lat, lon);
+    default: return latLonToMGRS(lat, lon);
+  }
+}
 
 </script>
 <script>
@@ -5742,6 +6050,23 @@ window.getRadarTimestampsForLayer = getRadarTimestampsForLayer;
   const MIN_PIN_SIZE = 8; // minimum pin radius in pixels to prevent pins from disappearing at low zoom
   const PIN_LABEL_MIN_ZOOM = 1.5; // minimum zoom to show labels
   const PIN_LABEL_MAX_ZOOM = 3; // maximum zoom before labels get too big
+  
+  // Grid rendering constants
+  const GRID_LINE_COLOR = 'rgba(255, 255, 255, 0.12)';
+  const GRID_LINE_WIDTH = 1;
+  const GRID_LABEL_COLOR = 'rgba(255, 255, 255, 0.65)';
+  const GRID_LABEL_BG_COLOR = 'rgba(13, 13, 26, 0.8)';
+  const GRID_LABEL_BORDER_COLOR = 'rgba(255, 255, 255, 0.1)';
+  const GRID_LABEL_FONT_SIZE = 9;
+  const GRID_LABEL_PADDING = 2;
+  // Grid spacing in km per zoom level — ensures ≥2 lines always visible on screen
+  // Zoom 0 (1x): 400km area → ~50km spacing → ~8 lines
+  // Zoom 1 (1.5x): ~267km visible → ~30km spacing → ~9 lines needed
+  // Zoom 2 (2x): ~200km visible → ~25km spacing → ~8 lines needed
+  // Zoom 3 (3x): ~133km visible → ~15km spacing → ~9 lines needed
+  const GRID_SPACING_KM = [50, 30, 25, 15];
+  // Label every Nth line per zoom level — avoids label clutter at higher zooms
+  const GRID_LABEL_INTERVAL = [2, 3, 3, 4];
   // Expose speed options globally so main.js can use them
   window.SPEED_OPTIONS = [0.5, 1, 2, 4, 8];
   const MAX_ZOOM = 3;
@@ -5777,11 +6102,17 @@ window.getRadarTimestampsForLayer = getRadarTimestampsForLayer;
     lastFrameTime: 0,
     isFullscreen: false,
     
+    // Coordinate readout state
+    coordFormat: 'mgrs', // default format
+    
     // Pin state
     pins: [], // array of { lat, lon, label, type, offsetX, offsetY }
     pinOffsetX: 0, // accumulated X offset for panning pins
     pinOffsetY: 0, // accumulated Y offset for panning pins
     showPins: true,
+    
+    // Grid state
+    showGrid: false,
   };
 
   // ===== CANVAS SETUP =====
@@ -5811,6 +6142,7 @@ window.getRadarTimestampsForLayer = getRadarTimestampsForLayer;
     state.totalPreFetch = 0;
     state.isLoading = true;
     state.isLoaded = false;
+    state.coordFormat = 'mgrs';
 
     canvas = document.getElementById('radar-canvas');
     ctx = canvas.getContext('2d');
@@ -5821,6 +6153,7 @@ window.getRadarTimestampsForLayer = getRadarTimestampsForLayer;
     // Event listeners
     setupCanvasEvents();
     setupKeyboardEvents();
+    setupCoordReadout();
 
     // Load initial data
     setupTimelineScrubbing();
@@ -5902,12 +6235,14 @@ window.getRadarTimestampsForLayer = getRadarTimestampsForLayer;
     // Pan move
     window.addEventListener('mousemove', (e) => {
       if (!state.isPanning) return;
-      const zoom = ZOOM_LEVELS[state.zoomLevel];
-      const dx = (e.clientX - state.panStartX) / zoom;
-      const dy = (e.clientY - state.panStartY) / zoom;
+      // Pan in canvas pixel space directly - no division by zoom
+      // This ensures consistent feel at all zoom levels: 1px mouse movement = 1px pan
+      const dx = e.clientX - state.panStartX;
+      const dy = e.clientY - state.panStartY;
       state.panX = state.panStartPanX + dx;
       state.panY = state.panStartPanY + dy;
       renderCanvas();
+      updateCenterCoordReadout();
     });
 
     // Pan end
@@ -5985,6 +6320,11 @@ window.getRadarTimestampsForLayer = getRadarTimestampsForLayer;
           e.preventDefault();
           panFrame(1);
           break;
+        case 'g':
+        case 'G':
+          e.preventDefault();
+          toggleGrid();
+          break;
       }
     });
   }
@@ -6044,6 +6384,9 @@ window.getRadarTimestampsForLayer = getRadarTimestampsForLayer;
     updateTimelineUI();
     updatePrefetchUI();
     renderCanvas();
+    
+    // Update center coordinate readout after initial load
+    updateCenterCoordReadout();
   }
 
   // ===== FRAME LOADING =====
@@ -6125,6 +6468,8 @@ window.getRadarTimestampsForLayer = getRadarTimestampsForLayer;
         updateTimestampDisplay(timestamp);
         renderCanvas();
         updateTimelineUI();
+        // Update center coordinate readout after frame change
+        updateCenterCoordReadout();
         resolve(dataUrl);
       };
       currentImg.onerror = () => resolve(null);
@@ -6295,6 +6640,9 @@ window.getRadarTimestampsForLayer = getRadarTimestampsForLayer;
       const level = parseInt(btn.dataset.zoom);
       btn.classList.toggle('active', level === state.zoomLevel);
     });
+
+    // Update center position readout
+    updateCenterCoordReadout();
   }
 
   // ===== PAN =====
@@ -6604,6 +6952,11 @@ window.getRadarTimestampsForLayer = getRadarTimestampsForLayer;
     const offsetY = (canvas.height - imgH) / 2;
     ctx.drawImage(loadedImage, offsetX, offsetY, imgW, imgH);
 
+    // Draw grid overlay on the radar image
+    if (state.showGrid) {
+      drawGrid(ctx, offsetX, offsetY, scale, imgW, imgH);
+    }
+
     // Draw pins on top of the radar image
     if (state.showPins && state.pins.length > 0) {
       drawPins(ctx, offsetX, offsetY, scale, imgW, imgH);
@@ -6901,6 +7254,115 @@ window.getRadarTimestampsForLayer = getRadarTimestampsForLayer;
     updateTimelineUI();
     updatePrefetchUI();
     renderCanvas();
+    
+    // Update center coordinate readout after layer switch
+    updateCenterCoordReadout();
+  }
+
+  // ===== GRID =====
+  function toggleGrid() {
+    state.showGrid = !state.showGrid;
+    renderCanvas();
+  }
+
+  function drawGrid(ctx, offsetX, offsetY, scale, imgW, imgH) {
+    const zoom = ZOOM_LEVELS[state.zoomLevel] || 1;
+    const spacingKm = GRID_SPACING_KM[state.zoomLevel];
+    const labelInterval = GRID_LABEL_INTERVAL[state.zoomLevel];
+
+    // The radar image covers a fixed geographic area (400km × 400km).
+    // We need to find which grid lines are visible in the current viewport.
+    
+    // Get the center position of the canvas in the original coordinate space
+    const centerX = canvasWidth / 2;
+    const centerY = canvasHeight / 2;
+    const centerPos = pixelToLatLon(centerX, centerY);
+    if (!centerPos.lat || !centerPos.lon) return;
+
+    // Get the bounding box of the radar image in meters (EPSG:3857)
+    const bbox = window.latLonToBboxEPSG3857(centerPos.lat, centerPos.lon, RADAR_BBOX_RADIUS_KM);
+    const [minx, miny, maxx, maxy] = bbox;
+
+    // Calculate visible area in the original coordinate space
+    // The image is drawn at (offsetX, offsetY) with size (imgW, imgH) in canvas space
+    // Visible bounds in canvas space: from (0, 0) to (canvasWidth, canvasHeight)
+    // Convert to meters using the scale factor
+    const metersPerPixel = (20037508.34 * 180) / (512 * scale);
+
+    // Visible bounds in original coordinate space
+    const visMinX = minx + (-offsetX) / imgW * (maxx - minx);
+    const visMaxX = minx + (canvasWidth - offsetX) / imgW * (maxx - minx);
+    const visMinY = maxy - (-offsetY) / imgH * (maxy - miny);
+    const visMaxY = maxy - (canvasHeight - offsetY) / imgH * (maxy - miny);
+
+    // Draw vertical grid lines (longitude)
+    for (let m = Math.ceil(visMinX / spacingKm) * spacingKm; m <= visMaxX; m += spacingKm) {
+      const px = offsetX + ((m - minx) / (maxx - minx)) * imgW;
+      ctx.beginPath();
+      ctx.strokeStyle = GRID_LINE_COLOR;
+      ctx.lineWidth = GRID_LINE_WIDTH;
+      ctx.moveTo(px, offsetY);
+      ctx.lineTo(px, offsetY + imgH);
+      ctx.stroke();
+
+      // Label every Nth line
+      const labelM = Math.round(m / spacingKm);
+      if (labelM % labelInterval === 0) {
+        drawGridLabel(ctx, px, offsetY + imgH + GRID_LABEL_PADDING, String(labelM), 'h', metersPerPixel);
+      }
+    }
+
+    // Draw horizontal grid lines (latitude)
+    for (let m = Math.ceil(visMinY / spacingKm) * spacingKm; m <= visMaxY; m += spacingKm) {
+      const py = offsetY + ((maxy - m) / (maxy - miny)) * imgH;
+      ctx.beginPath();
+      ctx.strokeStyle = GRID_LINE_COLOR;
+      ctx.lineWidth = GRID_LINE_WIDTH;
+      ctx.moveTo(offsetX, py);
+      ctx.lineTo(offsetX + imgW, py);
+      ctx.stroke();
+
+      // Label every Nth line
+      const labelM = Math.round(m / spacingKm);
+      if (labelM % labelInterval === 0) {
+        drawGridLabel(ctx, offsetX - GRID_LABEL_PADDING, py, String(labelM), 'v', metersPerPixel);
+      }
+    }
+  }
+
+  function drawGridLabel(ctx, x, y, text, orientation, metersPerPixel) {
+    const fontSize = Math.max(7, Math.min(10, GRID_LABEL_FONT_SIZE * (metersPerPixel / 5))); // scale font size with zoom
+    
+    ctx.font = `${Math.round(fontSize)}px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
+    ctx.textAlign = orientation === 'h' ? 'center' : 'right';
+    ctx.textBaseline = 'middle';
+    
+    const padding = GRID_LABEL_PADDING;
+    const textMetrics = ctx.measureText(text);
+    const bgW = textMetrics.width + padding * 2;
+    const bgH = fontSize + padding * 2;
+    
+    let bgX, bgY;
+    if (orientation === 'h') {
+      bgX = x - bgW / 2;
+      bgY = y - bgH / 2;
+    } else {
+      bgX = x - bgW;
+      bgY = y - bgH / 2;
+    }
+    
+    // Draw label background
+    ctx.fillStyle = GRID_LABEL_BG_COLOR;
+    ctx.fillRect(bgX, bgY, bgW, bgH);
+    
+    // Draw label border
+    ctx.strokeStyle = GRID_LABEL_BORDER_COLOR;
+    ctx.lineWidth = 0.5;
+    ctx.strokeRect(bgX, bgY, bgW, bgH);
+    
+    // Draw label text
+    ctx.fillStyle = GRID_LABEL_COLOR;
+    ctx.fillText(text, orientation === 'h' ? x : x - padding, y);
   }
 
   // ===== FULLSCREEN =====
@@ -6968,6 +7430,183 @@ window.getRadarTimestampsForLayer = getRadarTimestampsForLayer;
     }, 100);
   }
 
+  // ===== COORDINATE READOUT =====
+  function setupCoordReadout() {
+    const container = document.getElementById('radar-canvas-container');
+    if (!container) return;
+
+    // Create center position readout element
+    const coordReadout = document.createElement('div');
+    coordReadout.id = 'radar-coord-readout';
+    coordReadout.className = 'radar-header-coord-readout';
+    
+    // Center coordinates display
+    const coordText = document.createElement('span');
+    coordText.id = 'radar-center-coords';
+    coordText.textContent = '---';
+    
+    // Format dropdown
+    const formatSelect = document.createElement('select');
+    formatSelect.id = 'radar-coord-format-select';
+    formatSelect.className = 'coord-format-select';
+    
+    // Populate format options
+    COORD_FORMATS.forEach(fmt => {
+      const option = document.createElement('option');
+      option.value = fmt.value;
+      option.textContent = fmt.label;
+      if (fmt.value === state.coordFormat) option.selected = true;
+      formatSelect.appendChild(option);
+    });
+    
+    // Stop propagation on select element mouse events so canvas doesn't start panning
+    formatSelect.addEventListener('mousedown', (e) => e.stopPropagation());
+    formatSelect.addEventListener('click', (e) => e.stopPropagation());
+    
+    // Format select change handler
+    formatSelect.addEventListener('change', () => {
+      state.coordFormat = formatSelect.value;
+      updateCenterCoordReadout();
+    });
+    
+    // Zoom level display
+    const zoomLevel = document.createElement('span');
+    zoomLevel.id = 'radar-zoom-readout';
+    zoomLevel.className = 'zoom-level';
+    zoomLevel.textContent = `${Math.round((ZOOM_LEVELS[state.zoomLevel] || 1) * 100)}%`;
+    
+    coordReadout.appendChild(coordText);
+    coordReadout.appendChild(formatSelect);
+    coordReadout.appendChild(zoomLevel);
+    
+    // Insert into header section instead of canvas overlay
+    const headerSection = document.getElementById('radar-coord-readout-section');
+    if (headerSection) {
+      headerSection.appendChild(coordReadout);
+    }
+
+    // Create mouseover coordinate tooltip element
+    const mouseTooltip = document.createElement('div');
+    mouseTooltip.id = 'radar-mouse-coord-tooltip';
+    mouseTooltip.className = 'radar-mouse-coord-tooltip';
+    container.appendChild(mouseTooltip);
+
+    // Mouse events for canvas
+    canvas.addEventListener('mouseenter', () => {
+      mouseTooltip.style.display = 'block';
+    });
+    
+    canvas.addEventListener('mouseleave', () => {
+      mouseTooltip.style.display = 'none';
+    });
+    
+    canvas.addEventListener('mousemove', (e) => {
+      updateMouseCoordTooltip(e);
+    });
+  }
+
+  function updateCenterCoordReadout() {
+    const centerCoordsEl = document.getElementById('radar-center-coords');
+    const zoomReadoutEl = document.getElementById('radar-zoom-readout');
+    
+    if (!centerCoordsEl || !zoomReadoutEl) return;
+    
+    // Update zoom readout
+    const zoomLevel = ZOOM_LEVELS[state.zoomLevel] || 1;
+    zoomReadoutEl.textContent = `${Math.round(zoomLevel * 100)}%`;
+    
+    // Get center position in canvas space and convert to lat/lon
+    const centerX = canvasWidth / 2;
+    const centerY = canvasHeight / 2;
+    const centerPos = pixelToLatLon(centerX, centerY);
+    
+    if (centerPos.lat != null && centerPos.lon != null) {
+      centerCoordsEl.textContent = formatCoordinate(centerPos.lat, centerPos.lon, state.coordFormat);
+    } else {
+      centerCoordsEl.textContent = '---';
+    }
+  }
+
+  function updateMouseCoordTooltip(e) {
+    const mouseTooltip = document.getElementById('radar-mouse-coord-tooltip');
+    if (!mouseTooltip) return;
+    
+    // Skip tooltip updates while dragging the map
+    if (state.isPanning) return;
+    
+    // Get canvas-relative coordinates
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+    
+    // Convert mouse position to lat/lon using inverse of latLonToPixel
+    const centerPos = pixelToLatLon(mouseX, mouseY);
+    
+    if (centerPos.lat != null && centerPos.lon != null) {
+      const coordText = formatCoordinate(centerPos.lat, centerPos.lon, state.coordFormat);
+      mouseTooltip.textContent = coordText;
+      
+      // Position tooltip near cursor with boundary adjustment
+      let tooltipX = e.clientX - rect.left + 12;
+      let tooltipY = e.clientY - rect.top - 30;
+      
+      // Prevent tooltip from going off-screen right
+      const tooltipWidth = mouseTooltip.offsetWidth || 150;
+      if (tooltipX + tooltipWidth > canvasWidth) {
+        tooltipX = e.clientX - rect.left - tooltipWidth - 12;
+      }
+      
+      // Prevent tooltip from going off-screen bottom
+      const tooltipHeight = mouseTooltip.offsetHeight || 24;
+      if (tooltipY + tooltipHeight > canvasHeight) {
+        tooltipY = e.clientY - rect.top - tooltipHeight - 10;
+      }
+      
+      mouseTooltip.style.left = tooltipX + 'px';
+      mouseTooltip.style.top = tooltipY + 'px';
+    }
+  }
+
+  // ===== INVERSE: PIXEL → LAT/LON =====
+  // Convert canvas pixel position back to lat/lon (inverse of latLonToPixel)
+  function pixelToLatLon(pixelX, pixelY) {
+    const zoom = ZOOM_LEVELS[state.zoomLevel] || 1;
+    const scale = (canvasWidth / 512) * zoom;
+    const imgW = 512 * scale;
+    const imgH = 512 * scale;
+    
+    const offsetX = (canvasWidth - imgW) / 2 + state.panX;
+    const offsetY = (canvasHeight - imgH) / 2 + state.panY;
+    
+    // Convert canvas pixel to image-local coordinate (0-512 space)
+    const imageX = ((pixelX - offsetX) / scale);
+    const imageY = ((pixelY - offsetY) / scale);
+    
+    // Convert image coordinate to lat/lon using inverse of latLonToPixel
+    const bbox = window.latLonToBboxEPSG3857(state.lat, state.lon, window.RADAR_BBOX_RADIUS_KM);
+    const [minx, miny, maxx, maxy] = bbox;
+    
+    // Inverse: pixel → meters in EPSG:3857
+    const x = minx + (imageX / 512) * (maxx - minx);
+    const y = maxy - (imageY / 512) * (maxy - miny); // inverted Y
+    
+    // Inverse of latToY: meters → lat
+    const latFromY = (360 * Math.atan(Math.exp(y * Math.PI / 20037508.34)) / Math.PI) - 90;
+    
+    // Convert meters → lon
+    const lon = x * 180 / 20037508.34;
+    
+    return { lat: latFromY, lon };
+  }
+
+  // ===== CENTER POSITION CALCULATION =====
+  // Get the lat/lon at the center of the canvas viewport
+  function getCenterLatLon() {
+    const centerX = canvasWidth / 2;
+    const centerY = canvasHeight / 2;
+    return pixelToLatLon(centerX, centerY);
+  }
+
   // ===== UTILITY =====
   function getZoomPercent() {
     return Math.round((ZOOM_LEVELS[state.zoomLevel] || 1) * 100);
@@ -6986,6 +7625,7 @@ window.getRadarTimestampsForLayer = getRadarTimestampsForLayer;
     toggleFullscreen,
     togglePins,
     updatePins,
+    toggleGrid,
     getZoomPercent,
     getState: () => ({ ...state }),
   };
@@ -11992,10 +12632,14 @@ async function loadRadarCard(lat, lon) {
         <div class="radar-header-section">
           <select class="radar-layer-select" id="radar-layer-select" title="Radar layer">${layerOptions}</select>
           <span class="radar-timestamp" id="radar-timestamp">--:--</span>
-          <button class="radar-btn radar-btn-pins radar-tooltip" id="radar-pins-btn" data-tooltip="Toggle location pins" title="Pins">📌</button>
+          <button class="radar-btn radar-btn-pins radar-tooltip" id="radar-pins-btn" data-tooltip="Toggle location pins (G)" title="Pins">📌</button>
+          <button class="radar-btn radar-tooltip" id="radar-grid-btn" data-tooltip="Toggle grid (G)" title="Grid">▦</button>
           <button class="radar-btn radar-tooltip" id="radar-load-all-btn" data-tooltip="Load all cached frames">Load All</button>
           <button class="radar-btn radar-fullscreen-btn radar-tooltip" id="radar-fullscreen-btn" data-tooltip="Toggle fullscreen">⛶</button>
         </div>
+        
+        <!-- Coordinate readout section -->
+        <div id="radar-coord-readout-section" class="radar-header-section"></div>
       </div>
       
       <!-- Canvas Display -->
@@ -12124,6 +12768,14 @@ function bindRadarPlayerEvents() {
   if (pinsBtn) {
     pinsBtn.addEventListener('click', () => {
       if (window.RADAR_PLAYER) window.RADAR_PLAYER.togglePins();
+    });
+  }
+
+  // Grid toggle button
+  const gridBtn = document.getElementById('radar-grid-btn');
+  if (gridBtn) {
+    gridBtn.addEventListener('click', () => {
+      if (window.RADAR_PLAYER) window.RADAR_PLAYER.toggleGrid();
     });
   }
 
