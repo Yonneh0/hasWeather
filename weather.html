@@ -7278,27 +7278,23 @@ function formatCoordinate(lat, lon, format) {
     const [minx, miny, maxx, maxy] = bbox;
 
     // Calculate visible area in the original coordinate space
-    // After ctx.translate(state.panX, state.panY), the visible canvas bounds are:
-    //   Left: -state.panX  Right: canvasWidth - state.panX
-    //   Top: -state.panY   Bottom: canvasHeight - state.panY
+    // The image is drawn at (offsetX, offsetY) with size (imgW, imgH) in canvas space
+    // Inside ctx.translate(state.panX, state.panY), offsetX/offsetY already include pan.
+    // Visible canvas bounds in this shifted coordinate system: [0, 0] to [canvasWidth, canvasHeight]
     const metersPerPixel = (20037508.34 * 180) / (512 * scale);
 
     // Visible bounds in original coordinate space (EPSG:3857 meters)
-    const visMinX = minx + (-state.panX - offsetX) / imgW * (maxx - minx);
-    const visMaxX = minx + (canvasWidth - state.panX - offsetX) / imgW * (maxx - minx);
-    const visMinY = maxy - (canvasHeight - state.panY - offsetY) / imgH * (maxy - miny);
-    const visMaxY = maxy - (-state.panY - offsetY) / imgH * (maxy - miny);
+    const visMinX = minx + (-offsetX) / imgW * (maxx - minx);
+    const visMaxX = minx + (canvasWidth - offsetX) / imgW * (maxx - minx);
+    const visMinY = maxy - (canvasHeight - offsetY) / imgH * (maxy - miny);
+    const visMaxY = maxy - (-offsetY) / imgH * (maxy - miny);
 
-    // Determine which lines are on the borders of the radar image
-    // Border lines: top edge, bottom edge, left edge, right edge
-    const borderTopY = offsetY;
-    const borderBottomY = offsetY + imgH;
-    const borderLeftX = offsetX;
-    const borderRightX = offsetX + imgW;
-
-    // Draw vertical grid lines (longitude)
+    // Draw vertical grid lines (longitude) — only within the radar image bounds
     for (let m = Math.ceil(visMinX / spacingKm) * spacingKm; m <= visMaxX; m += spacingKm) {
       const px = offsetX + ((m - minx) / (maxx - minx)) * imgW;
+      // Only draw if within the radar image horizontal bounds
+      if (px < offsetX || px > offsetX + imgW) continue;
+      
       ctx.beginPath();
       ctx.strokeStyle = GRID_LINE_COLOR;
       ctx.lineWidth = GRID_LINE_WIDTH;
@@ -7306,21 +7302,25 @@ function formatCoordinate(lat, lon, format) {
       ctx.lineTo(px, offsetY + imgH);
       ctx.stroke();
 
-      // Put "#" marker at border intersections only
+      // Put "#" marker at left/right border intersections only
       const labelM = Math.round(m / spacingKm);
       
-      // Check if this line intersects the left or right border of the radar image
-      if (px >= borderLeftX - 1 && px <= borderLeftX + 1) {
+      // Check if this line intersects the left border of the radar image
+      if (Math.abs(px - offsetX) < 2) {
         drawGridBorderLabel(ctx, px, offsetY + imgH + GRID_LABEL_PADDING, '#' + labelM, 'h', metersPerPixel);
       }
-      if (px >= borderRightX - 1 && px <= borderRightX + 1) {
+      // Check if this line intersects the right border of the radar image
+      if (Math.abs(px - (offsetX + imgW)) < 2) {
         drawGridBorderLabel(ctx, px, offsetY + imgH + GRID_LABEL_PADDING, '#' + labelM, 'h', metersPerPixel);
       }
     }
 
-    // Draw horizontal grid lines (latitude)
+    // Draw horizontal grid lines (latitude) — only within the radar image bounds
     for (let m = Math.ceil(visMinY / spacingKm) * spacingKm; m <= visMaxY; m += spacingKm) {
       const py = offsetY + ((maxy - m) / (maxy - miny)) * imgH;
+      // Only draw if within the radar image vertical bounds
+      if (py < offsetY || py > offsetY + imgH) continue;
+      
       ctx.beginPath();
       ctx.strokeStyle = GRID_LINE_COLOR;
       ctx.lineWidth = GRID_LINE_WIDTH;
@@ -7328,14 +7328,15 @@ function formatCoordinate(lat, lon, format) {
       ctx.lineTo(offsetX + imgW, py);
       ctx.stroke();
 
-      // Put "#" marker at border intersections only
+      // Put "#" marker at top/bottom border intersections only
       const labelM = Math.round(m / spacingKm);
       
-      // Check if this line intersects the top or bottom border of the radar image
-      if (py >= borderTopY - 1 && py <= borderTopY + 1) {
+      // Check if this line intersects the top border of the radar image
+      if (Math.abs(py - offsetY) < 2) {
         drawGridBorderLabel(ctx, offsetX - GRID_LABEL_PADDING - 2, py, '#' + labelM, 'v', metersPerPixel);
       }
-      if (py >= borderBottomY - 1 && py <= borderBottomY + 1) {
+      // Check if this line intersects the bottom border of the radar image
+      if (Math.abs(py - (offsetY + imgH)) < 2) {
         drawGridBorderLabel(ctx, offsetX - GRID_LABEL_PADDING - 2, py, '#' + labelM, 'v', metersPerPixel);
       }
     }
