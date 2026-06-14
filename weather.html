@@ -6051,22 +6051,17 @@ function formatCoordinate(lat, lon, format) {
   const PIN_LABEL_MIN_ZOOM = 1.5; // minimum zoom to show labels
   const PIN_LABEL_MAX_ZOOM = 3; // maximum zoom before labels get too big
   
-  // Grid rendering constants
-  const GRID_LINE_COLOR = 'rgba(255, 255, 255, 0.12)';
-  const GRID_LINE_WIDTH = 1;
-  const GRID_LABEL_COLOR = 'rgba(255, 255, 255, 0.65)';
-  const GRID_LABEL_BG_COLOR = 'rgba(13, 13, 26, 0.8)';
-  const GRID_LABEL_BORDER_COLOR = 'rgba(255, 255, 255, 0.1)';
-  const GRID_LABEL_FONT_SIZE = 9;
-  const GRID_LABEL_PADDING = 2;
+  // Grid rendering constants — thin faint lines with border "#" markers
+  const GRID_LINE_COLOR = 'rgba(255, 255, 255, 0.06)';
+  const GRID_LINE_WIDTH = 0.5;
+  const GRID_LABEL_COLOR = 'rgba(255, 255, 255, 0.35)';
+  const GRID_LABEL_FONT_SIZE = 7;
   // Grid spacing in km per zoom level — ensures ≥2 lines always visible on screen
   // Zoom 0 (1x): 400km area → ~50km spacing → ~8 lines
   // Zoom 1 (1.5x): ~267km visible → ~30km spacing → ~9 lines needed
   // Zoom 2 (2x): ~200km visible → ~25km spacing → ~8 lines needed
   // Zoom 3 (3x): ~133km visible → ~15km spacing → ~9 lines needed
   const GRID_SPACING_KM = [50, 30, 25, 15];
-  // Label every Nth line per zoom level — avoids label clutter at higher zooms
-  const GRID_LABEL_INTERVAL = [2, 3, 3, 4];
   // Expose speed options globally so main.js can use them
   window.SPEED_OPTIONS = [0.5, 1, 2, 4, 8];
   const MAX_ZOOM = 3;
@@ -6112,7 +6107,7 @@ function formatCoordinate(lat, lon, format) {
     showPins: true,
     
     // Grid state
-    showGrid: false,
+    showGrid: true,  // enabled by default
   };
 
   // ===== CANVAS SETUP =====
@@ -7268,7 +7263,6 @@ function formatCoordinate(lat, lon, format) {
   function drawGrid(ctx, offsetX, offsetY, scale, imgW, imgH) {
     const zoom = ZOOM_LEVELS[state.zoomLevel] || 1;
     const spacingKm = GRID_SPACING_KM[state.zoomLevel];
-    const labelInterval = GRID_LABEL_INTERVAL[state.zoomLevel];
 
     // The radar image covers a fixed geographic area (400km × 400km).
     // We need to find which grid lines are visible in the current viewport.
@@ -7284,7 +7278,6 @@ function formatCoordinate(lat, lon, format) {
     const [minx, miny, maxx, maxy] = bbox;
 
     // Calculate visible area in the original coordinate space
-    // The image is drawn at (offsetX, offsetY) with size (imgW, imgH) in canvas space
     // After ctx.translate(state.panX, state.panY), the visible canvas bounds are:
     //   Left: -state.panX  Right: canvasWidth - state.panX
     //   Top: -state.panY   Bottom: canvasHeight - state.panY
@@ -7296,6 +7289,13 @@ function formatCoordinate(lat, lon, format) {
     const visMinY = maxy - (canvasHeight - state.panY - offsetY) / imgH * (maxy - miny);
     const visMaxY = maxy - (-state.panY - offsetY) / imgH * (maxy - miny);
 
+    // Determine which lines are on the borders of the radar image
+    // Border lines: top edge, bottom edge, left edge, right edge
+    const borderTopY = offsetY;
+    const borderBottomY = offsetY + imgH;
+    const borderLeftX = offsetX;
+    const borderRightX = offsetX + imgW;
+
     // Draw vertical grid lines (longitude)
     for (let m = Math.ceil(visMinX / spacingKm) * spacingKm; m <= visMaxX; m += spacingKm) {
       const px = offsetX + ((m - minx) / (maxx - minx)) * imgW;
@@ -7306,10 +7306,15 @@ function formatCoordinate(lat, lon, format) {
       ctx.lineTo(px, offsetY + imgH);
       ctx.stroke();
 
-      // Label every Nth line
+      // Put "#" marker at border intersections only
       const labelM = Math.round(m / spacingKm);
-      if (labelM % labelInterval === 0) {
-        drawGridLabel(ctx, px, offsetY + imgH + GRID_LABEL_PADDING, String(labelM), 'h', metersPerPixel);
+      
+      // Check if this line intersects the left or right border of the radar image
+      if (px >= borderLeftX - 1 && px <= borderLeftX + 1) {
+        drawGridBorderLabel(ctx, px, offsetY + imgH + GRID_LABEL_PADDING, '#' + labelM, 'h', metersPerPixel);
+      }
+      if (px >= borderRightX - 1 && px <= borderRightX + 1) {
+        drawGridBorderLabel(ctx, px, offsetY + imgH + GRID_LABEL_PADDING, '#' + labelM, 'h', metersPerPixel);
       }
     }
 
@@ -7323,22 +7328,27 @@ function formatCoordinate(lat, lon, format) {
       ctx.lineTo(offsetX + imgW, py);
       ctx.stroke();
 
-      // Label every Nth line
+      // Put "#" marker at border intersections only
       const labelM = Math.round(m / spacingKm);
-      if (labelM % labelInterval === 0) {
-        drawGridLabel(ctx, offsetX - GRID_LABEL_PADDING, py, String(labelM), 'v', metersPerPixel);
+      
+      // Check if this line intersects the top or bottom border of the radar image
+      if (py >= borderTopY - 1 && py <= borderTopY + 1) {
+        drawGridBorderLabel(ctx, offsetX - GRID_LABEL_PADDING - 2, py, '#' + labelM, 'v', metersPerPixel);
+      }
+      if (py >= borderBottomY - 1 && py <= borderBottomY + 1) {
+        drawGridBorderLabel(ctx, offsetX - GRID_LABEL_PADDING - 2, py, '#' + labelM, 'v', metersPerPixel);
       }
     }
   }
 
-  function drawGridLabel(ctx, x, y, text, orientation, metersPerPixel) {
-    const fontSize = Math.max(7, Math.min(10, GRID_LABEL_FONT_SIZE * (metersPerPixel / 5))); // scale font size with zoom
+  function drawGridBorderLabel(ctx, x, y, text, orientation, metersPerPixel) {
+    const fontSize = Math.max(6, Math.min(8, GRID_LABEL_FONT_SIZE * (metersPerPixel / 5))); // scale font size with zoom
     
     ctx.font = `${Math.round(fontSize)}px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
     ctx.textAlign = orientation === 'h' ? 'center' : 'right';
     ctx.textBaseline = 'middle';
     
-    const padding = GRID_LABEL_PADDING;
+    const padding = 1;
     const textMetrics = ctx.measureText(text);
     const bgW = textMetrics.width + padding * 2;
     const bgH = fontSize + padding * 2;
@@ -7352,14 +7362,9 @@ function formatCoordinate(lat, lon, format) {
       bgY = y - bgH / 2;
     }
     
-    // Draw label background
-    ctx.fillStyle = GRID_LABEL_BG_COLOR;
+    // Draw label background (very subtle)
+    ctx.fillStyle = 'rgba(13, 13, 26, 0.5)';
     ctx.fillRect(bgX, bgY, bgW, bgH);
-    
-    // Draw label border
-    ctx.strokeStyle = GRID_LABEL_BORDER_COLOR;
-    ctx.lineWidth = 0.5;
-    ctx.strokeRect(bgX, bgY, bgW, bgH);
     
     // Draw label text
     ctx.fillStyle = GRID_LABEL_COLOR;
