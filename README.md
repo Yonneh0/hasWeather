@@ -1,55 +1,5 @@
 # hasWeather (Under Development: Proceed with caution)
 
-## Changelog
-
-### 2026-06-13 — Remove Favorites System and City Search (Major Simplification)
-
-This release removes the favorites system and city search functionality. The app now simply displays the nearest 6 cities based on user location.
-
-**Changes:**
-- **Favorites Removed**: All favorites button, dropdown, search, and city management logic removed
-- **City Search Removed**: Location prompt modal and city input functionality removed
-- **Favorites UI Deleted**: `js/favorites.js` deleted entirely
-- **Favorites CSS Removed**: All `.fav-*` CSS classes removed from `interactive.css`
-- **Favorites References Removed**: FavoritesManager references removed from `render.js`
-
-**Fixes:**
-1. Removed all favorites system code and references
-2. Removed city search functionality and location prompt modal
-3. Cleaned up localStorage keys for favorites (hasW_favorites, hasW_favDetails)
-
-### 2026-06-13 — Per-City NWS Enhancement Toggle (Major Refactor)
-
-This release replaces the global source toggle (NWS vs OM for ALL cities) with per-city NWS enhancement toggles. The changes consolidate `favorites-ui.js` into `favorites.js`, restructure the CSS, and refactor the API fetching logic to always use OM as base data with optional NWS enhancement where available.
-
-**Changes:**
-- **Architecture**: Always fetch Open-Meteo as base for all cities; NWS is fetched only where available as supplemental enhancement (no global toggle)
-- **NWS Toggle Button**: Each city card now has a ⚡ toggle button that appears when NWS coverage is available for that city — users can selectively enhance individual cities with NWS data
-- **Visual Feedback**: Toggle buttons show green (success), red (error), amber (outside bounds), or blue (processing) feedback on click
-- **Cross-Session Persistence**: NWS toggle state is persisted to localStorage — user preferences are remembered across app reloads
-- **Cache Validation**: Stale cache entries are detected and cleaned up during cross-session restore
-- **Bounds Cache TTL**: NWS bounds cache now has a 1-hour TTL to prevent memory leak
-- **Source Badge Logic**: Enhanced cities always show "ENHANCED" badge; OM-only cities always show "OM" badge (no empty badges)
-- **Fullscreen Mode**: Game panel fullscreen restored to fill the viewport (was constrained to 640px centered)
-- **Dead CSS Removed**: Unused `.nws-toggle-btn.feedback-*` CSS classes removed
-- **HTML Entity Fix**: `escapeHTML()` now uses standard HTML entities instead of broken Unicode escapes
-- **File Consolidation**: `favorites-ui.js` deleted; its code merged into `favorites.js`
-- **Source Toggle Removed**: Global NWS/OM toggle button and related code removed from UI
-- **Background Refresh**: Conditional cache invalidation by source type (NWS-only vs OM cities)
-
-**Fixes:**
-1. Fixed contradictory `source`/`nwsActive` state in cross-source cached data
-2. Fixed enhanced city badge showing "OM" instead of "ENHANCED" when `nwsActive` is false
-3. Fixed fullscreen game panel no longer filling the viewport
-4. Removed dead CSS classes for NWS toggle feedback states
-5. Added TTL to NWS bounds cache to prevent memory leak
-6. Added processing feedback for rapid toggle clicks
-7. Added specific feedback for partial NWS data (not just generic error)
-8. Fixed `escapeHTML()` using broken Unicode escape sequences
-9. Added `place_id !== ''` check for empty placeId in event delegation
-10. Fixed source badge always showing "OM" for cities without NWS bounds
-11. Conditional cache invalidation by source type during background refresh
-
 completely self-contained single file weather app, that uses public sources, with proper local caching, to provide reliable comprehensive weather information, with 0 ads. Brought to you by `Carls' Jr`.
 
 ## Features
@@ -57,6 +7,7 @@ completely self-contained single file weather app, that uses public sources, wit
 - Multiple city monitoring in a responsive grid layout (configurable 0–20 cities)
 - Dual data source architecture: Open-Meteo as base for all cities, NWS as supplemental where available (enhanced mode)
 - Weather data from Open-Meteo API (temperature, humidity, wind, precipitation, UV index, visibility, surface pressure, air quality, 24-hour hourly forecast) + NWS API (current conditions, hourly forecast, alerts)
+- Radar imagery from NOAA/NCEP GeoServer WMS — MRMS composite radar data (Base Reflectivity, Composite Reflectivity, Echo Tops, Precipitation Type) with Cache API storage, layer selector dropdown, request deduplication, and size-based cache eviction (~250MB limit)
 - localStorage-based caching with configurable TTLs per data type (15 min for weather/AQI, 24h for geocoding/IP, 10 min for nearby cities) and LRU eviction (default: 500 entries per type)
 - Nearby city discovery via Nominatim with bearing-based diversity selection and automatic display of up to 6 nearest cities
 - °F/°C unit toggle with debouncing
@@ -80,6 +31,7 @@ completely self-contained single file weather app, that uses public sources, wit
 - **Build:** Node.js (no frameworks, no npm packages required at runtime)
 - **Weather Data:** [Open-Meteo API](https://open-meteo.com/) (forecast + current) + [NWS API](https://api.weather.gov/) (current conditions, hourly forecast, alerts)
 - **Air Quality:** [Open-Meteo Air Quality API](https://open-meteo.com/air-quality-api)
+- **Radar Imagery:** [NOAA/NCEP GeoServer WMS](https://opengeo.ncep.noaa.gov/geoserver/conus/) — MRMS composite radar data (Base Reflectivity, Composite Reflectivity, Echo Tops, Precipitation Type)
 - **Geocoding:** [Open-Meteo Geocoding API](https://geocoding-api.open-meteo.com/) + [Nominatim/OSM](https://nominatim.openstreetmap.org/)
 - **Location:** Browser Geolocation API, [ipinfo.io](https://ipinfo.io/) (fallback)
 - **Chart Rendering:** Canvas-based custom implementation
@@ -135,6 +87,7 @@ js/
   api-nws.js          1162 lines — NWS API client (gridpoint data, observation stations, alerts) with rate limiting and cross-source lookup
   api-openmeteo.js     314 lines — Open-Meteo weather/AQI API client with deduplication and retry logic
   api-openstreetmap.js 184 lines — Nominatim/OSM nearby city discovery
+  api-radar.js         549 lines — NOAA/NCEP GeoServer WMS radar API client (MRMS composite imagery, Cache API storage, request deduplication)
   cache.js             189 lines — DataCache (localStorage caching with configurable TTLs and LRU eviction)
   charts.js            302 lines — canvas chart rendering (merged chart, combined chart, particles)
   constants.js          72 lines — shared constants (WMO codes & gradients)
@@ -149,6 +102,7 @@ rag-docs/
   geocoding-api.md        137 lines — documentation for the geocoding endpoint
   weather-forecast-api.md 204 lines — documentation for the weather forecast endpoint
   weather.gov-api.md     1200 lines — documentation for the NWS API endpoint
+  WeatherGov-Radar-API.md 400+ lines — documentation for the Weather.gov radar endpoints (WMS, metadata)
 ```
 
 ## Caching
@@ -193,14 +147,33 @@ When the cache exceeds `DataCache.MAX_ENTRIES_PER_TYPE` (default: 500 entries pe
 - Before API calls, duplicate cities (within 0.01° of each other) are deduplicated — only unique coordinate pairs are fetched
 - `DataCache.MAX_ENTRIES_PER_TYPE` is configurable: set `DataCache.MAX_ENTRIES_PER_TYPE = 1000` before the cache initializes to change the limit
 
+### Radar Cache Architecture
+
+Radar images use **Browser Cache API** (CacheStorage) instead of localStorage — binary images (~100-300KB each as PNG) are stored directly in CacheStorage with frame-based keys for future animated clip playback. Metadata (available timestamps, layer info) is tracked in localStorage.
+
+- **Cache API key pattern:** `https://radar.hasweather.local/frame/{lat}/{lon}/{layer}/frame/{timestamp}`
+- **localStorage metadata:** `hasw_cache_radar_meta_{lat}_{lon}_{layer}` — `{ timestamps: [...], layer, lat, lon, lastUpdated }`
+- **Cache eviction:** ~250MB total limit — evicts oldest frames when exceeded
+- **Timestamp caching:** GetCapabilities response cached for 2 minutes to avoid repeated calls
+
+### Radar Card
+
+A standalone card displayed below the city grid, centered on the user's location. It displays live NEXRAD radar imagery from the NOAA/NCEP GeoServer WMS service (MRMS composite). Features include:
+
+- **Layer Selector**: Dropdown to switch between Base Reflectivity, Composite Reflectivity, Echo Tops, and Precipitation Type layers
+- **Request Deduplication**: Prevents duplicate WMS fetches for the same location/layer/timestamp via Map-based pending fetch tracking
+- **Exponential Backoff Retry**: 3 retries with 1s/2s/4s delays for failed WMS requests
+- **Size-Based Cache Eviction**: ~250MB total limit — evicts oldest frames when limit is exceeded
+
 Additional `localStorage` keys used by the app:
 
 | Key                     | Purpose                                  |
 |-------------------------|------------------------------------------|
 | `hasW_maxCities`        | User-configured max city count (default: 6) |
 | `hasW_donkeyHighScore`  | Donkey Runner minigame high score         |
+| `hasw_cache_radar_meta_*` | Radar frame timestamps per location/layer |
 
-Clear all cached data via browser dev tools → Application → Local Storage → remove keys starting with `hasw_cache_`, `hasw_lru_`, or `hasW_`.
+Clear all cached data via browser dev tools → Application → Local Storage → remove keys starting with `hasw_cache_`, `hasw_lru_`, or `hasW_`. For radar cache, also clear Cache Storage entries in the `hasw-radar-v1` cache.
 
 ## License
 
@@ -212,7 +185,7 @@ MIT. (google it yourself <3)
 - `rag-docs/geocoding-api.md` — current information about the geocoding-api
 - `rag-docs/weather-forecast-api.md` — current information about the weather forecast endpoint
 - `rag-docs/weather.gov-api.md` — current information about the NWS API endpoint
-
+- `rag-docs/WeatherGov-Radar-API.md` — current information about the Weather.gov radar endpoints (WMS, metadata)
 
 ## Aboot
 

@@ -20,7 +20,9 @@ const RADAR_LAYERS = {
 
 // Cache API constants
 const RADAR_CACHE_NAME = 'hasw-radar-v1';
-const RADAR_FRAME_PREFIX = 'radar:';
+// Fake HTTP prefix for cache keys — required because Cache API only accepts http(s) URLs
+const RADAR_FAKE_BASE = 'https://radar.hasweather.local/';
+const RADAR_FRAME_PREFIX = `${RADAR_FAKE_BASE}frame/`;
 const RADAR_FRAMES_KEY = 'frames';
 const RADAR_MAX_CACHE_BYTES = 250 * 1024 * 1024; // ~250MB total limit
 
@@ -64,17 +66,17 @@ function buildRadarImageUrl(lat, lon, layer, timestamp) {
 }
 
 // ===== CACHE KEY GENERATION =====
+// Build a fake HTTP URL as the cache key — Cache API only accepts http(s) URLs
 function radarFrameCacheKey(lat, lon, layer, timestamp) {
-  const locKey = radarLocationKey(lat, lon, layer);
-  return `${locKey}:frame:${timestamp}`;
+  return `${RADAR_FRAME_PREFIX}${lat.toFixed(4)}/${lon.toFixed(4)}/${layer}/frame/${timestamp}`;
 }
 
 function radarFramesCacheKey(lat, lon, layer) {
-  return `${radarLocationKey(lat, lon, layer)}:${RADAR_FRAMES_KEY}`;
+  return `${RADAR_FAKE_BASE}${lat.toFixed(4)}/${lon.toFixed(4)}/${layer}/${RADAR_FRAMES_KEY}`;
 }
 
-function radarLocationKey(lat, lon, layer) {
-  return `${RADAR_FRAME_PREFIX}${lat.toFixed(4)}:${lon.toFixed(4)}:${layer}`;
+function radarLocationPrefix(lat, lon, layer) {
+  return `${RADAR_FAKE_BASE}${lat.toFixed(4)}/${lon.toFixed(4)}/${layer}/`;
 }
 
 // ===== LATEST RADAR TIMESTAMP CACHE =====
@@ -255,7 +257,7 @@ async function invalidateRadarFrame(lat, lon, layer, timestamp) {
 async function clearRadarCacheForLocation(lat, lon) {
   try {
     const cache = await getCache();
-    const prefix = `${RADAR_FRAME_PREFIX}${lat.toFixed(4)}:${lon.toFixed(4)}:`;
+    const prefix = `${RADAR_FAKE_BASE}${lat.toFixed(4)}/${lon.toFixed(4)}/`;
     const entries = await cache.keys();
     for (const key of entries) {
       if (key.url.startsWith(prefix)) {
@@ -279,7 +281,7 @@ async function clearRadarCacheForLocation(lat, lon) {
 async function clearRadarCacheForLayer(lat, lon, layer) {
   try {
     const cache = await getCache();
-    const prefix = `${RADAR_FRAME_PREFIX}${lat.toFixed(4)}:${lon.toFixed(4)}:${layer}`;
+    const prefix = `${RADAR_FAKE_BASE}${lat.toFixed(4)}/${lon.toFixed(4)}/${layer}/`;
     const entries = await cache.keys();
     for (const key of entries) {
       if (key.url.startsWith(prefix)) {
@@ -295,7 +297,7 @@ async function clearRadarCacheForLayer(lat, lon, layer) {
 async function evictCacheIfNecessary(lat, lon, layer) {
   try {
     const cache = await getCache();
-    const prefix = `${RADAR_FRAME_PREFIX}${lat.toFixed(4)}:${lon.toFixed(4)}:${layer}:`;
+    const prefix = `${RADAR_FAKE_BASE}${lat.toFixed(4)}/${lon.toFixed(4)}/${layer}/frame/`;
     let totalSize = 0;
     
     // Calculate total size of all radar frames for this location/layer
@@ -314,10 +316,12 @@ async function evictCacheIfNecessary(lat, lon, layer) {
     
     // Evict oldest frames if over limit
     if (totalSize > RADAR_MAX_CACHE_BYTES) {
-      // Sort by timestamp (oldest first) — extract from key URL
+      // Sort by timestamp (oldest first) — extract from key URL (timestamp is after "frame/")
       frameEntries.sort((a, b) => {
-        const tsA = parseInt(a.key.split(':')[a.key.split(':').length - 1]);
-        const tsB = parseInt(b.key.split(':')[b.key.split(':').length - 1]);
+        const aParts = a.key.split('/');
+        const bParts = b.key.split('/');
+        const tsA = parseInt(aParts[aParts.length - 1]);
+        const tsB = parseInt(bParts[bParts.length - 1]);
         return tsA - tsB;
       });
       
