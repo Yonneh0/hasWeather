@@ -1147,149 +1147,6 @@ body {
   justify-content: center;
   padding: 1rem 2rem 2rem;
 }
-
-/* ===== RADAR CARD ===== */
-.radar-card {
-  width: 100%;
-  max-width: 512px;
-  margin: 0 auto 1rem;
-  border-radius: 16px;
-  overflow: hidden;
-  background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.04)), #0d0d1a;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
-  position: relative;
-}
-
-.radar-card-header {
-  padding: 0.75rem 1rem;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.radar-card-title {
-  font-size: 0.85rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: rgba(255, 255, 255, 0.7);
-}
-
-.radar-card-timestamp {
-  font-size: 0.7rem;
-  color: rgba(255, 255, 255, 0.4);
-  margin-left: auto;
-}
-
-.radar-card-body {
-  padding: 0.5rem;
-  display: flex;
-  justify-content: center;
-}
-
-.radar-image {
-  width: 100%;
-  max-width: 512px;
-  height: auto;
-  aspect-ratio: 1 / 1;
-  object-fit: contain;
-  border-radius: 8px;
-  display: none; /* hidden until loaded */
-}
-
-/* Show image when it has a valid src attribute */
-.radar-image[src]:not([src=""]) {
-  display: block !important;
-}
-
-/* Loading spinner for radar card */
-.radar-card.radar-loading .radar-image {
-  display: none !important;
-}
-
-.radar-card.radar-loading::after {
-  content: '';
-  display: inline-block;
-  width: 48px;
-  height: 48px;
-  border: 3px solid rgba(255, 255, 255, 0.1);
-  border-top-color: rgba(255, 255, 255, 0.6);
-  border-radius: 50%;
-  animation: radar-spinner 0.8s linear infinite;
-  margin: 1rem auto;
-}
-
-/* Layer selector dropdown */
-.radar-layer-select {
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 4px;
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 0.7rem;
-  padding: 0.15rem 0.3rem;
-  cursor: pointer;
-}
-
-.radar-layer-select:hover {
-  background: rgba(255, 255, 255, 0.1);
-}
-
-/* Clip playback controls */
-.radar-clip-controls {
-  display: none; /* hidden until clip is active */
-  padding: 0.5rem 1rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-}
-
-.radar-clip-controls.active {
-  display: flex !important;
-}
-
-.radar-clip-btn {
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 4px;
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 0.7rem;
-  padding: 0.2rem 0.5rem;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-}
-
-.radar-clip-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.radar-clip-btn.active {
-  background: rgba(0, 48, 135, 0.4);
-  border-color: rgba(0, 48, 135, 0.6);
-}
-
-.radar-clip-progress {
-  flex: 1;
-  max-width: 200px;
-  height: 4px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 2px;
-  overflow: hidden;
-}
-
-.radar-clip-progress-bar {
-  height: 100%;
-  background: linear-gradient(90deg, #4a9eff, #64b5f6);
-  border-radius: 2px;
-  transition: width 0.1s linear;
-}
-
-@keyframes radar-spinner {
-  to { transform: rotate(360deg); }
-}
 /* ===== DONKEY RUNNER MINIGAME ===== */
 .donkey-panel {
   position: fixed;
@@ -2033,6 +1890,520 @@ body.donkey-fullscreen .donkey-panel.donkey-hidden {
 }
 
 </style>
+<style>
+/* ===== RADAR PLAYER - Enhanced radar UI with zoom, pan, timeline, and playback ===== */
+
+/* ===== RADAR CARD WRAPPER ===== */
+.radar-card-wrapper {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  padding: 1rem 2rem 2rem;
+}
+
+/* ===== RADAR PLAYER CARD ===== */
+#radar-player-card {
+  width: 100%;
+  max-width: 560px;
+  margin: 0 auto 1rem;
+  border-radius: 16px;
+  overflow: visible;
+  background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.04)), #0d0d1a;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+  position: relative;
+  transition: max-width 0.4s ease, border-radius 0.4s ease;
+}
+
+#radar-player-card.hidden {
+  display: none;
+}
+
+/* Fullscreen mode */
+#radar-player-card.fullscreen {
+  max-width: 100%;
+  border-radius: 0;
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  margin: 0;
+}
+
+/* ===== RADAR PLAYER HEADER / TITLEBAR ===== */
+.radar-player-header {
+  padding: 0.6rem 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: linear-gradient(180deg, rgba(255,255,255,0.02), transparent);
+  flex-wrap: wrap;
+}
+
+.radar-player-title {
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: rgba(255, 255, 255, 0.7);
+  white-space: nowrap;
+}
+
+/* Titlebar sections */
+.radar-header-section {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.radar-header-divider {
+  width: 1px;
+  height: 20px;
+  background: rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+}
+
+/* ===== BUTTONS ===== */
+.radar-btn {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.7rem;
+  padding: 0.2rem 0.5rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.2rem;
+  white-space: nowrap;
+  transition: background 0.15s, border-color 0.15s;
+  min-width: 28px;
+  height: 26px;
+}
+
+.radar-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.radar-btn:active {
+  transform: scale(0.96);
+}
+
+.radar-btn.active {
+  background: rgba(0, 48, 135, 0.4);
+  border-color: rgba(0, 48, 135, 0.6);
+  color: #fff;
+  box-shadow: 0 0 8px rgba(0, 48, 135, 0.3);
+}
+
+.radar-btn.active:hover {
+  background: rgba(0, 48, 135, 0.5);
+  border-color: rgba(0, 48, 135, 0.7);
+}
+
+/* Play button special styling */
+.radar-btn-play {
+  font-size: 0.85rem;
+  padding: 0.2rem 0.6rem;
+  min-width: 34px;
+}
+
+/* Zoom buttons */
+.radar-zoom-level-btn {
+  font-size: 0.65rem;
+  width: 32px;
+  height: 26px;
+  justify-content: center;
+}
+
+/* Speed selector */
+.radar-speed-select {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.65rem;
+  padding: 0.2rem 0.3rem;
+  cursor: pointer;
+  height: 26px;
+  min-width: 48px;
+}
+
+.radar-speed-select:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* Layer selector */
+.radar-layer-select {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.65rem;
+  padding: 0.2rem 0.3rem;
+  cursor: pointer;
+  height: 26px;
+  min-width: 100px;
+}
+
+.radar-layer-select:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* ===== TIMESTAMP DISPLAY ===== */
+.radar-timestamp {
+  font-size: 0.65rem;
+  color: rgba(255, 255, 255, 0.5);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ===== ZOOM TEXT ===== */
+.radar-zoom-text {
+  font-size: 0.6rem;
+  color: rgba(255, 255, 255, 0.4);
+  min-width: 36px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ===== CANVAS CONTAINER ===== */
+.radar-canvas-container {
+  position: relative;
+  width: 100%;
+  padding-bottom: 100%; /* Square aspect ratio */
+  overflow: hidden;
+  border-radius: 8px;
+  margin: 0.5rem;
+}
+
+/* ===== RADAR CANVAS ===== */
+#radar-canvas {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  cursor: grab;
+  border-radius: 8px;
+  transition: box-shadow 0.2s;
+}
+
+#radar-canvas:hover {
+  box-shadow: 0 0 20px rgba(0, 48, 135, 0.2);
+}
+
+#radar-canvas.grabbing {
+  cursor: grabbing;
+}
+
+/* ===== LOADING OVERLAY ===== */
+.radar-loading-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(13, 13, 26, 0.85);
+  z-index: 10;
+  border-radius: 8px;
+}
+
+.radar-loading-overlay.hidden {
+  display: none !important;
+}
+
+.radar-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(255, 255, 255, 0.1);
+  border-top-color: rgba(255, 255, 255, 0.6);
+  border-radius: 50%;
+  animation: radar-spinner 0.8s linear infinite;
+}
+
+.radar-loading-text {
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.5);
+  margin-top: 0.5rem;
+}
+
+/* ===== PREFETCH PROGRESS ===== */
+.radar-prefetch-bar {
+  width: 100%;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.radar-prefetch-progress {
+  height: 100%;
+  background: linear-gradient(90deg, #4a9eff, #64b5f6);
+  border-radius: 2px;
+  transition: width 0.2s ease;
+}
+
+.radar-prefetch-text {
+  font-size: 0.55rem;
+  color: rgba(255, 255, 255, 0.35);
+  text-align: center;
+  margin-top: 0.15rem;
+}
+
+/* ===== TIMELINE ===== */
+.radar-timeline-container {
+  padding: 0.5rem 0.75rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.radar-time-range {
+  font-size: 0.55rem;
+  color: rgba(255, 255, 255, 0.35);
+  text-align: center;
+  margin-bottom: 0.3rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.radar-timeline-progress-bar {
+  width: 100%;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 0.3rem;
+  cursor: grab;
+}
+
+.radar-timeline-progress-bar:active {
+  cursor: grabbing;
+}
+
+.radar-timeline-progress-bar:hover .radar-timeline-progress {
+  background: linear-gradient(90deg, #5ab5ff, #7cc4f8);
+}
+
+.radar-timeline-progress {
+  height: 100%;
+  background: linear-gradient(90deg, #4a9eff, #64b5f6);
+  border-radius: 2px;
+  transition: width 0.1s linear;
+}
+
+.radar-timeline {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  justify-content: center;
+  overflow-x: auto;
+  scrollbar-width: none; /* Firefox */
+}
+
+.radar-timeline::-webkit-scrollbar {
+  display: none; /* Chrome/Safari */
+}
+
+/* Timeline dots */
+.radar-timeline-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+  cursor: pointer;
+  transition: background 0.15s, transform 0.15s, box-shadow 0.15s;
+  flex-shrink: 0;
+}
+
+.radar-timeline-dot:hover {
+  background: rgba(74, 158, 255, 0.6);
+  transform: scale(1.5);
+}
+
+.radar-timeline-dot.active {
+  background: #4a9eff;
+  transform: scale(1.8);
+  box-shadow: 0 0 6px rgba(74, 158, 255, 0.5);
+  animation: dotPulse 1s ease-in-out infinite;
+}
+
+@keyframes dotPulse {
+  0%, 100% { box-shadow: 0 0 6px rgba(74, 158, 255, 0.5); }
+  50% { box-shadow: 0 0 12px rgba(74, 158, 255, 0.8); }
+}
+
+.radar-timeline-dot.uncached {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px dashed rgba(255, 255, 255, 0.15);
+}
+
+.radar-timeline-dot.uncached:hover {
+  background: rgba(255, 255, 255, 0.15);
+  transform: scale(1.5);
+}
+
+/* ===== PLAYBACK CONTROLS BAR ===== */
+.radar-playback-controls {
+  display: none; /* hidden until clip is active */
+  padding: 0.4rem 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.radar-playback-controls.active {
+  display: flex !important;
+}
+
+.radar-clip-frame-label {
+  font-size: 0.6rem;
+  color: rgba(255, 255, 255, 0.4);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ===== LOAD ALL FRAMES BUTTON ===== */
+.radar-load-all-btn {
+  font-size: 0.6rem;
+  padding: 0.15rem 0.4rem;
+  gap: 0.2rem;
+}
+
+.radar-check-icon {
+  color: #4caf50;
+}
+
+/* ===== FULLSCREEN BUTTON ===== */
+.radar-fullscreen-btn {
+  font-size: 0.75rem;
+}
+
+/* ===== KEYBOARD SHORTCUT TOOLTIP ===== */
+.radar-tooltip {
+  position: relative;
+}
+
+.radar-tooltip::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(20, 20, 30, 0.95);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.55rem;
+  padding: 0.2rem 0.4rem;
+  border-radius: 4px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s;
+  z-index: 100;
+}
+
+.radar-tooltip:hover::after {
+  opacity: 1;
+}
+
+/* ===== ANIMATIONS ===== */
+@keyframes radar-spinner {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.radar-fade-in {
+  animation: fadeIn 0.3s ease forwards;
+}
+
+/* ===== PLAYING STATE HIGHLIGHT ===== */
+.radar-player-header.playing .radar-btn-play {
+  background: rgba(0, 48, 135, 0.4);
+  border-color: rgba(0, 48, 135, 0.6);
+  color: #fff;
+}
+
+.radar-timeline-container.playing .radar-timeline-progress {
+  background: linear-gradient(90deg, #4a9eff, #7cc4f8);
+  box-shadow: 0 0 8px rgba(74, 158, 255, 0.3);
+}
+
+/* ===== RESPONSIVE ===== */
+@media (max-width: 600px) {
+  #radar-player-card {
+    max-width: 100%;
+    margin: 0;
+    border-radius: 0;
+  }
+
+  .radar-player-header {
+    padding: 0.4rem 0.5rem;
+    gap: 0.2rem;
+  }
+
+  .radar-header-divider {
+    display: none;
+  }
+
+  .radar-btn {
+    font-size: 0.6rem;
+    padding: 0.15rem 0.3rem;
+    min-width: 24px;
+    height: 24px;
+  }
+
+  .radar-timestamp {
+    font-size: 0.55rem;
+  }
+
+  .radar-zoom-text {
+    font-size: 0.55rem;
+    min-width: 30px;
+  }
+
+  .radar-canvas-container {
+    margin: 0.3rem;
+  }
+
+  .radar-timeline-dot {
+    width: 4px;
+    height: 4px;
+  }
+
+  .radar-timeline-dot.active {
+    transform: scale(2);
+  }
+
+  .radar-timeline-dot:hover {
+    transform: scale(1.5);
+  }
+
+  /* Stack controls on mobile */
+  .radar-player-header {
+    flex-wrap: wrap;
+  }
+
+  .radar-header-section {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 400px) {
+  .radar-layer-select {
+    min-width: 70px;
+    font-size: 0.55rem;
+  }
+
+  .radar-speed-select {
+    min-width: 36px;
+    font-size: 0.55rem;
+  }
+}
+</style>
 </head>
 <body translate="no">
 
@@ -2227,7 +2598,7 @@ const DataCache = {
     weather: 15 * 60 * 1000,      // 15 minutes
     airQuality: 15 * 60 * 1000,   // 15 minutes
     geocode: 24 * 60 * 60 * 1000, // 24 hours
-    nearby: 10 * 60 * 1000,       // 10 minutes
+    nearby: 15 * 60 * 1000,       // 15 minutes (aligned with weather TTL)
     ipLocation: 24 * 60 * 60 * 1000, // 24 hours
     nwsPoint: 15 * 60 * 1000,     // 15 minutes
     nwsForecast: 10 * 60 * 1000,  // 10 minutes
@@ -2573,12 +2944,12 @@ function getCityShortestTTL(city) {
     if (remaining < shortest) shortest = remaining;
   }
   
-  // Check NWS cache (Fix #16: Include NWS data in TTL calculation)
-  const nwsCityKey = nwsCacheKey(city.latitude, city.longitude);
-  const nwsEntry = localStorage.getItem(`hasw_cache_${nwsCityKey}`);
+  // Check NWS cache — only nwsPoint entries matter (they have the longest TTL among NWS types)
+  const nwsPointKey = nwsPointCacheKey(city.latitude, city.longitude);
+  const nwsEntry = localStorage.getItem(`hasw_cache_${nwsPointKey}`);
   if (nwsEntry) {
     const entry = JSON.parse(nwsEntry);
-    const ttl = DataCache.TTL[entry.type] || DataCache.TTL.nwsCityData;
+    const ttl = DataCache.TTL[entry.type] || DataCache.TTL.nwsPoint;
     const remaining = ttl - (Date.now() - entry.timestamp);
     if (remaining < shortest) shortest = remaining;
   }
@@ -3560,8 +3931,8 @@ function nwsPointCacheKey(lat, lon) {
 }
 
 // Build a NWS cache key for gridpoint data
-function nwsGridCacheKey(wfo, x, y) {
-  return `nws_grid_${wfo}_${x}_${y}`;
+function nwsGridCacheKey(wfo, x, y, suffix) {
+  return `nws_grid_${wfo}_${x}_${y}${suffix ? '_' + suffix : ''}`;
 }
 
 // Fetch with User-Agent header, rate limiting, and retry logic
@@ -4801,6 +5172,60 @@ async function getRadarCacheSize() {
   }
 }
 
+// ===== BATCH PRE-FETCH FOR A RANGE OF FRAMES =====
+// Fetch a contiguous range of frames for the radar player timeline
+async function prefetchFramesInRange(lat, lon, layer, startIdx, endIdx) {
+  const meta = getRadarMeta(lat, lon, layer);
+  if (!meta || !meta.timestamps.length) return;
+
+  const results = [];
+  for (let i = Math.max(0, startIdx); i <= Math.min(endIdx, meta.timestamps.length - 1); i++) {
+    const timestamp = meta.timestamps[i];
+    // Check cache first
+    const cached = await getCachedRadarFrameAsDataURL(lat, lon, layer, timestamp);
+    if (cached) continue; // Already cached
+
+    // Fetch from WMS
+    const result = await fetchRadarImageForTimestamp(lat, lon, layer, timestamp);
+    if (!result.error) {
+      results.push({ index: i, timestamp, dataUrl: result.imageUrl });
+    }
+  }
+  return results;
+}
+
+// ===== GET FRAME RANGE FOR PLAYBACK =====
+// Get frames within a time range for the radar player
+async function getFramesInRange(lat, lon, layer, startTimestamp, endTimestamp) {
+  const meta = getRadarMeta(lat, lon, layer);
+  if (!meta || !meta.timestamps.length) return [];
+
+  // Filter timestamps within range
+  const filtered = meta.timestamps.filter(ts => ts >= startTimestamp && ts <= endTimestamp);
+  const frames = [];
+
+  for (const ts of filtered) {
+    const dataUrl = await getCachedRadarFrameAsDataURL(lat, lon, layer, ts);
+    if (dataUrl) {
+      frames.push({ timestamp: ts, dataUrl });
+    }
+  }
+
+  return frames;
+}
+
+// ===== CHECK IF ALL FRAMES IN RANGE ARE CACHED =====
+async function areFramesCachedInRange(lat, lon, layer, startIdx, endIdx) {
+  const meta = getRadarMeta(lat, lon, layer);
+  if (!meta || !meta.timestamps.length) return false;
+
+  for (let i = Math.max(0, startIdx); i <= Math.min(endIdx, meta.timestamps.length - 1); i++) {
+    const cached = await getCachedRadarFrameAsDataURL(lat, lon, layer, meta.timestamps[i]);
+    if (!cached) return false;
+  }
+  return true;
+}
+
 // ===== GLOBAL EXPORTS =====
 // Make all radar functions and constants available globally for non-module scripts
 window.RADAR_DEFAULT_LAYER = RADAR_DEFAULT_LAYER;
@@ -4809,6 +5234,9 @@ window.fetchRadarImageForLocation = fetchRadarImageForLocation;
 window.fetchRadarImageForTimestamp = fetchRadarImageForTimestamp;
 window.getCachedRadarFrameAsDataURL = getCachedRadarFrameAsDataURL;
 window.getRadarFramesForClip = getRadarFramesForClip;
+window.prefetchFramesInRange = prefetchFramesInRange;
+window.getFramesInRange = getFramesInRange;
+window.areFramesCachedInRange = areFramesCachedInRange;
 window.clearRadarCacheForLocation = clearRadarCacheForLocation;
 window.clearRadarCacheForLayer = clearRadarCacheForLayer;
 window.clearRadarCache = clearRadarCache;
@@ -4816,6 +5244,918 @@ window.invalidateRadarCache = invalidateRadarCache;
 window.getRadarMeta = getRadarMeta;
 window.getRadarCacheSize = getRadarCacheSize;
 
+</script>
+<script>
+// ===== RADAR PLAYER ENGINE =====
+// Enhanced radar UI with zoom, pan, timeline, and playback state management.
+// Canvas-based rendering for smooth interactions.
+
+(function() {
+  'use strict';
+
+  // ===== CONSTANTS =====
+  const ZOOM_LEVELS = [1, 1.5, 2, 3];
+  // Expose speed options globally so main.js can use them
+  window.SPEED_OPTIONS = [0.5, 1, 2, 4, 8];
+  const MAX_ZOOM = 3;
+  const PAN_SPEED = 8; // pixels per frame at zoom 1
+  const ZOOM_DURATION_MS = 300;
+  const PRE_FETCH_COUNT = 50; // frames to pre-fetch on load
+
+  // ===== STATE =====
+  let state = {
+    lat: null,
+    lon: null,
+    layer: RADAR_DEFAULT_LAYER,
+    zoomLevel: 0, // index into ZOOM_LEVELS
+    panX: 0,
+    panY: 0,
+    isPanning: false,
+    panStartX: 0,
+    panStartY: 0,
+    panStartPanX: 0,
+    panStartPanY: 0,
+    isPlaying: false,
+    currentFrameIndex: -1,
+    frames: null, // array of { timestamp, dataUrl }
+    speed: 1,
+    allTimestamps: [], // all available timestamps for this location/layer
+    cachedTimestamps: [], // timestamps that have been fetched
+    isPreFetching: false,
+    preFetchProgress: 0,
+    totalPreFetch: 0,
+    isLoading: false,
+    isLoaded: false,
+    animFrameId: null,
+    lastFrameTime: 0,
+    isFullscreen: false,
+  };
+
+  // ===== CANVAS SETUP =====
+  let canvas = null;
+  let ctx = null;
+  let loadedImage = null;
+  let isCurrentImageLoaded = false; // tracks the current image's load state independently
+  let canvasWidth = 512;
+  let canvasHeight = 512;
+
+  // ===== INITIALIZATION =====
+  function initRadarPlayer(lat, lon) {
+    state.lat = lat;
+    state.lon = lon;
+    state.layer = RADAR_DEFAULT_LAYER;
+    state.zoomLevel = 0;
+    state.panX = 0;
+    state.panY = 0;
+    state.isPlaying = false;
+    state.currentFrameIndex = -1;
+    state.frames = null;
+    state.speed = 1;
+    state.allTimestamps = [];
+    state.cachedTimestamps = [];
+    state.isPreFetching = false;
+    state.preFetchProgress = 0;
+    state.totalPreFetch = 0;
+    state.isLoading = true;
+    state.isLoaded = false;
+
+    canvas = document.getElementById('radar-canvas');
+    ctx = canvas.getContext('2d');
+
+    // Set canvas size based on zoom level
+    updateCanvasSize();
+
+    // Event listeners
+    setupCanvasEvents();
+    setupKeyboardEvents();
+
+    // Load initial data
+    setupTimelineScrubbing();
+    loadInitialRadarFrame();
+  }
+
+  function updateCanvasSize() {
+    const container = document.getElementById('radar-canvas-container');
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    canvasWidth = Math.min(rect.width, 512);
+    canvasHeight = canvasWidth;
+    canvas.width = canvasWidth;
+    canvas.height = canvasHeight;
+  }
+
+  function hideLoadingOverlay() {
+    const loadingOverlay = document.getElementById('radar-loading-overlay');
+    if (loadingOverlay) {
+      loadingOverlay.classList.add('hidden');
+    }
+  }
+
+  function showLoadingOverlay(text) {
+    const loadingOverlay = document.getElementById('radar-loading-overlay');
+    if (loadingOverlay) {
+      loadingOverlay.classList.remove('hidden');
+      const loadingText = document.getElementById('radar-loading-text');
+      if (loadingText) {
+        loadingText.textContent = text || 'Loading radar...';
+      }
+    }
+  }
+
+  // ===== CANVAS EVENTS =====
+  function setupCanvasEvents() {
+    if (!canvas) return;
+
+    // Pan start
+    canvas.addEventListener('mousedown', (e) => {
+      if (state.zoomLevel > 0 && !isImageLoaded()) return;
+      state.isPanning = true;
+      state.panStartX = e.clientX;
+      state.panStartY = e.clientY;
+      state.panStartPanX = state.panX;
+      state.panStartPanY = state.panY;
+      canvas.style.cursor = 'grabbing';
+    });
+
+    // Pan move
+    window.addEventListener('mousemove', (e) => {
+      if (!state.isPanning) return;
+      const zoom = ZOOM_LEVELS[state.zoomLevel];
+      const dx = (e.clientX - state.panStartX) / zoom;
+      const dy = (e.clientY - state.panStartY) / zoom;
+      state.panX = state.panStartPanX + dx;
+      state.panY = state.panStartPanY + dy;
+      renderCanvas();
+    });
+
+    // Pan end
+    window.addEventListener('mouseup', () => {
+      if (state.isPanning) {
+        state.isPanning = false;
+        canvas.style.cursor = isImageLoaded() ? 'grab' : 'default';
+      }
+    });
+
+    // Scroll to zoom
+    canvas.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? -1 : 1;
+      const newZoom = Math.max(0, Math.min(ZOOM_LEVELS.length - 1, state.zoomLevel + delta));
+      if (newZoom !== state.zoomLevel) {
+        zoomTo(newZoom);
+      }
+    }, { passive: false });
+
+    // Double-click to reset view
+    canvas.addEventListener('dblclick', () => {
+      resetView();
+    });
+
+    // Resize observer
+    const resizeObserver = new ResizeObserver(() => {
+      updateCanvasSize();
+      renderCanvas();
+    });
+    const container = document.getElementById('radar-canvas-container');
+    if (container) resizeObserver.observe(container);
+  }
+
+  // ===== KEYBOARD EVENTS =====
+  function setupKeyboardEvents() {
+    window.addEventListener('keydown', (e) => {
+      // Only handle when radar player is visible
+      const radarCard = document.getElementById('radar-player-card');
+      if (!radarCard || radarCard.classList.contains('hidden')) return;
+
+      switch (e.key) {
+        case ' ':
+          e.preventDefault();
+          togglePlayback();
+          break;
+        case '+':
+        case '=':
+          e.preventDefault();
+          zoomIn();
+          break;
+        case '-':
+          e.preventDefault();
+          zoomOut();
+          break;
+        case '0':
+          e.preventDefault();
+          resetView();
+          break;
+        case 'ArrowLeft':
+          e.preventDefault();
+          panFrame(-1);
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          panFrame(1);
+          break;
+      }
+    });
+  }
+
+  // ===== INITIAL LOAD =====
+  async function loadInitialRadarFrame() {
+    const progressBar = document.getElementById('radar-prefetch-progress');
+    const progressText = document.getElementById('radar-frame-count-text');
+    if (progressBar) progressBar.style.width = '0%';
+    if (progressText) progressText.textContent = 'Loading radar...';
+
+    // First, get the latest timestamp from WMS to initialize the timeline
+    const latestTimestamp = await getLatestRadarTimestamp();
+    if (latestTimestamp) {
+      state.allTimestamps = [latestTimestamp];
+    }
+
+    // Try to load cached timestamps from metadata
+    const meta = getRadarMeta(state.lat, state.lon, state.layer);
+    if (meta && meta.timestamps && meta.timestamps.length > 0) {
+      state.allTimestamps = [...meta.timestamps].sort();
+    }
+
+    // Fetch the latest frame first
+    await loadCurrentFrame();
+
+    // Hide loading overlay after initial frame loads
+    hideLoadingOverlay();
+
+    // Start pre-fetching adjacent frames
+    if (state.allTimestamps.length > 0 && !state.isPreFetching) {
+      await preFetchFrames();
+    }
+
+    state.isLoading = false;
+    state.isLoaded = true;
+
+    // Update UI
+    updateTimelineUI();
+    updatePrefetchUI();
+    renderCanvas();
+  }
+
+  // ===== FRAME LOADING =====
+  async function loadCurrentFrame() {
+    const timestamp = state.allTimestamps.length > 0
+      ? state.allTimestamps[state.allTimestamps.length - 1] // latest timestamp
+      : null;
+
+    return loadRadarFrameForTimestamp(state.lat, state.lon, state.layer, timestamp);
+  }
+
+  async function loadRadarFrameForTimestamp(lat, lon, layer, timestamp) {
+    // Check cache first
+    let dataUrl = await getCachedRadarFrameAsDataURL(lat, lon, layer, timestamp);
+
+    if (!dataUrl) {
+      // Fetch from WMS
+      const result = await fetchRadarImageForTimestamp(lat, lon, layer, timestamp);
+      if (result.error) {
+        console.warn('[Radar Player] Failed to load frame:', result.error);
+        return null;
+      }
+      dataUrl = result.imageUrl;
+    }
+
+    // Load image into canvas
+    const currentImg = new Image();
+    loadedImage = currentImg;
+    isCurrentImageLoaded = false;
+    
+    return new Promise((resolve) => {
+      // Set onload before setting src to avoid race conditions with cached images
+      currentImg.onload = () => {
+        // Ensure this is still the current image (not overwritten by a newer request)
+        if (loadedImage !== currentImg) return;
+        isCurrentImageLoaded = true;
+        renderCanvas();
+        hideLoadingOverlay();
+        resolve(dataUrl);
+      };
+      currentImg.onerror = () => {
+        console.warn('[Radar Player] Image failed to load');
+        resolve(null);
+      };
+      // Now set src - if the image is cached, onload may fire immediately
+      currentImg.src = dataUrl;
+      
+      // If the image is already complete (cached), render immediately
+      if (currentImg.complete && currentImg.naturalWidth > 0) {
+        isCurrentImageLoaded = true;
+        renderCanvas();
+        hideLoadingOverlay();
+        resolve(dataUrl);
+      }
+    });
+  }
+
+  async function loadFrameByIndex(index) {
+    if (!state.allTimestamps.length || index < 0 || index >= state.allTimestamps.length) return null;
+
+    const timestamp = state.allTimestamps[index];
+    let dataUrl = await getCachedRadarFrameAsDataURL(state.lat, state.lon, state.layer, timestamp);
+
+    if (!dataUrl) {
+      const result = await fetchRadarImageForTimestamp(state.lat, state.lon, state.layer, timestamp);
+      if (result.error) return null;
+      dataUrl = result.imageUrl;
+    }
+
+    const currentImg = new Image();
+    loadedImage = currentImg;
+    isCurrentImageLoaded = false;
+    
+    return new Promise((resolve) => {
+      currentImg.onload = () => {
+        if (loadedImage !== currentImg) return;
+        isCurrentImageLoaded = true;
+        state.currentFrameIndex = index;
+        updateTimestampDisplay(timestamp);
+        renderCanvas();
+        updateTimelineUI();
+        resolve(dataUrl);
+      };
+      currentImg.onerror = () => resolve(null);
+      currentImg.src = dataUrl;
+    });
+  }
+
+  // ===== PRE-FETCHING =====
+  async function preFetchFrames() {
+    if (!state.allTimestamps.length) return;
+
+    state.isPreFetching = true;
+    state.preFetchProgress = 0;
+
+    // Pre-fetch frames around the current position (last N frames)
+    const startIdx = Math.max(0, state.allTimestamps.length - PRE_FETCH_COUNT);
+    state.totalPreFetch = PRE_FETCH_COUNT;
+
+    for (let i = startIdx; i < state.allTimestamps.length; i++) {
+      const timestamp = state.allTimestamps[i];
+      // Skip if already cached
+      const cached = await getCachedRadarFrameAsDataURL(state.lat, state.lon, state.layer, timestamp);
+      if (!cached) {
+        await fetchRadarImageForTimestamp(state.lat, state.lon, state.layer, timestamp);
+      }
+      state.preFetchProgress++;
+      updatePrefetchUI();
+
+      // Yield to avoid blocking UI
+      await new Promise(r => setTimeout(r, 10));
+    }
+
+    state.isPreFetching = false;
+    state.preFetchProgress = state.totalPreFetch;
+    updatePrefetchUI();
+  }
+
+  function updatePrefetchUI() {
+    const progressBar = document.getElementById('radar-prefetch-progress');
+    const progressText = document.getElementById('radar-frame-count-text');
+    const loadAllBtn = document.getElementById('radar-load-all-btn');
+
+    if (state.allTimestamps.length === 0) {
+      if (progressBar) progressBar.style.width = '0%';
+      if (progressText) progressText.textContent = '';
+      if (loadAllBtn) loadAllBtn.style.display = 'none';
+      return;
+    }
+
+    const available = state.allTimestamps.length;
+    const cached = state.preFetchProgress || 0;
+
+    if (progressText) {
+      progressText.textContent = `${cached}/${available} frames`;
+    }
+
+    // Also update loading overlay text
+    const loadingText = document.getElementById('radar-loading-text');
+    if (loadingText && state.isLoading) {
+      loadingText.textContent = `${cached}/${available} frames loaded...`;
+    }
+
+    if (progressBar) {
+      const pct = state.totalPreFetch > 0 ? (state.preFetchProgress / state.totalPreFetch) * 100 : 0;
+      progressBar.style.width = `${pct}%`;
+    }
+
+    // Show load all button if not all frames are cached
+    if (loadAllBtn) {
+      const allCached = state.allTimestamps.length <= state.preFetchProgress;
+      loadAllBtn.style.display = allCached ? 'none' : 'flex';
+      if (allCached) {
+        loadAllBtn.innerHTML = '<span class="radar-check-icon">✓</span> All Loaded';
+      } else {
+        loadAllBtn.innerHTML = 'Load All Frames';
+      }
+    }
+  }
+
+  // ===== ZOOM =====
+  function zoomTo(zoomLevel) {
+    if (zoomLevel < 0 || zoomLevel >= ZOOM_LEVELS.length) return;
+    const oldZoom = state.zoomLevel;
+    state.zoomLevel = zoomLevel;
+    const newZoom = ZOOM_LEVELS[zoomLevel];
+    const oldZoomFactor = ZOOM_LEVELS[oldZoom] || 1;
+
+    // Update canvas size based on zoom
+    const container = document.getElementById('radar-canvas-container');
+    if (container) {
+      const rect = container.getBoundingClientRect();
+      canvasWidth = Math.min(rect.width, 512);
+      canvasHeight = canvasWidth;
+      canvas.width = canvasWidth;
+      canvas.height = canvasHeight;
+    }
+
+    // Update cursor
+    if (canvas) {
+      canvas.style.cursor = isImageLoaded() ? 'grab' : 'default';
+    }
+
+    updateZoomUI();
+    renderCanvas();
+  }
+
+  function zoomIn() {
+    const newLevel = Math.min(ZOOM_LEVELS.length - 1, state.zoomLevel + 1);
+    if (newLevel !== state.zoomLevel) zoomTo(newLevel);
+  }
+
+  function zoomOut() {
+    const newLevel = Math.max(0, state.zoomLevel - 1);
+    if (newLevel !== state.zoomLevel) zoomTo(newLevel);
+  }
+
+  function resetView() {
+    state.zoomLevel = 0;
+    state.panX = 0;
+    state.panY = 0;
+    updateZoomUI();
+    renderCanvas();
+  }
+
+  function updateZoomUI() {
+    const zoomLevel = ZOOM_LEVELS[state.zoomLevel];
+    const zoomText = document.getElementById('radar-zoom-text');
+    if (zoomText) {
+      zoomText.textContent = `${Math.round(zoomLevel * 100)}%`;
+    }
+
+    // Update zoom level buttons
+    document.querySelectorAll('.radar-zoom-level-btn').forEach(btn => {
+      const level = parseInt(btn.dataset.zoom);
+      btn.classList.toggle('active', level === state.zoomLevel);
+    });
+  }
+
+  // ===== PAN =====
+  function panFrame(direction) {
+    // Pan to adjacent frame in the timeline
+    if (!state.allTimestamps.length) return;
+    const newIdx = state.currentFrameIndex + direction;
+    if (newIdx < 0 || newIdx >= state.allTimestamps.length) return;
+
+    // Stop playback if active
+    if (state.isPlaying) togglePlayback();
+
+    loadFrameByIndex(newIdx);
+  }
+
+  function panToTimestamp(timestamp) {
+    const idx = state.allTimestamps.indexOf(timestamp);
+    if (idx === -1) return;
+    panFrame(idx - state.currentFrameIndex);
+  }
+
+  // ===== PLAYBACK =====
+  function togglePlayback() {
+    if (!state.allTimestamps.length || !isImageLoaded()) return;
+
+    if (state.isPlaying) {
+      stopPlayback();
+    } else {
+      startPlayback();
+    }
+  }
+
+  function startPlayback() {
+    state.isPlaying = true;
+    state.currentFrameIndex = -1;
+    state.lastFrameTime = Date.now();
+
+    // Update UI
+    const playBtn = document.getElementById('radar-play-btn');
+    if (playBtn) {
+      playBtn.classList.add('active');
+      playBtn.textContent = '⏸';
+    }
+
+    // Show timeline progress during playback
+    const timelineContainer = document.getElementById('radar-timeline-container');
+    if (timelineContainer) {
+      timelineContainer.classList.add('playing');
+    }
+
+    // Highlight play button in titlebar
+    const playerHeader = document.getElementById('radar-player-card')?.querySelector('.radar-player-header');
+    if (playerHeader) {
+      playerHeader.classList.add('playing');
+    }
+
+    // Start playback loop
+    playbackLoop();
+  }
+
+  function stopPlayback() {
+    state.isPlaying = false;
+    if (state.animFrameId) {
+      cancelAnimationFrame(state.animFrameId);
+      state.animFrameId = null;
+    }
+
+    // Update UI
+    const playBtn = document.getElementById('radar-play-btn');
+    if (playBtn) {
+      playBtn.classList.remove('active');
+      playBtn.textContent = '▶';
+    }
+
+    // Hide timeline progress during playback
+    const timelineContainer = document.getElementById('radar-timeline-container');
+    if (timelineContainer) {
+      timelineContainer.classList.remove('playing');
+    }
+
+    // Remove highlight from play button in titlebar
+    const playerHeader = document.getElementById('radar-player-card')?.querySelector('.radar-player-header');
+    if (playerHeader) {
+      playerHeader.classList.remove('playing');
+    }
+  }
+
+  function playbackLoop() {
+    if (!state.isPlaying) return;
+
+    const now = Date.now();
+    const interval = 1000 / (state.speed * 2); // base: 2 fps at 1x speed
+
+    if (now - state.lastFrameTime >= interval) {
+      state.lastFrameTime = now;
+
+      // Move to next frame
+      state.currentFrameIndex++;
+      if (state.currentFrameIndex >= state.allTimestamps.length) {
+        state.currentFrameIndex = 0; // loop back to start
+      }
+
+      // Load and render frame
+      loadFrameByIndex(state.currentFrameIndex);
+
+      // Update timeline progress
+      updateTimelineProgress();
+    }
+
+    state.animFrameId = requestAnimationFrame(playbackLoop);
+  }
+
+  // ===== TIMELINE =====
+  function updateTimelineUI() {
+    const timelineContainer = document.getElementById('radar-timeline');
+    const loadingOverlay = document.getElementById('radar-loading-overlay');
+    if (!timelineContainer || !state.allTimestamps.length) return;
+
+    // Clear existing dots
+    while (timelineContainer.firstChild) {
+      timelineContainer.removeChild(timelineContainer.firstChild);
+    }
+
+    // Create dots for each timestamp
+    state.allTimestamps.forEach((timestamp, idx) => {
+      const dot = document.createElement('div');
+      dot.className = 'radar-timeline-dot';
+      if (idx === state.currentFrameIndex) {
+        dot.classList.add('active');
+      }
+
+      // Check if frame is cached
+      const isCached = getCachedRadarFrameAsDataURL(state.lat, state.lon, state.layer, timestamp) !== null;
+      if (!isCached) {
+        dot.classList.add('uncached');
+      }
+
+      // Format time for tooltip
+      const date = new Date(timestamp);
+      const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      dot.title = `${timeStr}`;
+      dot.dataset.timestamp = timestamp;
+      dot.dataset.index = idx;
+
+      // Click to seek
+      dot.addEventListener('click', () => {
+        if (state.isPlaying) stopPlayback();
+        loadFrameByIndex(parseInt(dot.dataset.index));
+      });
+
+      timelineContainer.appendChild(dot);
+    });
+
+    // Update time range display
+    const timeRange = document.getElementById('radar-time-range');
+    if (timeRange && state.allTimestamps.length > 0) {
+      const start = new Date(state.allTimestamps[0]);
+      const end = new Date(state.allTimestamps[state.allTimestamps.length - 1]);
+      timeRange.textContent = `${start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} — ${end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    }
+
+    // Update timeline progress bar
+    updateTimelineProgress();
+  }
+
+  // ===== TIMELINE SCRUBBING =====
+  function setupTimelineScrubbing() {
+    const progressBar = document.getElementById('radar-timeline-progress-bar');
+    if (!progressBar) return;
+
+    let isScrubbing = false;
+
+    // Mouse down - start scrubbing
+    progressBar.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      isScrubbing = true;
+      scrubToPosition(e);
+    });
+
+    // Mouse move - continue scrubbing
+    window.addEventListener('mousemove', (e) => {
+      if (!isScrubbing) return;
+      scrubToPosition(e);
+    });
+
+    // Mouse up - stop scrubbing
+    window.addEventListener('mouseup', () => {
+      isScrubbing = false;
+    });
+
+    // Touch events for mobile
+    progressBar.addEventListener('touchstart', (e) => {
+      isScrubbing = true;
+      scrubToPosition(e.touches[0]);
+    }, { passive: true });
+
+    window.addEventListener('touchmove', (e) => {
+      if (!isScrubbing) return;
+      scrubToPosition(e.touches[0]);
+    }, { passive: true });
+
+    window.addEventListener('touchend', () => {
+      isScrubbing = false;
+    });
+
+    function scrubToPosition(e) {
+      const rect = progressBar.getBoundingClientRect();
+      let pct = (e.clientX - rect.left) / rect.width;
+      pct = Math.max(0, Math.min(1, pct));
+
+      // Calculate which frame index to seek to
+      const targetIdx = Math.round(pct * (state.allTimestamps.length - 1));
+
+      if (targetIdx !== state.currentFrameIndex) {
+        if (state.isPlaying) stopPlayback();
+        loadFrameByIndex(targetIdx);
+      }
+    }
+  }
+
+  function updateTimelineProgress() {
+    const progressBar = document.getElementById('radar-timeline-progress');
+    if (!progressBar || !state.allTimestamps.length) return;
+
+    const pct = state.currentFrameIndex >= 0
+      ? ((state.currentFrameIndex + 1) / state.allTimestamps.length) * 100
+      : 0;
+    progressBar.style.width = `${pct}%`;
+
+    // Update active dot
+    const timelineContainer = document.getElementById('radar-timeline');
+    if (!timelineContainer) return;
+    const dots = timelineContainer.querySelectorAll('.radar-timeline-dot');
+    dots.forEach((dot, idx) => {
+      dot.classList.toggle('active', idx === state.currentFrameIndex);
+    });
+  }
+
+  function updateTimestampDisplay(timestamp) {
+    const timestampEl = document.getElementById('radar-timestamp');
+    const loadingOverlay = document.getElementById('radar-loading-overlay');
+    if (!timestampEl || !timestamp) return;
+    const date = new Date(timestamp);
+    timestampEl.textContent = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    
+    // Hide loading overlay when timestamp is set
+    if (loadingOverlay) loadingOverlay.classList.add('hidden');
+  }
+
+  // ===== CANVAS RENDERING =====
+  function isImageLoaded() {
+    return isCurrentImageLoaded;
+  }
+
+  function renderCanvas() {
+    if (!ctx || !canvas) return;
+
+    // Clear canvas
+    ctx.clearRect(0, 0, canvas.width, canvasHeight);
+
+    // Background
+    ctx.fillStyle = '#0d0d1a';
+    ctx.fillRect(0, 0, canvas.width, canvasHeight);
+
+    if (!isImageLoaded()) {
+      // Draw loading spinner
+      drawLoadingSpinner(ctx, canvas.width / 2, canvas.height / 2);
+      return;
+    }
+
+    const zoom = ZOOM_LEVELS[state.zoomLevel] || 1;
+    const scale = (canvasWidth / 512) * zoom;
+    const imgW = 512 * scale;
+    const imgH = 512 * scale;
+
+    ctx.save();
+
+    // Apply pan offset
+    ctx.translate(state.panX, state.panY);
+
+    // Draw the image centered
+    const offsetX = (canvas.width - imgW) / 2;
+    const offsetY = (canvas.height - imgH) / 2;
+    ctx.drawImage(loadedImage, offsetX, offsetY, imgW, imgH);
+
+    ctx.restore();
+  }
+
+  function drawLoadingSpinner(ctx, cx, cy) {
+    const radius = 16;
+    const lineWidth = 3;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+    ctx.lineWidth = lineWidth;
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Spinning arc
+    const time = Date.now() / 1000;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+    ctx.lineWidth = lineWidth;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, -Math.PI / 2 + time * 3, Math.PI / 2 + time * 3);
+    ctx.stroke();
+  }
+
+  // ===== LAYER SWITCHING =====
+  async function switchLayer(layer) {
+    if (layer === state.layer) return;
+
+    const oldLayer = state.layer;
+    state.layer = layer;
+
+    // Stop playback
+    if (state.isPlaying) stopPlayback();
+
+    // Clear state for new layer
+    state.allTimestamps = [];
+    state.cachedTimestamps = [];
+    state.currentFrameIndex = -1;
+    state.frames = null;
+    loadedImage = null;
+
+    // Get timestamps for new layer from WMS (not just metadata)
+    const newTimestamp = await getLatestRadarTimestamp();
+    if (newTimestamp) {
+      state.allTimestamps = [newTimestamp];
+    }
+    const meta = getRadarMeta(state.lat, state.lon, state.layer);
+    if (meta && meta.timestamps && meta.timestamps.length > 0) {
+      state.allTimestamps = [...meta.timestamps].sort();
+    }
+
+    // Update UI
+    const layerSelect = document.getElementById('radar-layer-select');
+    if (layerSelect) {
+      const option = layerSelect.querySelector(`option[value="${layer}"]`);
+      if (option) option.selected = true;
+    }
+
+    updateZoomUI();
+
+    // Show loading overlay for layer switch
+    state.isLoading = true;
+    showLoadingOverlay('Switching layer...');
+    await loadCurrentFrame();
+    hideLoadingOverlay();
+    state.isLoading = false;
+    state.isLoaded = true;
+
+    updateTimelineUI();
+    updatePrefetchUI();
+    renderCanvas();
+  }
+
+  // ===== FULLSCREEN =====
+  function toggleFullscreen() {
+    const card = document.getElementById('radar-player-card');
+    if (!card) return;
+
+    if (state.isFullscreen) {
+      exitFullscreen();
+    } else {
+      enterFullscreen();
+    }
+  }
+
+  function enterFullscreen() {
+    state.isFullscreen = true;
+    const card = document.getElementById('radar-player-card');
+    const fsBtn = document.getElementById('radar-fullscreen-btn');
+    if (card) card.classList.add('fullscreen');
+    if (fsBtn) {
+      fsBtn.classList.add('active');
+      fsBtn.textContent = '⛶'; // exit fullscreen icon
+    }
+
+    // Make card fixed overlay
+    if (card) {
+      card.style.position = 'fixed';
+      card.style.inset = '0';
+      card.style.zIndex = '999';
+      card.style.margin = '0';
+      card.style.borderRadius = '0';
+      card.style.maxWidth = '100%';
+      card.style.width = '100%';
+    }
+
+    // Update canvas size for fullscreen
+    setTimeout(() => {
+      updateCanvasSize();
+      renderCanvas();
+    }, 100);
+  }
+
+  function exitFullscreen() {
+    state.isFullscreen = false;
+    const card = document.getElementById('radar-player-card');
+    const fsBtn = document.getElementById('radar-fullscreen-btn');
+    if (card) {
+      card.classList.remove('fullscreen');
+      card.style.position = '';
+      card.style.inset = '';
+      card.style.zIndex = '';
+      card.style.margin = '';
+      card.style.borderRadius = '';
+      card.style.maxWidth = '';
+      card.style.width = '';
+    }
+    if (fsBtn) {
+      fsBtn.classList.remove('active');
+      fsBtn.textContent = '⛶'; // enter fullscreen icon
+    }
+
+    setTimeout(() => {
+      updateCanvasSize();
+      renderCanvas();
+    }, 100);
+  }
+
+  // ===== UTILITY =====
+  function getZoomPercent() {
+    return Math.round((ZOOM_LEVELS[state.zoomLevel] || 1) * 100);
+  }
+
+  // ===== PUBLIC API =====
+  const RadarPlayer = {
+    init: initRadarPlayer,
+    togglePlayback,
+    stopPlayback,
+    zoomIn,
+    zoomOut,
+    resetView,
+    switchLayer,
+    panFrame,
+    toggleFullscreen,
+    getZoomPercent,
+    getState: () => ({ ...state }),
+  };
+
+  // Expose globally
+  window.RADAR_PLAYER = RadarPlayer;
+
+})();
 </script>
 <script>
 // ===== RENDER =====
@@ -8725,153 +10065,172 @@ async function run() {
    }
  }
 
-// ===== RADAR CARD =====
+// ===== RADAR PLAYER =====
 async function loadRadarCard(lat, lon) {
   const container = document.getElementById('radar-card-container');
   if (!container) return;
 
-  // Build radar card HTML
+  // Build radar player HTML
   const layerOptions = Object.entries(RADAR_LAYERS).map(([key, value]) => 
     `<option value="${value}" ${value === RADAR_DEFAULT_LAYER ? 'selected' : ''}>${key.replace('_', ' ')}</option>`
   ).join('');
 
+  const speedOptions = (window.SPEED_OPTIONS || [0.5, 1, 2, 4, 8]).map((speed, idx) => 
+    `<option value="${speed}" ${idx === 1 ? 'selected' : ''}>${speed}x</option>`
+  ).join('');
+
   container.innerHTML = `
-    <div class="radar-card" data-radar-lat="${lat.toFixed(4)}" data-radar-lon="${lon.toFixed(4)}">
-      <div class="radar-card-header">
-        <span class="radar-card-title">Radar</span>
-        <select class="radar-layer-select" title="Select radar layer">${layerOptions}</select>
-        <span class="radar-card-timestamp">Loading...</span>
+    <div id="radar-player-card" class="radar-fade-in">
+      <!-- Titlebar -->
+      <div class="radar-player-header">
+        <!-- Left: Playback Controls -->
+        <div class="radar-header-section">
+          <button class="radar-btn radar-btn-play radar-tooltip" id="radar-play-btn" data-tooltip="Play/Pause (Space)">▶</button>
+          <span class="radar-speed-select" title="Playback speed">
+            <select class="radar-speed-select" id="radar-speed-select" title="Speed">${speedOptions}</select>
+          </span>
+        </div>
+        
+        <div class="radar-header-divider"></div>
+        
+        <!-- Center: Zoom Controls -->
+        <div class="radar-header-section">
+          <button class="radar-btn radar-tooltip" id="radar-zoom-out-btn" data-tooltip="Zoom out (-)">−</button>
+          <span class="radar-zoom-text" id="radar-zoom-text">100%</span>
+          <button class="radar-btn radar-tooltip" id="radar-zoom-in-btn" data-tooltip="Zoom in (+)">+</button>
+          <button class="radar-btn radar-tooltip" id="radar-reset-btn" data-tooltip="Reset view (0)">⟲</button>
+        </div>
+        
+        <div class="radar-header-divider"></div>
+        
+        <!-- Right: Layer & Info -->
+        <div class="radar-header-section">
+          <select class="radar-layer-select" id="radar-layer-select" title="Radar layer">${layerOptions}</select>
+          <span class="radar-timestamp" id="radar-timestamp">--:--</span>
+          <button class="radar-btn radar-tooltip" id="radar-load-all-btn" data-tooltip="Load all cached frames">Load All</button>
+          <button class="radar-btn radar-fullscreen-btn radar-tooltip" id="radar-fullscreen-btn" data-tooltip="Toggle fullscreen">⛶</button>
+        </div>
       </div>
-      <div class="radar-card-body">
-        <img class="radar-image" alt="Radar" />
+      
+      <!-- Canvas Display -->
+      <div id="radar-canvas-container" class="radar-canvas-container">
+        <canvas id="radar-canvas"></canvas>
+        <div class="radar-loading-overlay" id="radar-loading-overlay">
+          <div class="radar-spinner"></div>
+          <span class="radar-loading-text" id="radar-loading-text">Loading radar...</span>
+        </div>
       </div>
-      <div class="radar-clip-controls">
-        <button class="radar-clip-btn radar-clip-play-btn" title="Play/pause clip">▶</button>
-        <span class="radar-clip-frame-label">0/0</span>
-        <div class="radar-clip-progress"><div class="radar-clip-progress-bar"></div></div>
+      
+      <!-- Prefetch Progress -->
+      <div class="radar-prefetch-bar">
+        <div class="radar-prefetch-progress" id="radar-prefetch-progress" style="width: 0%"></div>
+      </div>
+      <span class="radar-prefetch-text" id="radar-frame-count-text">0/0 frames</span>
+      
+      <!-- Timeline -->
+      <div class="radar-timeline-container">
+        <span class="radar-time-range" id="radar-time-range">--:-- — --:--</span>
+        <div class="radar-timeline-progress-bar">
+          <div class="radar-timeline-progress" id="radar-timeline-progress" style="width: 0%"></div>
+        </div>
+        <div class="radar-timeline" id="radar-timeline"></div>
       </div>
     </div>`;
 
-  // Fetch and display radar image
-  await updateRadarImage(lat, lon);
+  // Bind events
+  bindRadarPlayerEvents();
 
-  // Layer selector event
-  const layerSelect = container.querySelector('.radar-layer-select');
-  if (layerSelect) {
-    layerSelect.addEventListener('change', async (e) => {
-      e.stopPropagation();
-      // Clear cache for this layer and re-fetch
-      await clearRadarCacheForLayer(lat, lon, RADAR_DEFAULT_LAYER);
-      await updateRadarImage(lat, lon, e.target.value);
-    });
-  }
-
-  // Clip playback controls
-  const playBtn = container.querySelector('.radar-clip-play-btn');
-  if (playBtn) {
-    playBtn.addEventListener('click', async (e) => {
-      e.stopPropagation();
-      const meta = getRadarMeta(lat, lon, layerSelect?.value || RADAR_DEFAULT_LAYER);
-      if (!meta || !meta.timestamps.length) return;
-      
-      // Fetch last 10 frames for animation
-      const frames = await getRadarFramesForClip(lat, lon, layerSelect?.value || RADAR_DEFAULT_LAYER, 10);
-      if (!frames || !frames.length) return;
-
-      // Toggle playback
-      if (playBtn.classList.contains('active')) {
-        playBtn.classList.remove('active');
-        playBtn.textContent = '▶';
-        container.querySelector('.radar-clip-controls').classList.remove('active');
-        return;
-      }
-
-      playBtn.classList.add('active');
-      playBtn.textContent = '⏸';
-      container.querySelector('.radar-clip-controls').classList.add('active');
-      
-      // Start playback
-      let frameIdx = 0;
-      const progressBar = container.querySelector('.radar-clip-progress-bar');
-      const frameLabel = container.querySelector('.radar-clip-frame-label');
-      
-      function showNextFrame() {
-        if (!playBtn.classList.contains('active')) return;
-        
-        const frame = frames[frameIdx % frames.length];
-        const img = container.querySelector('.radar-image');
-        if (img && frame) {
-          img.src = frame.dataUrl;
-          img.style.display = 'block';
-          progressBar.style.width = `${((frameIdx + 1) / frames.length) * 100}%`;
-          frameLabel.textContent = `${frameIdx + 1}/${frames.length}`;
-        }
-        
-        frameIdx++;
-        setTimeout(showNextFrame, 500); // 2 FPS (radar updates every ~2 min)
-      }
-      
-      showNextFrame();
-    });
+  // Initialize radar player engine
+  if (window.RADAR_PLAYER) {
+    window.RADAR_PLAYER.init(lat, lon);
   }
 }
 
-// Update radar image for current timestamp
-async function updateRadarImage(lat, lon, layer = null) {
+function bindRadarPlayerEvents() {
   const container = document.getElementById('radar-card-container');
   if (!container) return;
 
-  const card = container.querySelector('.radar-card');
-  const img = container.querySelector('.radar-image');
-  const timestampEl = container.querySelector('.radar-card-timestamp');
+  // Play/Pause button
+  const playBtn = document.getElementById('radar-play-btn');
+  if (playBtn) {
+    playBtn.addEventListener('click', () => {
+      if (window.RADAR_PLAYER) window.RADAR_PLAYER.togglePlayback();
+    });
+  }
 
-  // Show loading state
-  card.classList.add('radar-loading');
+  // Speed selector
+  const speedSelect = document.getElementById('radar-speed-select');
+  if (speedSelect) {
+    speedSelect.addEventListener('change', (e) => {
+      e.stopPropagation();
+      if (!window.RADAR_PLAYER) return;
+      const state = window.RADAR_PLAYER.getState();
+      state.speed = parseFloat(e.target.value);
+      // If playing, restart the playback loop with new speed
+      if (state.isPlaying) {
+        window.RADAR_PLAYER.stopPlayback();
+        window.RADAR_PLAYER.togglePlayback();
+      }
+    });
+  }
 
-  try {
-    const result = await fetchRadarImageForLocation(lat, lon, layer || RADAR_DEFAULT_LAYER);
-    
-    if (result.error) {
-      console.warn('[Radar] Failed to load radar:', result.error);
-      timestampEl.textContent = 'Failed to load';
-      card.classList.remove('radar-loading');
-      return;
-    }
+  // Zoom in button
+  const zoomInBtn = document.getElementById('radar-zoom-in-btn');
+  if (zoomInBtn) {
+    zoomInBtn.addEventListener('click', () => {
+      if (window.RADAR_PLAYER) window.RADAR_PLAYER.zoomIn();
+    });
+  }
 
-    // Update timestamp display
-    if (result.timestamp) {
-      const date = new Date(result.timestamp);
-      timestampEl.textContent = date.toLocaleTimeString();
-    }
+  // Zoom out button
+  const zoomOutBtn = document.getElementById('radar-zoom-out-btn');
+  if (zoomOutBtn) {
+    zoomOutBtn.addEventListener('click', () => {
+      if (window.RADAR_PLAYER) window.RADAR_PLAYER.zoomOut();
+    });
+  }
 
-    // Remove loading spinner — either when image loads or immediately if it was cached
-    if (result.cached) {
-      card.classList.remove('radar-loading');
-    } else {
-      img.onload = () => {
-        card.classList.remove('radar-loading');
-      };
-      img.onerror = () => {
-        console.warn('[Radar] Image failed to load');
-        img.style.display = 'none';
-        timestampEl.textContent = 'Failed to load';
-        card.classList.remove('radar-loading');
-      };
-    }
+  // Reset view button
+  const resetBtn = document.getElementById('radar-reset-btn');
+  if (resetBtn) {
+    resetBtn.addEventListener('click', () => {
+      if (window.RADAR_PLAYER) window.RADAR_PLAYER.resetView();
+    });
+  }
 
-    // Update the radar image element
-    img.src = result.imageUrl;
-    
-    // Show the image — for cached images, CSS selector [src]:not([src=""]) will handle display
-    // For uncached images, the onload handler will set display: block
-    if (result.cached) {
-      // Cached data URLs may not trigger onload — ensure visibility immediately
-      img.style.display = 'block';
-    }
-  } catch (e) {
-    console.error('[Radar] Error loading radar:', e);
-    timestampEl.textContent = 'Failed to load';
-    card.classList.remove('radar-loading');
+  // Layer selector
+  const layerSelect = document.getElementById('radar-layer-select');
+  if (layerSelect) {
+    layerSelect.addEventListener('change', async (e) => {
+      e.stopPropagation();
+      if (!window.RADAR_PLAYER) return;
+      await window.RADAR_PLAYER.switchLayer(e.target.value);
+    });
+  }
+
+  // Load all frames button
+  const loadAllBtn = document.getElementById('radar-load-all-btn');
+  if (loadAllBtn) {
+    loadAllBtn.addEventListener('click', async () => {
+      if (!window.RADAR_PLAYER) return;
+      const state = window.RADAR_PLAYER.getState();
+      // Pre-fetch all remaining frames
+      for (let i = 0; i < state.allTimestamps.length; i++) {
+        const timestamp = state.allTimestamps[i];
+        const cached = await getCachedRadarFrameAsDataURL(state.lat, state.lon, state.layer, timestamp);
+        if (!cached) {
+          await fetchRadarImageForTimestamp(state.lat, state.lon, state.layer, timestamp);
+        }
+      }
+    });
+  }
+
+  // Fullscreen button
+  const fullscreenBtn = document.getElementById('radar-fullscreen-btn');
+  if (fullscreenBtn) {
+    fullscreenBtn.addEventListener('click', () => {
+      if (window.RADAR_PLAYER) window.RADAR_PLAYER.toggleFullscreen();
+    });
   }
 }
 
