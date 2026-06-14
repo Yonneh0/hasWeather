@@ -102,8 +102,8 @@ function nwsPointCacheKey(lat, lon) {
 }
 
 // Build a NWS cache key for gridpoint data
-function nwsGridCacheKey(wfo, x, y) {
-  return `nws_grid_${wfo}_${x}_${y}`;
+function nwsGridCacheKey(wfo, x, y, suffix) {
+  return `nws_grid_${wfo}_${x}_${y}${suffix ? '_' + suffix : ''}`;
 }
 
 // Fetch with User-Agent header, rate limiting, and retry logic

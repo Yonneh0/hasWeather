@@ -537,6 +537,60 @@ async function getRadarCacheSize() {
   }
 }
 
+// ===== BATCH PRE-FETCH FOR A RANGE OF FRAMES =====
+// Fetch a contiguous range of frames for the radar player timeline
+async function prefetchFramesInRange(lat, lon, layer, startIdx, endIdx) {
+  const meta = getRadarMeta(lat, lon, layer);
+  if (!meta || !meta.timestamps.length) return;
+
+  const results = [];
+  for (let i = Math.max(0, startIdx); i <= Math.min(endIdx, meta.timestamps.length - 1); i++) {
+    const timestamp = meta.timestamps[i];
+    // Check cache first
+    const cached = await getCachedRadarFrameAsDataURL(lat, lon, layer, timestamp);
+    if (cached) continue; // Already cached
+
+    // Fetch from WMS
+    const result = await fetchRadarImageForTimestamp(lat, lon, layer, timestamp);
+    if (!result.error) {
+      results.push({ index: i, timestamp, dataUrl: result.imageUrl });
+    }
+  }
+  return results;
+}
+
+// ===== GET FRAME RANGE FOR PLAYBACK =====
+// Get frames within a time range for the radar player
+async function getFramesInRange(lat, lon, layer, startTimestamp, endTimestamp) {
+  const meta = getRadarMeta(lat, lon, layer);
+  if (!meta || !meta.timestamps.length) return [];
+
+  // Filter timestamps within range
+  const filtered = meta.timestamps.filter(ts => ts >= startTimestamp && ts <= endTimestamp);
+  const frames = [];
+
+  for (const ts of filtered) {
+    const dataUrl = await getCachedRadarFrameAsDataURL(lat, lon, layer, ts);
+    if (dataUrl) {
+      frames.push({ timestamp: ts, dataUrl });
+    }
+  }
+
+  return frames;
+}
+
+// ===== CHECK IF ALL FRAMES IN RANGE ARE CACHED =====
+async function areFramesCachedInRange(lat, lon, layer, startIdx, endIdx) {
+  const meta = getRadarMeta(lat, lon, layer);
+  if (!meta || !meta.timestamps.length) return false;
+
+  for (let i = Math.max(0, startIdx); i <= Math.min(endIdx, meta.timestamps.length - 1); i++) {
+    const cached = await getCachedRadarFrameAsDataURL(lat, lon, layer, meta.timestamps[i]);
+    if (!cached) return false;
+  }
+  return true;
+}
+
 // ===== GLOBAL EXPORTS =====
 // Make all radar functions and constants available globally for non-module scripts
 window.RADAR_DEFAULT_LAYER = RADAR_DEFAULT_LAYER;
@@ -545,6 +599,9 @@ window.fetchRadarImageForLocation = fetchRadarImageForLocation;
 window.fetchRadarImageForTimestamp = fetchRadarImageForTimestamp;
 window.getCachedRadarFrameAsDataURL = getCachedRadarFrameAsDataURL;
 window.getRadarFramesForClip = getRadarFramesForClip;
+window.prefetchFramesInRange = prefetchFramesInRange;
+window.getFramesInRange = getFramesInRange;
+window.areFramesCachedInRange = areFramesCachedInRange;
 window.clearRadarCacheForLocation = clearRadarCacheForLocation;
 window.clearRadarCacheForLayer = clearRadarCacheForLayer;
 window.clearRadarCache = clearRadarCache;

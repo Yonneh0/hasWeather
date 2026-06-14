@@ -133,153 +133,172 @@ async function run() {
    }
  }
 
-// ===== RADAR CARD =====
+// ===== RADAR PLAYER =====
 async function loadRadarCard(lat, lon) {
   const container = document.getElementById('radar-card-container');
   if (!container) return;
 
-  // Build radar card HTML
+  // Build radar player HTML
   const layerOptions = Object.entries(RADAR_LAYERS).map(([key, value]) => 
     `<option value="${value}" ${value === RADAR_DEFAULT_LAYER ? 'selected' : ''}>${key.replace('_', ' ')}</option>`
   ).join('');
 
+  const speedOptions = (window.SPEED_OPTIONS || [0.5, 1, 2, 4, 8]).map((speed, idx) => 
+    `<option value="${speed}" ${idx === 1 ? 'selected' : ''}>${speed}x</option>`
+  ).join('');
+
   container.innerHTML = `
-    <div class="radar-card" data-radar-lat="${lat.toFixed(4)}" data-radar-lon="${lon.toFixed(4)}">
-      <div class="radar-card-header">
-        <span class="radar-card-title">Radar</span>
-        <select class="radar-layer-select" title="Select radar layer">${layerOptions}</select>
-        <span class="radar-card-timestamp">Loading...</span>
+    <div id="radar-player-card" class="radar-fade-in">
+      <!-- Titlebar -->
+      <div class="radar-player-header">
+        <!-- Left: Playback Controls -->
+        <div class="radar-header-section">
+          <button class="radar-btn radar-btn-play radar-tooltip" id="radar-play-btn" data-tooltip="Play/Pause (Space)">▶</button>
+          <span class="radar-speed-select" title="Playback speed">
+            <select class="radar-speed-select" id="radar-speed-select" title="Speed">${speedOptions}</select>
+          </span>
+        </div>
+        
+        <div class="radar-header-divider"></div>
+        
+        <!-- Center: Zoom Controls -->
+        <div class="radar-header-section">
+          <button class="radar-btn radar-tooltip" id="radar-zoom-out-btn" data-tooltip="Zoom out (-)">−</button>
+          <span class="radar-zoom-text" id="radar-zoom-text">100%</span>
+          <button class="radar-btn radar-tooltip" id="radar-zoom-in-btn" data-tooltip="Zoom in (+)">+</button>
+          <button class="radar-btn radar-tooltip" id="radar-reset-btn" data-tooltip="Reset view (0)">⟲</button>
+        </div>
+        
+        <div class="radar-header-divider"></div>
+        
+        <!-- Right: Layer & Info -->
+        <div class="radar-header-section">
+          <select class="radar-layer-select" id="radar-layer-select" title="Radar layer">${layerOptions}</select>
+          <span class="radar-timestamp" id="radar-timestamp">--:--</span>
+          <button class="radar-btn radar-tooltip" id="radar-load-all-btn" data-tooltip="Load all cached frames">Load All</button>
+          <button class="radar-btn radar-fullscreen-btn radar-tooltip" id="radar-fullscreen-btn" data-tooltip="Toggle fullscreen">⛶</button>
+        </div>
       </div>
-      <div class="radar-card-body">
-        <img class="radar-image" alt="Radar" />
+      
+      <!-- Canvas Display -->
+      <div id="radar-canvas-container" class="radar-canvas-container">
+        <canvas id="radar-canvas"></canvas>
+        <div class="radar-loading-overlay" id="radar-loading-overlay">
+          <div class="radar-spinner"></div>
+          <span class="radar-loading-text" id="radar-loading-text">Loading radar...</span>
+        </div>
       </div>
-      <div class="radar-clip-controls">
-        <button class="radar-clip-btn radar-clip-play-btn" title="Play/pause clip">▶</button>
-        <span class="radar-clip-frame-label">0/0</span>
-        <div class="radar-clip-progress"><div class="radar-clip-progress-bar"></div></div>
+      
+      <!-- Prefetch Progress -->
+      <div class="radar-prefetch-bar">
+        <div class="radar-prefetch-progress" id="radar-prefetch-progress" style="width: 0%"></div>
+      </div>
+      <span class="radar-prefetch-text" id="radar-frame-count-text">0/0 frames</span>
+      
+      <!-- Timeline -->
+      <div class="radar-timeline-container">
+        <span class="radar-time-range" id="radar-time-range">--:-- — --:--</span>
+        <div class="radar-timeline-progress-bar">
+          <div class="radar-timeline-progress" id="radar-timeline-progress" style="width: 0%"></div>
+        </div>
+        <div class="radar-timeline" id="radar-timeline"></div>
       </div>
     </div>`;
 
-  // Fetch and display radar image
-  await updateRadarImage(lat, lon);
+  // Bind events
+  bindRadarPlayerEvents();
 
-  // Layer selector event
-  const layerSelect = container.querySelector('.radar-layer-select');
-  if (layerSelect) {
-    layerSelect.addEventListener('change', async (e) => {
-      e.stopPropagation();
-      // Clear cache for this layer and re-fetch
-      await clearRadarCacheForLayer(lat, lon, RADAR_DEFAULT_LAYER);
-      await updateRadarImage(lat, lon, e.target.value);
-    });
-  }
-
-  // Clip playback controls
-  const playBtn = container.querySelector('.radar-clip-play-btn');
-  if (playBtn) {
-    playBtn.addEventListener('click', async (e) => {
-      e.stopPropagation();
-      const meta = getRadarMeta(lat, lon, layerSelect?.value || RADAR_DEFAULT_LAYER);
-      if (!meta || !meta.timestamps.length) return;
-      
-      // Fetch last 10 frames for animation
-      const frames = await getRadarFramesForClip(lat, lon, layerSelect?.value || RADAR_DEFAULT_LAYER, 10);
-      if (!frames || !frames.length) return;
-
-      // Toggle playback
-      if (playBtn.classList.contains('active')) {
-        playBtn.classList.remove('active');
-        playBtn.textContent = '▶';
-        container.querySelector('.radar-clip-controls').classList.remove('active');
-        return;
-      }
-
-      playBtn.classList.add('active');
-      playBtn.textContent = '⏸';
-      container.querySelector('.radar-clip-controls').classList.add('active');
-      
-      // Start playback
-      let frameIdx = 0;
-      const progressBar = container.querySelector('.radar-clip-progress-bar');
-      const frameLabel = container.querySelector('.radar-clip-frame-label');
-      
-      function showNextFrame() {
-        if (!playBtn.classList.contains('active')) return;
-        
-        const frame = frames[frameIdx % frames.length];
-        const img = container.querySelector('.radar-image');
-        if (img && frame) {
-          img.src = frame.dataUrl;
-          img.style.display = 'block';
-          progressBar.style.width = `${((frameIdx + 1) / frames.length) * 100}%`;
-          frameLabel.textContent = `${frameIdx + 1}/${frames.length}`;
-        }
-        
-        frameIdx++;
-        setTimeout(showNextFrame, 500); // 2 FPS (radar updates every ~2 min)
-      }
-      
-      showNextFrame();
-    });
+  // Initialize radar player engine
+  if (window.RADAR_PLAYER) {
+    window.RADAR_PLAYER.init(lat, lon);
   }
 }
 
-// Update radar image for current timestamp
-async function updateRadarImage(lat, lon, layer = null) {
+function bindRadarPlayerEvents() {
   const container = document.getElementById('radar-card-container');
   if (!container) return;
 
-  const card = container.querySelector('.radar-card');
-  const img = container.querySelector('.radar-image');
-  const timestampEl = container.querySelector('.radar-card-timestamp');
+  // Play/Pause button
+  const playBtn = document.getElementById('radar-play-btn');
+  if (playBtn) {
+    playBtn.addEventListener('click', () => {
+      if (window.RADAR_PLAYER) window.RADAR_PLAYER.togglePlayback();
+    });
+  }
 
-  // Show loading state
-  card.classList.add('radar-loading');
+  // Speed selector
+  const speedSelect = document.getElementById('radar-speed-select');
+  if (speedSelect) {
+    speedSelect.addEventListener('change', (e) => {
+      e.stopPropagation();
+      if (!window.RADAR_PLAYER) return;
+      const state = window.RADAR_PLAYER.getState();
+      state.speed = parseFloat(e.target.value);
+      // If playing, restart the playback loop with new speed
+      if (state.isPlaying) {
+        window.RADAR_PLAYER.stopPlayback();
+        window.RADAR_PLAYER.togglePlayback();
+      }
+    });
+  }
 
-  try {
-    const result = await fetchRadarImageForLocation(lat, lon, layer || RADAR_DEFAULT_LAYER);
-    
-    if (result.error) {
-      console.warn('[Radar] Failed to load radar:', result.error);
-      timestampEl.textContent = 'Failed to load';
-      card.classList.remove('radar-loading');
-      return;
-    }
+  // Zoom in button
+  const zoomInBtn = document.getElementById('radar-zoom-in-btn');
+  if (zoomInBtn) {
+    zoomInBtn.addEventListener('click', () => {
+      if (window.RADAR_PLAYER) window.RADAR_PLAYER.zoomIn();
+    });
+  }
 
-    // Update timestamp display
-    if (result.timestamp) {
-      const date = new Date(result.timestamp);
-      timestampEl.textContent = date.toLocaleTimeString();
-    }
+  // Zoom out button
+  const zoomOutBtn = document.getElementById('radar-zoom-out-btn');
+  if (zoomOutBtn) {
+    zoomOutBtn.addEventListener('click', () => {
+      if (window.RADAR_PLAYER) window.RADAR_PLAYER.zoomOut();
+    });
+  }
 
-    // Remove loading spinner — either when image loads or immediately if it was cached
-    if (result.cached) {
-      card.classList.remove('radar-loading');
-    } else {
-      img.onload = () => {
-        card.classList.remove('radar-loading');
-      };
-      img.onerror = () => {
-        console.warn('[Radar] Image failed to load');
-        img.style.display = 'none';
-        timestampEl.textContent = 'Failed to load';
-        card.classList.remove('radar-loading');
-      };
-    }
+  // Reset view button
+  const resetBtn = document.getElementById('radar-reset-btn');
+  if (resetBtn) {
+    resetBtn.addEventListener('click', () => {
+      if (window.RADAR_PLAYER) window.RADAR_PLAYER.resetView();
+    });
+  }
 
-    // Update the radar image element
-    img.src = result.imageUrl;
-    
-    // Show the image — for cached images, CSS selector [src]:not([src=""]) will handle display
-    // For uncached images, the onload handler will set display: block
-    if (result.cached) {
-      // Cached data URLs may not trigger onload — ensure visibility immediately
-      img.style.display = 'block';
-    }
-  } catch (e) {
-    console.error('[Radar] Error loading radar:', e);
-    timestampEl.textContent = 'Failed to load';
-    card.classList.remove('radar-loading');
+  // Layer selector
+  const layerSelect = document.getElementById('radar-layer-select');
+  if (layerSelect) {
+    layerSelect.addEventListener('change', async (e) => {
+      e.stopPropagation();
+      if (!window.RADAR_PLAYER) return;
+      await window.RADAR_PLAYER.switchLayer(e.target.value);
+    });
+  }
+
+  // Load all frames button
+  const loadAllBtn = document.getElementById('radar-load-all-btn');
+  if (loadAllBtn) {
+    loadAllBtn.addEventListener('click', async () => {
+      if (!window.RADAR_PLAYER) return;
+      const state = window.RADAR_PLAYER.getState();
+      // Pre-fetch all remaining frames
+      for (let i = 0; i < state.allTimestamps.length; i++) {
+        const timestamp = state.allTimestamps[i];
+        const cached = await getCachedRadarFrameAsDataURL(state.lat, state.lon, state.layer, timestamp);
+        if (!cached) {
+          await fetchRadarImageForTimestamp(state.lat, state.lon, state.layer, timestamp);
+        }
+      }
+    });
+  }
+
+  // Fullscreen button
+  const fullscreenBtn = document.getElementById('radar-fullscreen-btn');
+  if (fullscreenBtn) {
+    fullscreenBtn.addEventListener('click', () => {
+      if (window.RADAR_PLAYER) window.RADAR_PLAYER.toggleFullscreen();
+    });
   }
 }
 

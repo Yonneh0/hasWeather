@@ -91,7 +91,7 @@ const DataCache = {
     weather: 15 * 60 * 1000,      // 15 minutes
     airQuality: 15 * 60 * 1000,   // 15 minutes
     geocode: 24 * 60 * 60 * 1000, // 24 hours
-    nearby: 10 * 60 * 1000,       // 10 minutes
+    nearby: 15 * 60 * 1000,       // 15 minutes (aligned with weather TTL)
     ipLocation: 24 * 60 * 60 * 1000, // 24 hours
     nwsPoint: 15 * 60 * 1000,     // 15 minutes
     nwsForecast: 10 * 60 * 1000,  // 10 minutes

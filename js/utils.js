@@ -163,12 +163,12 @@ function getCityShortestTTL(city) {
     if (remaining < shortest) shortest = remaining;
   }
   
-  // Check NWS cache (Fix #16: Include NWS data in TTL calculation)
-  const nwsCityKey = nwsCacheKey(city.latitude, city.longitude);
-  const nwsEntry = localStorage.getItem(`hasw_cache_${nwsCityKey}`);
+  // Check NWS cache — only nwsPoint entries matter (they have the longest TTL among NWS types)
+  const nwsPointKey = nwsPointCacheKey(city.latitude, city.longitude);
+  const nwsEntry = localStorage.getItem(`hasw_cache_${nwsPointKey}`);
   if (nwsEntry) {
     const entry = JSON.parse(nwsEntry);
-    const ttl = DataCache.TTL[entry.type] || DataCache.TTL.nwsCityData;
+    const ttl = DataCache.TTL[entry.type] || DataCache.TTL.nwsPoint;
     const remaining = ttl - (Date.now() - entry.timestamp);
     if (remaining < shortest) shortest = remaining;
   }
