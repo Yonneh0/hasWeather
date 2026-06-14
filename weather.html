@@ -2203,6 +2203,19 @@ body.donkey-fullscreen .donkey-panel.donkey-hidden {
   justify-content: center;
 }
 
+/* Pin toggle button active state (more specific to override the generic .radar-btn.active) */
+.radar-btn-pins.active {
+  background: rgba(74, 158, 255, 0.3);
+  border-color: rgba(74, 158, 255, 0.5);
+  color: #4a9eff;
+  box-shadow: 0 0 8px rgba(74, 158, 255, 0.2);
+}
+
+.radar-btn-pins.active:hover {
+  background: rgba(74, 158, 255, 0.4);
+  border-color: rgba(74, 158, 255, 0.6);
+}
+
 /* Speed selector */
 .radar-speed-select {
   background: rgba(255, 255, 255, 0.06);
@@ -2503,6 +2516,17 @@ body.donkey-fullscreen .donkey-panel.donkey-hidden {
 
 .radar-fade-in {
   animation: fadeIn 0.3s ease forwards;
+}
+
+/* ===== PIN ANIMATIONS ===== */
+@keyframes pinPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.15); }
+}
+
+@keyframes userPinGlow {
+  0%, 100% { box-shadow: 0 0 4px rgba(74, 158, 255, 0.3); }
+  50% { box-shadow: 0 0 12px rgba(74, 158, 255, 0.6); }
 }
 
 /* ===== PLAYING STATE HIGHLIGHT ===== */
@@ -5553,6 +5577,33 @@ function invalidateRadarCache(lat, lon) {
   } catch { /* ignore */ }
 }
 
+// ===== COORDINATE CONVERSION FOR PINS =====
+// Convert lat/lon to pixel position within the radar image (512x512 canvas)
+function latLonToPixel(lat, lon, latCenter, lonCenter, radiusKm) {
+  const bbox = latLonToBboxEPSG3857(latCenter, lonCenter, radiusKm);
+  const [minx, miny, maxx, maxy] = bbox;
+  
+  const x = lonToX(lon);
+  const y = latToY(lat);
+  
+  // Convert to pixel position (inverted Y for canvas)
+  const pixelX = ((x - minx) / (maxx - minx)) * RADAR_IMAGE_SIZE;
+  const pixelY = RADAR_IMAGE_SIZE - ((y - miny) / (maxy - miny)) * RADAR_IMAGE_SIZE;
+  
+  return { x: pixelX, y: pixelY };
+}
+
+// Check if a lat/lon point is within the radar image bounds
+function latLonInBounds(lat, lon, latCenter, lonCenter, radiusKm) {
+  const bbox = latLonToBboxEPSG3857(latCenter, lonCenter, radiusKm);
+  const [minx, miny, maxx, maxy] = bbox;
+  
+  const x = lonToX(lon);
+  const y = latToY(lat);
+  
+  return x >= minx && x <= maxx && y >= miny && y <= maxy;
+}
+
 // ===== RADAR CACHE CLEAR =====
 // Clear all radar cache entries (used during manual refresh or storage cleanup)
 async function clearRadarCache() {
@@ -5655,6 +5706,9 @@ async function areFramesCachedInRange(lat, lon, layer, startIdx, endIdx) {
 // Make all radar functions and constants available globally for non-module scripts
 window.RADAR_DEFAULT_LAYER = RADAR_DEFAULT_LAYER;
 window.RADAR_LAYERS = RADAR_LAYERS;
+window.RADAR_BBOX_RADIUS_KM = RADAR_BBOX_RADIUS_KM;
+window.latLonToPixel = latLonToPixel;
+window.latLonInBounds = latLonInBounds;
 window.fetchRadarImageForLocation = fetchRadarImageForLocation;
 window.fetchRadarImageForTimestamp = fetchRadarImageForTimestamp;
 window.getCachedRadarFrameAsDataURL = getCachedRadarFrameAsDataURL;
@@ -5681,6 +5735,12 @@ window.getRadarTimestampsForLayer = getRadarTimestampsForLayer;
 
   // ===== CONSTANTS =====
   const ZOOM_LEVELS = [1, 1.5, 2, 3];
+  
+  // Pin rendering constants
+  const PIN_SIZE_BASE = 12; // base pin radius in pixels
+  const PIN_SIZE_SCALE = 0.5; // scale factor for pin size at higher zoom levels
+  const PIN_LABEL_MIN_ZOOM = 1.5; // minimum zoom to show labels
+  const PIN_LABEL_MAX_ZOOM = 3; // maximum zoom before labels get too big
   // Expose speed options globally so main.js can use them
   window.SPEED_OPTIONS = [0.5, 1, 2, 4, 8];
   const MAX_ZOOM = 3;
@@ -5715,6 +5775,12 @@ window.getRadarTimestampsForLayer = getRadarTimestampsForLayer;
     animFrameId: null,
     lastFrameTime: 0,
     isFullscreen: false,
+    
+    // Pin state
+    pins: [], // array of { lat, lon, label, type, offsetX, offsetY }
+    pinOffsetX: 0, // accumulated X offset for panning pins
+    pinOffsetY: 0, // accumulated Y offset for panning pins
+    showPins: true,
   };
 
   // ===== CANVAS SETUP =====
@@ -6526,7 +6592,222 @@ window.getRadarTimestampsForLayer = getRadarTimestampsForLayer;
     const offsetY = (canvas.height - imgH) / 2;
     ctx.drawImage(loadedImage, offsetX, offsetY, imgW, imgH);
 
+    // Draw pins on top of the radar image
+    if (state.showPins && state.pins.length > 0) {
+      drawPins(ctx, offsetX, offsetY, scale, imgW, imgH);
+    }
+
     ctx.restore();
+  }
+
+  // ===== PIN RENDERING =====
+  // Draw location pins on the radar canvas, aligned with the radar image position
+  
+  function drawPins(ctx, offsetX, offsetY, scale, imgW, imgH) {
+    const zoom = ZOOM_LEVELS[state.zoomLevel] || 1;
+    const pinSize = PIN_SIZE_BASE + (zoom - 1) * PIN_SIZE_SCALE;
+    
+    // Calculate radar image's top-left corner in canvas space
+    // Note: drawPins is called inside ctx.translate(state.panX, state.panY),
+    // so offsetX/offsetY are already in the translated coordinate system.
+    // The image is drawn at (offsetX, offsetY) in this shifted coordinate system.
+    const topLeftX = offsetX;
+    const topLeftY = offsetY;
+    
+    // Calculate viewport bounds in canvas space (with padding)
+    const viewPadding = 200;
+    const viewLeft = -viewPadding;
+    const viewRight = canvas.width + viewPadding;
+    const viewTop = -viewPadding;
+    const viewBottom = canvas.height + viewPadding;
+
+    for (const pin of state.pins) {
+      // Convert pin lat/lon to pixel position in 512px space
+      const pixelPos = window.latLonToPixel(pin.lat, pin.lon, state.lat, state.lon, window.RADAR_BBOX_RADIUS_KM);
+      
+      // Calculate pin position in canvas space (aligned with radar image)
+      const pinX = topLeftX + (pixelPos.x / 512) * imgW;
+      const pinY = topLeftY + (pixelPos.y / 512) * imgH;
+      
+      // Skip pins outside the viewport
+      if (pinX < viewLeft || pinX > viewRight || pinY < viewTop || pinY > viewBottom) continue;
+      
+      // Scale pin size for zoom level
+      const scaledPinSize = pinSize * scale / 512;
+      const scaledFontSize = Math.max(8, Math.min(14, 10 * scale / 512));
+      
+      drawPin(ctx, pinX, pinY, scaledPinSize, pin.type, pin.label, zoom, scaledFontSize);
+    }
+  }
+
+  function drawPin(ctx, x, y, size, type, label, zoom, fontSize) {
+    const isUser = type === 'user';
+    const pinColor = isUser ? '#4a9eff' : '#ff6b6b';
+    const pinBorderColor = isUser ? '#2a7edf' : '#e05555';
+    
+    // Draw pulsing ring for user location pin (only when radar is loaded)
+    if (isUser && isImageLoaded()) {
+      const pulseRadius = size * 2.5;
+      const pulseOpacity = (Math.sin(Date.now() / 800) + 1) / 4; // 0 to 0.5
+      ctx.beginPath();
+      ctx.arc(x, y + size * 0.2, pulseRadius, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(74, 158, 255, ${pulseOpacity})`;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+    
+    // Draw pin shadow
+    ctx.save();
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
+    ctx.shadowBlur = 6;
+    ctx.shadowOffsetX = 1;
+    ctx.shadowOffsetY = 2;
+    
+    // Draw pin body (teardrop shape)
+    const r = size;
+    const topY = y - r * 1.5; // pin tip
+    
+    // Pin tip (point at top)
+    ctx.beginPath();
+    ctx.moveTo(x, topY);
+    // Left side curve
+    ctx.quadraticCurveTo(x - r, y - r * 0.3, x - r, y + r * 0.2);
+    // Bottom arc
+    ctx.arc(x, y + r * 0.2, r, Math.PI * 0.95, Math.PI * 0.05, true);
+    // Right side curve
+    ctx.quadraticCurveTo(x + r, y - r * 0.3, x, topY);
+    
+    // Fill pin
+    ctx.fillStyle = pinColor;
+    ctx.fill();
+    // Stroke pin border
+    ctx.strokeStyle = pinBorderColor;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.restore();
+    
+    // Draw center dot on pin
+    ctx.beginPath();
+    ctx.arc(x, y + r * 0.2, Math.max(2, r * 0.3), 0, Math.PI * 2);
+    ctx.fillStyle = '#fff';
+    ctx.fill();
+    
+    // Draw label if zoom is sufficient
+    const showLabel = zoom >= PIN_LABEL_MIN_ZOOM && zoom <= PIN_LABEL_MAX_ZOOM;
+    if (showLabel && label) {
+      ctx.font = `bold ${fontSize}px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      
+      // Measure text width for background
+      const textMetrics = ctx.measureText(label);
+      const padding = 3;
+      const bgW = textMetrics.width + padding * 2;
+      const bgH = fontSize + padding * 2;
+      const bgX = x - bgW / 2;
+      const bgY = y + r * 1.6;
+      
+      // Draw label background
+      ctx.fillStyle = 'rgba(13, 13, 26, 0.85)';
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+      ctx.lineWidth = 1;
+      const cornerRadius = 4;
+      // Rounded rectangle background
+      ctx.beginPath();
+      ctx.moveTo(bgX + cornerRadius, bgY);
+      ctx.lineTo(bgX + bgW - cornerRadius, bgY);
+      ctx.quadraticCurveTo(bgX + bgW, bgY, bgX + bgW, bgY + cornerRadius);
+      ctx.lineTo(bgX + bgW, bgY + bgH - cornerRadius);
+      ctx.quadraticCurveTo(bgX + bgW, bgY + bgH, bgX + bgW - cornerRadius, bgY + bgH);
+      ctx.lineTo(bgX + cornerRadius, bgY + bgH);
+      ctx.quadraticCurveTo(bgX, bgY + bgH, bgX, bgY + bgH - cornerRadius);
+      ctx.lineTo(bgX, bgY + cornerRadius);
+      ctx.quadraticCurveTo(bgX, bgY, bgX + cornerRadius, bgY);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      
+      // Draw label text
+      ctx.fillStyle = isUser ? '#4a9eff' : '#fff';
+      ctx.fillText(label, x, bgY + padding);
+    }
+  }
+
+  // ===== PIN UPDATE =====
+  // Update pins from weather data and user location
+  function updatePins(weatherDataList, userLoc) {
+    if (!weatherDataList) return;
+    
+    state.pins = [];
+    
+    // Start pin animation loop if radar is loaded
+    if (isImageLoaded() && !state.pinAnimFrameId) {
+      startPinAnimation();
+    }
+    
+    // Add user location pin
+    if (userLoc && userLoc.lat != null && userLoc.lon != null) {
+      state.pins.push({
+        lat: userLoc.lat,
+        lon: userLoc.lon,
+        label: 'You',
+        type: 'user',
+      });
+    }
+    
+    // Add city pins from weather data
+    for (const city of weatherDataList) {
+      if (city.latitude != null && city.longitude != null) {
+        // Get first 3 chars of city name for label
+        const cityName = city.name ? city.name.substring(0, 3).toUpperCase() : '??';
+        state.pins.push({
+          lat: city.latitude,
+          lon: city.longitude,
+          label: cityName,
+          type: 'city',
+        });
+      }
+    }
+    
+    // Re-render canvas with pins (will only show if image is loaded)
+    renderCanvas();
+  }
+
+  // ===== PIN TOGGLE =====
+  function togglePins() {
+    state.showPins = !state.showPins;
+    const pinBtn = document.getElementById('radar-pins-btn');
+    if (pinBtn) {
+      pinBtn.classList.toggle('active', state.showPins);
+      pinBtn.title = state.showPins ? 'Hide pins' : 'Show pins';
+      pinBtn.dataset.tooltip = state.showPins ? 'Hide pins' : 'Show pins';
+    }
+    
+    // Start/stop animation loop based on pin visibility
+    if (isImageLoaded() && !state.pinAnimFrameId) {
+      startPinAnimation();
+    } else if (!state.showPins && state.pinAnimFrameId) {
+      cancelAnimationFrame(state.pinAnimFrameId);
+      state.pinAnimFrameId = null;
+    }
+    
+    renderCanvas();
+  }
+
+  // ===== PIN ANIMATION LOOP =====
+  function startPinAnimation() {
+    if (state.pinAnimFrameId) return; // Already running
+    
+    function animatePins() {
+      if (!isImageLoaded() || !state.showPins || state.pins.length === 0) {
+        state.pinAnimFrameId = null;
+        return;
+      }
+      renderCanvas();
+      state.pinAnimFrameId = requestAnimationFrame(animatePins);
+    }
+    
+    animatePins();
   }
 
   function drawLoadingSpinner(ctx, cx, cy) {
@@ -6691,6 +6972,8 @@ window.getRadarTimestampsForLayer = getRadarTimestampsForLayer;
     switchLayer,
     panFrame,
     toggleFullscreen,
+    togglePins,
+    updatePins,
     getZoomPercent,
     getState: () => ({ ...state }),
   };
@@ -11697,6 +11980,7 @@ async function loadRadarCard(lat, lon) {
         <div class="radar-header-section">
           <select class="radar-layer-select" id="radar-layer-select" title="Radar layer">${layerOptions}</select>
           <span class="radar-timestamp" id="radar-timestamp">--:--</span>
+          <button class="radar-btn radar-btn-pins radar-tooltip" id="radar-pins-btn" data-tooltip="Toggle location pins" title="Pins">📌</button>
           <button class="radar-btn radar-tooltip" id="radar-load-all-btn" data-tooltip="Load all cached frames">Load All</button>
           <button class="radar-btn radar-fullscreen-btn radar-tooltip" id="radar-fullscreen-btn" data-tooltip="Toggle fullscreen">⛶</button>
         </div>
@@ -11821,6 +12105,34 @@ function bindRadarPlayerEvents() {
     fullscreenBtn.addEventListener('click', () => {
       if (window.RADAR_PLAYER) window.RADAR_PLAYER.toggleFullscreen();
     });
+  }
+
+  // Pin toggle button
+  const pinsBtn = document.getElementById('radar-pins-btn');
+  if (pinsBtn) {
+    pinsBtn.addEventListener('click', () => {
+      if (window.RADAR_PLAYER) window.RADAR_PLAYER.togglePins();
+    });
+  }
+
+  // Update pins when weather data changes
+  const updatePinsObserver = new MutationObserver(() => {
+    if (weatherData.length > 0 && userLocation && window.RADAR_PLAYER) {
+      window.RADAR_PLAYER.updatePins(weatherData, userLocation);
+    }
+  });
+  
+  // Observe city-grid for changes to trigger pin updates
+  const cityGrid = document.getElementById('city-grid');
+  if (cityGrid) {
+    updatePinsObserver.observe(cityGrid, { childList: true, subtree: true });
+  }
+  
+  // Also update pins after weather data loads
+  if (weatherData.length > 0 && userLocation && window.RADAR_PLAYER) {
+    setTimeout(() => {
+      window.RADAR_PLAYER.updatePins(weatherData, userLocation);
+    }, 500);
   }
 }
 
