@@ -82,28 +82,49 @@ async function run() {
     return;
   }
 
-    // Always use OM as base for all cities
-    weatherData = await fetchWeatherForCities(allCities);
+  // ===== PHASE 1: Render placeholder cards immediately + start radar loading =====
+  renderPlaceholderCards(allCities);
+  
+  // Start radar card loading as soon as location is known (don't wait for weather data)
+  if (userLocation) {
+    loadRadarCard(userLocation.lat, userLocation.lon);
+  }
 
-    // Check NWS bounds for each city and fetch NWS data where available — sequential to respect rate limits
-    const nwsCities = [];
-    for (const city of weatherData) {
-      if (city.latitude != null && city.longitude != null) {
-        // Quick bounds filter first (no API call for obvious non-NWS cities)
-        if (city.latitude >= 17 && city.latitude <= 71 && city.longitude >= -170 && city.longitude <= -65) {
-          city.nwsBounds = await isNwsBoundsAvailable(city.latitude, city.longitude);
-        } else {
-          city.nwsBounds = false;
-        }
-      } else {
-        city.nwsBounds = false;
-      }
-
-      // Queue cities that have NWS bounds for data fetching
-      if (city.nwsBounds) {
-        nwsCities.push(city);
-      }
+  // ===== PHASE 2: Fetch OM weather data for each city in parallel and update cards incrementally =====
+  const omResults = await Promise.allSettled(
+    allCities.map(city => fetchWeatherForCity(city).catch(() => null))
+  );
+  
+  weatherData = [];
+  for (let i = 0; i < allCities.length; i++) {
+    if (omResults[i].status === 'fulfilled' && omResults[i].value) {
+      weatherData.push(omResults[i].value);
+      
+      // Update this card immediately as OM data arrives (also draws charts)
+      updateCardsWithOMData([omResults[i].value]);
     }
+  }
+
+  // ===== PHASE 3: Check NWS bounds and fetch NWS data where available — in parallel =====
+  if (weatherData.length > 0) {
+    // Check all bounds in parallel (only for cities within US lat/lon range)
+    const boundsPromises = weatherData.map(async (city) => {
+      if (city.latitude != null && city.longitude != null &&
+          city.latitude >= 17 && city.latitude <= 71 &&
+          city.longitude >= -170 && city.longitude <= -65) {
+        const inBounds = await isNwsBoundsAvailable(city.latitude, city.longitude);
+        return { city, nwsBounds: inBounds };
+      }
+      return { city, nwsBounds: false };
+    });
+    
+    const boundsResults = await Promise.all(boundsPromises);
+    for (const { city, nwsBounds } of boundsResults) {
+      city.nwsBounds = nwsBounds;
+    }
+    
+    // Queue cities that have NWS bounds for data fetching
+    const nwsCities = weatherData.filter(c => c.nwsBounds);
 
     // Fetch NWS data for all queued cities in parallel
     if (nwsCities.length > 0) {
@@ -111,7 +132,7 @@ async function run() {
         nwsCities.map(city => fetchForCity(city.latitude, city.longitude).catch(() => null))
       );
 
-      // Store NWS data on each city object as separate from OM data
+      // Store NWS data on each city object as separate from OM data, updating cards incrementally
       for (let i = 0; i < nwsCities.length; i++) {
         const city = nwsCities[i];
         const result = nwsResults[i];
@@ -120,17 +141,15 @@ async function run() {
           const nwsAppData = nwsToAppData(city, result.value);
           if (nwsAppData) {
             city.nwsData = nwsAppData;
+            
+            // Update this card immediately as NWS data arrives (also draws charts)
+            updateCardsWithNWSData([city]);
           }
         }
       }
     }
+  }
 
-   renderAll();
-   
-   // After cities are rendered, load the radar card and fetch radar image
-   if (userLocation) {
-     loadRadarCard(userLocation.lat, userLocation.lon);
-   }
  }
 
 // ===== RADAR PLAYER =====

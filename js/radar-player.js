@@ -114,6 +114,32 @@
     }
   }
 
+  function showErrorOverlay(text) {
+    const loadingOverlay = document.getElementById('radar-loading-overlay');
+    if (!loadingOverlay) return;
+    loadingOverlay.classList.remove('hidden');
+    const spinner = loadingOverlay.querySelector('.radar-spinner');
+    if (spinner) spinner.style.display = 'none';
+    const loadingText = document.getElementById('radar-loading-text');
+    if (loadingText) {
+      loadingText.textContent = text || 'Error loading radar';
+      loadingText.style.color = '#ff4444';
+    }
+  }
+
+  function hideErrorOverlay() {
+    const loadingOverlay = document.getElementById('radar-loading-overlay');
+    if (!loadingOverlay) return;
+    loadingOverlay.classList.add('hidden');
+    const spinner = loadingOverlay.querySelector('.radar-spinner');
+    if (spinner) spinner.style.display = '';
+    const loadingText = document.getElementById('radar-loading-text');
+    if (loadingText) {
+      loadingText.textContent = 'Loading radar...';
+      loadingText.style.color = '';
+    }
+  }
+
   // ===== CANVAS EVENTS =====
   function setupCanvasEvents() {
     if (!canvas) return;
@@ -148,19 +174,29 @@
       }
     });
 
-    // Scroll to zoom
+    // Scroll to zoom (zoom-to-point)
     canvas.addEventListener('wheel', (e) => {
       e.preventDefault();
       const delta = e.deltaY > 0 ? -1 : 1;
       const newZoom = Math.max(0, Math.min(ZOOM_LEVELS.length - 1, state.zoomLevel + delta));
       if (newZoom !== state.zoomLevel) {
-        zoomTo(newZoom);
+        zoomTo(newZoom, e.clientX, e.clientY);
       }
     }, { passive: false });
 
-    // Double-click to reset view
-    canvas.addEventListener('dblclick', () => {
-      resetView();
+    // Double-click to reset view (zoom-to-point for reset)
+    canvas.addEventListener('dblclick', (e) => {
+      if (isImageLoaded()) {
+        // Reset zoom first, then pan at the click point
+        const newZoom = 0;
+        zoomTo(newZoom, e.clientX, e.clientY);
+        state.panX = 0;
+        state.panY = 0;
+        updateZoomUI();
+        renderCanvas();
+      } else {
+        resetView();
+      }
     });
 
     // Resize observer
@@ -216,20 +252,38 @@
     if (progressBar) progressBar.style.width = '0%';
     if (progressText) progressText.textContent = 'Loading radar...';
 
-    // First, get the latest timestamp from WMS to initialize the timeline
-    const latestTimestamp = await getLatestRadarTimestamp();
-    if (latestTimestamp) {
-      state.allTimestamps = [latestTimestamp];
+    // Try to load cached timestamps from metadata first
+    let meta = getRadarMeta(state.lat, state.lon, state.layer);
+    
+    // If no metadata cache, fetch all timestamps from WMS GetCapabilities
+    if (!meta || !meta.timestamps || meta.timestamps.length === 0) {
+      const allTimestamps = await getRadarTimestampsForLayer(state.layer);
+      if (allTimestamps && allTimestamps.length > 0) {
+        // Save to metadata cache for future use
+        meta = { timestamps: allTimestamps, layer: state.layer, lat: state.lat, lon: state.lon, lastUpdated: Date.now() };
+        setRadarMeta(state.lat, state.lon, state.layer, null);
+      }
     }
 
-    // Try to load cached timestamps from metadata
-    const meta = getRadarMeta(state.lat, state.lon, state.layer);
+    // Set timestamps from metadata (or WMS if no cache)
     if (meta && meta.timestamps && meta.timestamps.length > 0) {
       state.allTimestamps = [...meta.timestamps].sort();
+    } else {
+      // No timestamps available — show error
+      const loadingText = document.getElementById('radar-loading-text');
+      if (loadingText) loadingText.textContent = 'No radar data available';
+      showErrorOverlay('No radar data available for this location');
+      return;
     }
 
-    // Fetch the latest frame first
-    await loadCurrentFrame();
+    // Fetch the latest frame first (last in sorted timestamps)
+    const loadResult = await loadCurrentFrame();
+    
+    // Check if the frame loaded successfully
+    if (!loadResult && state.allTimestamps.length > 0) {
+      showErrorOverlay('Failed to load radar image');
+      return;
+    }
 
     // Hide loading overlay after initial frame loads
     hideLoadingOverlay();
@@ -407,12 +461,38 @@
   }
 
   // ===== ZOOM =====
-  function zoomTo(zoomLevel) {
+  function zoomTo(zoomLevel, centerX, centerY) {
     if (zoomLevel < 0 || zoomLevel >= ZOOM_LEVELS.length) return;
     const oldZoom = state.zoomLevel;
     state.zoomLevel = zoomLevel;
     const newZoom = ZOOM_LEVELS[zoomLevel];
     const oldZoomFactor = ZOOM_LEVELS[oldZoom] || 1;
+
+    // Zoom-to-point: adjust pan so the point under the mouse stays in place
+    if (centerX != null && centerY != null && isImageLoaded()) {
+      const rect = canvas.getBoundingClientRect();
+      const mouseX = centerX - rect.left;
+      const mouseY = centerY - rect.top;
+      
+      // Calculate the offset of the zoom point from the center before zoom
+      const imgW = 512 * (canvasWidth / 512) * oldZoomFactor;
+      const imgH = 512 * (canvasHeight / 512) * oldZoomFactor;
+      const centerXOffset = (canvas.width - imgW) / 2 + state.panX;
+      const centerYOffset = (canvas.height - imgH) / 2 + state.panY;
+      
+      const pointOffsetX = mouseX - centerXOffset;
+      const pointOffsetY = mouseY - centerYOffset;
+      
+      // Calculate new image size after zoom
+      const newImgW = 512 * (canvasWidth / 512) * newZoom;
+      const newImgH = 512 * (canvasHeight / 512) * newZoom;
+      const newCenterXOffset = (canvas.width - newImgW) / 2 + state.panX;
+      const newCenterYOffset = (canvas.height - newImgH) / 2 + state.panY;
+      
+      // Adjust pan to keep the point in place
+      state.panX += pointOffsetX * (newZoom / oldZoomFactor - 1);
+      state.panY += pointOffsetY * (newZoom / oldZoomFactor - 1);
+    }
 
     // Update canvas size based on zoom
     const container = document.getElementById('radar-canvas-container');
@@ -578,43 +658,52 @@
   // ===== TIMELINE =====
   function updateTimelineUI() {
     const timelineContainer = document.getElementById('radar-timeline');
-    const loadingOverlay = document.getElementById('radar-loading-overlay');
     if (!timelineContainer || !state.allTimestamps.length) return;
 
-    // Clear existing dots
-    while (timelineContainer.firstChild) {
-      timelineContainer.removeChild(timelineContainer.firstChild);
-    }
-
-    // Create dots for each timestamp
-    state.allTimestamps.forEach((timestamp, idx) => {
-      const dot = document.createElement('div');
-      dot.className = 'radar-timeline-dot';
-      if (idx === state.currentFrameIndex) {
-        dot.classList.add('active');
+    // Only rebuild dots if we don't have any yet (e.g., first load or layer change)
+    const existingDots = timelineContainer.querySelectorAll('.radar-timeline-dot');
+    if (existingDots.length !== state.allTimestamps.length) {
+      // Need to create dots
+      while (timelineContainer.firstChild) {
+        timelineContainer.removeChild(timelineContainer.firstChild);
       }
 
-      // Check if frame is cached
-      const isCached = getCachedRadarFrameAsDataURL(state.lat, state.lon, state.layer, timestamp) !== null;
-      if (!isCached) {
-        dot.classList.add('uncached');
-      }
+      // Create dots for each timestamp
+      state.allTimestamps.forEach((timestamp, idx) => {
+        const dot = document.createElement('div');
+        dot.className = 'radar-timeline-dot';
+        if (idx === state.currentFrameIndex) {
+          dot.classList.add('active');
+        }
 
-      // Format time for tooltip
-      const date = new Date(timestamp);
-      const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      dot.title = `${timeStr}`;
-      dot.dataset.timestamp = timestamp;
-      dot.dataset.index = idx;
+        // Check if frame is cached
+        const isCached = getCachedRadarFrameAsDataURL(state.lat, state.lon, state.layer, timestamp) !== null;
+        if (!isCached) {
+          dot.classList.add('uncached');
+        }
 
-      // Click to seek
-      dot.addEventListener('click', () => {
-        if (state.isPlaying) stopPlayback();
-        loadFrameByIndex(parseInt(dot.dataset.index));
+        // Format time for tooltip
+        const date = new Date(timestamp);
+        const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        dot.title = `${timeStr}`;
+        dot.dataset.timestamp = timestamp;
+        dot.dataset.index = idx;
+
+        // Click to seek
+        dot.addEventListener('click', () => {
+          if (state.isPlaying) stopPlayback();
+          loadFrameByIndex(parseInt(dot.dataset.index));
+        });
+
+        timelineContainer.appendChild(dot);
       });
-
-      timelineContainer.appendChild(dot);
-    });
+    } else {
+      // Just update active/cached classes on existing dots (efficient!)
+      const dots = timelineContainer.querySelectorAll('.radar-timeline-dot');
+      dots.forEach((dot, idx) => {
+        dot.classList.toggle('active', idx === state.currentFrameIndex);
+      });
+    }
 
     // Update time range display
     const timeRange = document.getElementById('radar-time-range');
@@ -673,6 +762,9 @@
       let pct = (e.clientX - rect.left) / rect.width;
       pct = Math.max(0, Math.min(1, pct));
 
+      // Guard against empty timestamps array
+      if (!state.allTimestamps.length) return;
+
       // Calculate which frame index to seek to
       const targetIdx = Math.round(pct * (state.allTimestamps.length - 1));
 
@@ -704,8 +796,20 @@
   function updateTimestampDisplay(timestamp) {
     const timestampEl = document.getElementById('radar-timestamp');
     const loadingOverlay = document.getElementById('radar-loading-overlay');
-    if (!timestampEl || !timestamp) return;
+    if (!timestampEl) return;
+    
+    // Guard against null/invalid timestamps
+    if (!timestamp) {
+      timestampEl.textContent = '--:--';
+      return;
+    }
+    
     const date = new Date(timestamp);
+    if (isNaN(date.getTime())) {
+      timestampEl.textContent = '--:--';
+      return;
+    }
+    
     timestampEl.textContent = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     
     // Hide loading overlay when timestamp is set
@@ -787,21 +891,27 @@
     state.frames = null;
     loadedImage = null;
 
-    // Get timestamps for new layer from WMS (not just metadata)
-    const newTimestamp = await getLatestRadarTimestamp();
-    if (newTimestamp) {
-      state.allTimestamps = [newTimestamp];
-    }
-    const meta = getRadarMeta(state.lat, state.lon, state.layer);
-    if (meta && meta.timestamps && meta.timestamps.length > 0) {
-      state.allTimestamps = [...meta.timestamps].sort();
+    // Get timestamps for new layer from WMS (not just metadata) — use all timestamps, not just latest
+    const allTimestamps = await getRadarTimestampsForLayer(layer);
+    if (allTimestamps && allTimestamps.length > 0) {
+      state.allTimestamps = [...allTimestamps].sort();
+    } else {
+      // Fallback: try metadata cache, then latest timestamp
+      const meta = getRadarMeta(state.lat, state.lon, state.layer);
+      if (meta && meta.timestamps && meta.timestamps.length > 0) {
+        state.allTimestamps = [...meta.timestamps].sort();
+      } else {
+        const latestTimestamp = await getLatestRadarTimestamp();
+        if (latestTimestamp) {
+          state.allTimestamps = [latestTimestamp];
+        }
+      }
     }
 
-    // Update UI
+    // Update UI - set layer select value WITHOUT triggering another change event
     const layerSelect = document.getElementById('radar-layer-select');
     if (layerSelect) {
-      const option = layerSelect.querySelector(`option[value="${layer}"]`);
-      if (option) option.selected = true;
+      layerSelect.value = layer;
     }
 
     updateZoomUI();
@@ -809,7 +919,14 @@
     // Show loading overlay for layer switch
     state.isLoading = true;
     showLoadingOverlay('Switching layer...');
-    await loadCurrentFrame();
+    
+    const loadResult = await loadCurrentFrame();
+    if (!loadResult && state.allTimestamps.length > 0) {
+      showErrorOverlay('Failed to load radar image');
+      hideErrorOverlay();
+      return;
+    }
+    
     hideLoadingOverlay();
     state.isLoading = false;
     state.isLoaded = true;

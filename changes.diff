@@ -1,542 +1,922 @@
-diff --git a/css/interactive.css b/css/interactive.css
-index 48bbd51..4036cdf 100644
---- a/css/interactive.css
-+++ b/css/interactive.css
-@@ -358,146 +358,3 @@
-   justify-content: center;
-   padding: 1rem 2rem 2rem;
+diff --git a/changes.diff b/changes.diff
+index 6136973..e69de29 100644
+--- a/changes.diff
++++ b/changes.diff
+@@ -1,542 +0,0 @@
+-diff --git a/css/interactive.css b/css/interactive.css
+-index 48bbd51..4036cdf 100644
+---- a/css/interactive.css
+-+++ b/css/interactive.css
+-@@ -358,146 +358,3 @@
+-   justify-content: center;
+-   padding: 1rem 2rem 2rem;
+- }
+--
+--/* ===== RADAR CARD ===== */
+--.radar-card {
+--  width: 100%;
+--  max-width: 512px;
+--  margin: 0 auto 1rem;
+--  border-radius: 16px;
+--  overflow: hidden;
+--  background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.04)), #0d0d1a;
+--  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+--  position: relative;
+--}
+--
+--.radar-card-header {
+--  padding: 0.75rem 1rem;
+--  display: flex;
+--  align-items: center;
+--  gap: 0.5rem;
+--  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+--}
+--
+--.radar-card-title {
+--  font-size: 0.85rem;
+--  font-weight: 700;
+--  text-transform: uppercase;
+--  letter-spacing: 0.1em;
+--  color: rgba(255, 255, 255, 0.7);
+--}
+--
+--.radar-card-timestamp {
+--  font-size: 0.7rem;
+--  color: rgba(255, 255, 255, 0.4);
+--  margin-left: auto;
+--}
+--
+--.radar-card-body {
+--  padding: 0.5rem;
+--  display: flex;
+--  justify-content: center;
+--}
+--
+--.radar-image {
+--  width: 100%;
+--  max-width: 512px;
+--  height: auto;
+--  aspect-ratio: 1 / 1;
+--  object-fit: contain;
+--  border-radius: 8px;
+--  display: none; /* hidden until loaded */
+--}
+--
+--/* Show image when it has a valid src attribute */
+--.radar-image[src]:not([src=""]) {
+--  display: block !important;
+--}
+--
+--/* Loading spinner for radar card */
+--.radar-card.radar-loading .radar-image {
+--  display: none !important;
+--}
+--
+--.radar-card.radar-loading::after {
+--  content: '';
+--  display: inline-block;
+--  width: 48px;
+--  height: 48px;
+--  border: 3px solid rgba(255, 255, 255, 0.1);
+--  border-top-color: rgba(255, 255, 255, 0.6);
+--  border-radius: 50%;
+--  animation: radar-spinner 0.8s linear infinite;
+--  margin: 1rem auto;
+--}
+--
+--/* Layer selector dropdown */
+--.radar-layer-select {
+--  background: rgba(255, 255, 255, 0.06);
+--  border: 1px solid rgba(255, 255, 255, 0.1);
+--  border-radius: 4px;
+--  color: rgba(255, 255, 255, 0.7);
+--  font-size: 0.7rem;
+--  padding: 0.15rem 0.3rem;
+--  cursor: pointer;
+--}
+--
+--.radar-layer-select:hover {
+--  background: rgba(255, 255, 255, 0.1);
+--}
+--
+--/* Clip playback controls */
+--.radar-clip-controls {
+--  display: none; /* hidden until clip is active */
+--  padding: 0.5rem 1rem;
+--  border-top: 1px solid rgba(255, 255, 255, 0.06);
+--  align-items: center;
+--  justify-content: center;
+--  gap: 0.5rem;
+--}
+--
+--.radar-clip-controls.active {
+--  display: flex !important;
+--}
+--
+--.radar-clip-btn {
+--  background: rgba(255, 255, 255, 0.06);
+--  border: 1px solid rgba(255, 255, 255, 0.1);
+--  border-radius: 4px;
+--  color: rgba(255, 255, 255, 0.7);
+--  font-size: 0.7rem;
+--  padding: 0.2rem 0.5rem;
+--  cursor: pointer;
+--  display: flex;
+--  align-items: center;
+--  gap: 0.25rem;
+--}
+--
+--.radar-clip-btn:hover {
+--  background: rgba(255, 255, 255, 0.1);
+--}
+--
+--.radar-clip-btn.active {
+--  background: rgba(0, 48, 135, 0.4);
+--  border-color: rgba(0, 48, 135, 0.6);
+--}
+--
+--.radar-clip-progress {
+--  flex: 1;
+--  max-width: 200px;
+--  height: 4px;
+--  background: rgba(255, 255, 255, 0.1);
+--  border-radius: 2px;
+--  overflow: hidden;
+--}
+--
+--.radar-clip-progress-bar {
+--  height: 100%;
+--  background: linear-gradient(90deg, #4a9eff, #64b5f6);
+--  border-radius: 2px;
+--  transition: width 0.1s linear;
+--}
+--
+--@keyframes radar-spinner {
+--  to { transform: rotate(360deg); }
+--}
+-diff --git a/index.html b/index.html
+-index b75bbf6..68fb8da 100644
+---- a/index.html
+-+++ b/index.html
+-@@ -6,6 +6,7 @@
+- <title>hasWeather</title>
+- <link rel="icon" href="hasWeather-low.png" type="image/png">
+- <link rel="stylesheet" href="css/main.css">
+-+<link rel="stylesheet" href="css/radar-player.css">
+- </head>
+- <body translate="no">
+- 
+-@@ -44,6 +45,7 @@
+- <script src="js/api-openstreetmap.js"></script>
+- <script src="js/api-nws.js"></script>
+- <script src="js/api-radar.js"></script>
+-+<script src="js/radar-player.js"></script>
+- <script src="js/render.js"></script>
+- <script src="js/charts.js"></script>
+-   <script src="js/network-monitor.js"></script>
+-diff --git a/js/api-radar.js b/js/api-radar.js
+-index 790b8ad..8442f66 100644
+---- a/js/api-radar.js
+-+++ b/js/api-radar.js
+-@@ -537,6 +537,60 @@ async function getRadarCacheSize() {
+-   }
+- }
+- 
+-+// ===== BATCH PRE-FETCH FOR A RANGE OF FRAMES =====
+-+// Fetch a contiguous range of frames for the radar player timeline
+-+async function prefetchFramesInRange(lat, lon, layer, startIdx, endIdx) {
+-+  const meta = getRadarMeta(lat, lon, layer);
+-+  if (!meta || !meta.timestamps.length) return;
+-+
+-+  const results = [];
+-+  for (let i = Math.max(0, startIdx); i <= Math.min(endIdx, meta.timestamps.length - 1); i++) {
+-+    const timestamp = meta.timestamps[i];
+-+    // Check cache first
+-+    const cached = await getCachedRadarFrameAsDataURL(lat, lon, layer, timestamp);
+-+    if (cached) continue; // Already cached
+-+
+-+    // Fetch from WMS
+-+    const result = await fetchRadarImageForTimestamp(lat, lon, layer, timestamp);
+-+    if (!result.error) {
+-+      results.push({ index: i, timestamp, dataUrl: result.imageUrl });
+-+    }
+-+  }
+-+  return results;
+-+}
+-+
+-+// ===== GET FRAME RANGE FOR PLAYBACK =====
+-+// Get frames within a time range for the radar player
+-+async function getFramesInRange(lat, lon, layer, startTimestamp, endTimestamp) {
+-+  const meta = getRadarMeta(lat, lon, layer);
+-+  if (!meta || !meta.timestamps.length) return [];
+-+
+-+  // Filter timestamps within range
+-+  const filtered = meta.timestamps.filter(ts => ts >= startTimestamp && ts <= endTimestamp);
+-+  const frames = [];
+-+
+-+  for (const ts of filtered) {
+-+    const dataUrl = await getCachedRadarFrameAsDataURL(lat, lon, layer, ts);
+-+    if (dataUrl) {
+-+      frames.push({ timestamp: ts, dataUrl });
+-+    }
+-+  }
+-+
+-+  return frames;
+-+}
+-+
+-+// ===== CHECK IF ALL FRAMES IN RANGE ARE CACHED =====
+-+async function areFramesCachedInRange(lat, lon, layer, startIdx, endIdx) {
+-+  const meta = getRadarMeta(lat, lon, layer);
+-+  if (!meta || !meta.timestamps.length) return false;
+-+
+-+  for (let i = Math.max(0, startIdx); i <= Math.min(endIdx, meta.timestamps.length - 1); i++) {
+-+    const cached = await getCachedRadarFrameAsDataURL(lat, lon, layer, meta.timestamps[i]);
+-+    if (!cached) return false;
+-+  }
+-+  return true;
+-+}
+-+
+- // ===== GLOBAL EXPORTS =====
+- // Make all radar functions and constants available globally for non-module scripts
+- window.RADAR_DEFAULT_LAYER = RADAR_DEFAULT_LAYER;
+-@@ -545,6 +599,9 @@ window.fetchRadarImageForLocation = fetchRadarImageForLocation;
+- window.fetchRadarImageForTimestamp = fetchRadarImageForTimestamp;
+- window.getCachedRadarFrameAsDataURL = getCachedRadarFrameAsDataURL;
+- window.getRadarFramesForClip = getRadarFramesForClip;
+-+window.prefetchFramesInRange = prefetchFramesInRange;
+-+window.getFramesInRange = getFramesInRange;
+-+window.areFramesCachedInRange = areFramesCachedInRange;
+- window.clearRadarCacheForLocation = clearRadarCacheForLocation;
+- window.clearRadarCacheForLayer = clearRadarCacheForLayer;
+- window.clearRadarCache = clearRadarCache;
+-diff --git a/js/main.js b/js/main.js
+-index 72b13b9..d358379 100644
+---- a/js/main.js
+-+++ b/js/main.js
+-@@ -133,153 +133,172 @@ async function run() {
+-    }
+-  }
+- 
+--// ===== RADAR CARD =====
+-+// ===== RADAR PLAYER =====
+- async function loadRadarCard(lat, lon) {
+-   const container = document.getElementById('radar-card-container');
+-   if (!container) return;
+- 
+--  // Build radar card HTML
+-+  // Build radar player HTML
+-   const layerOptions = Object.entries(RADAR_LAYERS).map(([key, value]) => 
+-     `<option value="${value}" ${value === RADAR_DEFAULT_LAYER ? 'selected' : ''}>${key.replace('_', ' ')}</option>`
+-   ).join('');
+- 
+-+  const speedOptions = (window.SPEED_OPTIONS || [0.5, 1, 2, 4, 8]).map((speed, idx) => 
+-+    `<option value="${speed}" ${idx === 1 ? 'selected' : ''}>${speed}x</option>`
+-+  ).join('');
+-+
+-   container.innerHTML = `
+--    <div class="radar-card" data-radar-lat="${lat.toFixed(4)}" data-radar-lon="${lon.toFixed(4)}">
+--      <div class="radar-card-header">
+--        <span class="radar-card-title">Radar</span>
+--        <select class="radar-layer-select" title="Select radar layer">${layerOptions}</select>
+--        <span class="radar-card-timestamp">Loading...</span>
+-+    <div id="radar-player-card" class="radar-fade-in">
+-+      <!-- Titlebar -->
+-+      <div class="radar-player-header">
+-+        <!-- Left: Playback Controls -->
+-+        <div class="radar-header-section">
+-+          <button class="radar-btn radar-btn-play radar-tooltip" id="radar-play-btn" data-tooltip="Play/Pause (Space)">▶</button>
+-+          <span class="radar-speed-select" title="Playback speed">
+-+            <select class="radar-speed-select" id="radar-speed-select" title="Speed">${speedOptions}</select>
+-+          </span>
+-+        </div>
+-+        
+-+        <div class="radar-header-divider"></div>
+-+        
+-+        <!-- Center: Zoom Controls -->
+-+        <div class="radar-header-section">
+-+          <button class="radar-btn radar-tooltip" id="radar-zoom-out-btn" data-tooltip="Zoom out (-)">−</button>
+-+          <span class="radar-zoom-text" id="radar-zoom-text">100%</span>
+-+          <button class="radar-btn radar-tooltip" id="radar-zoom-in-btn" data-tooltip="Zoom in (+)">+</button>
+-+          <button class="radar-btn radar-tooltip" id="radar-reset-btn" data-tooltip="Reset view (0)">⟲</button>
+-+        </div>
+-+        
+-+        <div class="radar-header-divider"></div>
+-+        
+-+        <!-- Right: Layer & Info -->
+-+        <div class="radar-header-section">
+-+          <select class="radar-layer-select" id="radar-layer-select" title="Radar layer">${layerOptions}</select>
+-+          <span class="radar-timestamp" id="radar-timestamp">--:--</span>
+-+          <button class="radar-btn radar-tooltip" id="radar-load-all-btn" data-tooltip="Load all cached frames">Load All</button>
+-+          <button class="radar-btn radar-fullscreen-btn radar-tooltip" id="radar-fullscreen-btn" data-tooltip="Toggle fullscreen">⛶</button>
+-+        </div>
+-       </div>
+--      <div class="radar-card-body">
+--        <img class="radar-image" alt="Radar" />
+-+      
+-+      <!-- Canvas Display -->
+-+      <div id="radar-canvas-container" class="radar-canvas-container">
+-+        <canvas id="radar-canvas"></canvas>
+-+        <div class="radar-loading-overlay" id="radar-loading-overlay">
+-+          <div class="radar-spinner"></div>
+-+          <span class="radar-loading-text" id="radar-loading-text">Loading radar...</span>
+-+        </div>
+-       </div>
+--      <div class="radar-clip-controls">
+--        <button class="radar-clip-btn radar-clip-play-btn" title="Play/pause clip">▶</button>
+--        <span class="radar-clip-frame-label">0/0</span>
+--        <div class="radar-clip-progress"><div class="radar-clip-progress-bar"></div></div>
+-+      
+-+      <!-- Prefetch Progress -->
+-+      <div class="radar-prefetch-bar">
+-+        <div class="radar-prefetch-progress" id="radar-prefetch-progress" style="width: 0%"></div>
+-+      </div>
+-+      <span class="radar-prefetch-text" id="radar-frame-count-text">0/0 frames</span>
+-+      
+-+      <!-- Timeline -->
+-+      <div class="radar-timeline-container">
+-+        <span class="radar-time-range" id="radar-time-range">--:-- — --:--</span>
+-+        <div class="radar-timeline-progress-bar">
+-+          <div class="radar-timeline-progress" id="radar-timeline-progress" style="width: 0%"></div>
+-+        </div>
+-+        <div class="radar-timeline" id="radar-timeline"></div>
+-       </div>
+-     </div>`;
+- 
+--  // Fetch and display radar image
+--  await updateRadarImage(lat, lon);
+-+  // Bind events
+-+  bindRadarPlayerEvents();
+- 
+--  // Layer selector event
+--  const layerSelect = container.querySelector('.radar-layer-select');
+--  if (layerSelect) {
+--    layerSelect.addEventListener('change', async (e) => {
+--      e.stopPropagation();
+--      // Clear cache for this layer and re-fetch
+--      await clearRadarCacheForLayer(lat, lon, RADAR_DEFAULT_LAYER);
+--      await updateRadarImage(lat, lon, e.target.value);
+--    });
+-+  // Initialize radar player engine
+-+  if (window.RADAR_PLAYER) {
+-+    window.RADAR_PLAYER.init(lat, lon);
+-   }
+-+}
+- 
+--  // Clip playback controls
+--  const playBtn = container.querySelector('.radar-clip-play-btn');
+-+function bindRadarPlayerEvents() {
+-+  const container = document.getElementById('radar-card-container');
+-+  if (!container) return;
+-+
+-+  // Play/Pause button
+-+  const playBtn = document.getElementById('radar-play-btn');
+-   if (playBtn) {
+--    playBtn.addEventListener('click', async (e) => {
+-+    playBtn.addEventListener('click', () => {
+-+      if (window.RADAR_PLAYER) window.RADAR_PLAYER.togglePlayback();
+-+    });
+-+  }
+-+
+-+  // Speed selector
+-+  const speedSelect = document.getElementById('radar-speed-select');
+-+  if (speedSelect) {
+-+    speedSelect.addEventListener('change', (e) => {
+-       e.stopPropagation();
+--      const meta = getRadarMeta(lat, lon, layerSelect?.value || RADAR_DEFAULT_LAYER);
+--      if (!meta || !meta.timestamps.length) return;
+--      
+--      // Fetch last 10 frames for animation
+--      const frames = await getRadarFramesForClip(lat, lon, layerSelect?.value || RADAR_DEFAULT_LAYER, 10);
+--      if (!frames || !frames.length) return;
+--
+--      // Toggle playback
+--      if (playBtn.classList.contains('active')) {
+--        playBtn.classList.remove('active');
+--        playBtn.textContent = '▶';
+--        container.querySelector('.radar-clip-controls').classList.remove('active');
+--        return;
+-+      if (!window.RADAR_PLAYER) return;
+-+      const state = window.RADAR_PLAYER.getState();
+-+      state.speed = parseFloat(e.target.value);
+-+      // If playing, restart the playback loop with new speed
+-+      if (state.isPlaying) {
+-+        window.RADAR_PLAYER.stopPlayback();
+-+        window.RADAR_PLAYER.togglePlayback();
+-       }
+-+    });
+-+  }
+- 
+--      playBtn.classList.add('active');
+--      playBtn.textContent = '⏸';
+--      container.querySelector('.radar-clip-controls').classList.add('active');
+--      
+--      // Start playback
+--      let frameIdx = 0;
+--      const progressBar = container.querySelector('.radar-clip-progress-bar');
+--      const frameLabel = container.querySelector('.radar-clip-frame-label');
+--      
+--      function showNextFrame() {
+--        if (!playBtn.classList.contains('active')) return;
+--        
+--        const frame = frames[frameIdx % frames.length];
+--        const img = container.querySelector('.radar-image');
+--        if (img && frame) {
+--          img.src = frame.dataUrl;
+--          img.style.display = 'block';
+--          progressBar.style.width = `${((frameIdx + 1) / frames.length) * 100}%`;
+--          frameLabel.textContent = `${frameIdx + 1}/${frames.length}`;
+--        }
+--        
+--        frameIdx++;
+--        setTimeout(showNextFrame, 500); // 2 FPS (radar updates every ~2 min)
+--      }
+--      
+--      showNextFrame();
+-+  // Zoom in button
+-+  const zoomInBtn = document.getElementById('radar-zoom-in-btn');
+-+  if (zoomInBtn) {
+-+    zoomInBtn.addEventListener('click', () => {
+-+      if (window.RADAR_PLAYER) window.RADAR_PLAYER.zoomIn();
+-     });
+-   }
+--}
+- 
+--// Update radar image for current timestamp
+--async function updateRadarImage(lat, lon, layer = null) {
+--  const container = document.getElementById('radar-card-container');
+--  if (!container) return;
+-+  // Zoom out button
+-+  const zoomOutBtn = document.getElementById('radar-zoom-out-btn');
+-+  if (zoomOutBtn) {
+-+    zoomOutBtn.addEventListener('click', () => {
+-+      if (window.RADAR_PLAYER) window.RADAR_PLAYER.zoomOut();
+-+    });
+-+  }
+- 
+--  const card = container.querySelector('.radar-card');
+--  const img = container.querySelector('.radar-image');
+--  const timestampEl = container.querySelector('.radar-card-timestamp');
+--
+--  // Show loading state
+--  card.classList.add('radar-loading');
+--
+--  try {
+--    const result = await fetchRadarImageForLocation(lat, lon, layer || RADAR_DEFAULT_LAYER);
+--    
+--    if (result.error) {
+--      console.warn('[Radar] Failed to load radar:', result.error);
+--      timestampEl.textContent = 'Failed to load';
+--      card.classList.remove('radar-loading');
+--      return;
+--    }
+-+  // Reset view button
+-+  const resetBtn = document.getElementById('radar-reset-btn');
+-+  if (resetBtn) {
+-+    resetBtn.addEventListener('click', () => {
+-+      if (window.RADAR_PLAYER) window.RADAR_PLAYER.resetView();
+-+    });
+-+  }
+- 
+--    // Update timestamp display
+--    if (result.timestamp) {
+--      const date = new Date(result.timestamp);
+--      timestampEl.textContent = date.toLocaleTimeString();
+--    }
+-+  // Layer selector
+-+  const layerSelect = document.getElementById('radar-layer-select');
+-+  if (layerSelect) {
+-+    layerSelect.addEventListener('change', async (e) => {
+-+      e.stopPropagation();
+-+      if (!window.RADAR_PLAYER) return;
+-+      await window.RADAR_PLAYER.switchLayer(e.target.value);
+-+    });
+-+  }
+- 
+--    // Remove loading spinner — either when image loads or immediately if it was cached
+--    if (result.cached) {
+--      card.classList.remove('radar-loading');
+--    } else {
+--      img.onload = () => {
+--        card.classList.remove('radar-loading');
+--      };
+--      img.onerror = () => {
+--        console.warn('[Radar] Image failed to load');
+--        img.style.display = 'none';
+--        timestampEl.textContent = 'Failed to load';
+--        card.classList.remove('radar-loading');
+--      };
+--    }
+-+  // Load all frames button
+-+  const loadAllBtn = document.getElementById('radar-load-all-btn');
+-+  if (loadAllBtn) {
+-+    loadAllBtn.addEventListener('click', async () => {
+-+      if (!window.RADAR_PLAYER) return;
+-+      const state = window.RADAR_PLAYER.getState();
+-+      // Pre-fetch all remaining frames
+-+      for (let i = 0; i < state.allTimestamps.length; i++) {
+-+        const timestamp = state.allTimestamps[i];
+-+        const cached = await getCachedRadarFrameAsDataURL(state.lat, state.lon, state.layer, timestamp);
+-+        if (!cached) {
+-+          await fetchRadarImageForTimestamp(state.lat, state.lon, state.layer, timestamp);
+-+        }
+-+      }
+-+    });
+-+  }
+- 
+--    // Update the radar image element
+--    img.src = result.imageUrl;
+--    
+--    // Show the image — for cached images, CSS selector [src]:not([src=""]) will handle display
+--    // For uncached images, the onload handler will set display: block
+--    if (result.cached) {
+--      // Cached data URLs may not trigger onload — ensure visibility immediately
+--      img.style.display = 'block';
+--    }
+--  } catch (e) {
+--    console.error('[Radar] Error loading radar:', e);
+--    timestampEl.textContent = 'Failed to load';
+--    card.classList.remove('radar-loading');
+-+  // Fullscreen button
+-+  const fullscreenBtn = document.getElementById('radar-fullscreen-btn');
+-+  if (fullscreenBtn) {
+-+    fullscreenBtn.addEventListener('click', () => {
+-+      if (window.RADAR_PLAYER) window.RADAR_PLAYER.toggleFullscreen();
+-+    });
+-   }
+- }
+- 
+diff --git a/css/card-components.css b/css/card-components.css
+index dea591c..c62c053 100644
+--- a/css/card-components.css
++++ b/css/card-components.css
+@@ -4,12 +4,12 @@
+ .city-card {
+   position: relative;
+   background: rgba(255,255,255,0.04);
+-  backdrop-filter: blur(16px) saturate(180%);
++  backdrop-filter: blur(16px) saturate(188%);
+   border: 1px solid rgba(255,255,255,0.07);
+   border-radius: 8px;
+   padding: 0.5rem;
+   overflow: visible;
+-  transition: transform 0.3s, box-shadow 0.3s;
++  transition: transform 0.3s, box-shadow 0.3s, opacity 0.4s ease;
+   animation: fadeInUp 0.6s ease forwards;
+   opacity: 0;
  }
--
--/* ===== RADAR CARD ===== */
--.radar-card {
--  width: 100%;
--  max-width: 512px;
--  margin: 0 auto 1rem;
--  border-radius: 16px;
--  overflow: hidden;
--  background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.04)), #0d0d1a;
--  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
--  position: relative;
--}
--
--.radar-card-header {
--  padding: 0.75rem 1rem;
--  display: flex;
--  align-items: center;
--  gap: 0.5rem;
--  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
--}
--
--.radar-card-title {
--  font-size: 0.85rem;
--  font-weight: 700;
--  text-transform: uppercase;
--  letter-spacing: 0.1em;
--  color: rgba(255, 255, 255, 0.7);
--}
--
--.radar-card-timestamp {
--  font-size: 0.7rem;
--  color: rgba(255, 255, 255, 0.4);
--  margin-left: auto;
--}
--
--.radar-card-body {
--  padding: 0.5rem;
--  display: flex;
--  justify-content: center;
--}
--
--.radar-image {
--  width: 100%;
--  max-width: 512px;
--  height: auto;
--  aspect-ratio: 1 / 1;
--  object-fit: contain;
--  border-radius: 8px;
--  display: none; /* hidden until loaded */
--}
--
--/* Show image when it has a valid src attribute */
--.radar-image[src]:not([src=""]) {
--  display: block !important;
--}
--
--/* Loading spinner for radar card */
--.radar-card.radar-loading .radar-image {
--  display: none !important;
--}
--
--.radar-card.radar-loading::after {
--  content: '';
--  display: inline-block;
--  width: 48px;
--  height: 48px;
--  border: 3px solid rgba(255, 255, 255, 0.1);
--  border-top-color: rgba(255, 255, 255, 0.6);
--  border-radius: 50%;
--  animation: radar-spinner 0.8s linear infinite;
--  margin: 1rem auto;
--}
--
--/* Layer selector dropdown */
--.radar-layer-select {
--  background: rgba(255, 255, 255, 0.06);
--  border: 1px solid rgba(255, 255, 255, 0.1);
--  border-radius: 4px;
--  color: rgba(255, 255, 255, 0.7);
--  font-size: 0.7rem;
--  padding: 0.15rem 0.3rem;
--  cursor: pointer;
--}
--
--.radar-layer-select:hover {
--  background: rgba(255, 255, 255, 0.1);
--}
--
--/* Clip playback controls */
--.radar-clip-controls {
--  display: none; /* hidden until clip is active */
--  padding: 0.5rem 1rem;
--  border-top: 1px solid rgba(255, 255, 255, 0.06);
--  align-items: center;
--  justify-content: center;
--  gap: 0.5rem;
--}
--
--.radar-clip-controls.active {
--  display: flex !important;
--}
--
--.radar-clip-btn {
--  background: rgba(255, 255, 255, 0.06);
--  border: 1px solid rgba(255, 255, 255, 0.1);
--  border-radius: 4px;
--  color: rgba(255, 255, 255, 0.7);
--  font-size: 0.7rem;
--  padding: 0.2rem 0.5rem;
--  cursor: pointer;
--  display: flex;
--  align-items: center;
--  gap: 0.25rem;
--}
--
--.radar-clip-btn:hover {
--  background: rgba(255, 255, 255, 0.1);
--}
--
--.radar-clip-btn.active {
--  background: rgba(0, 48, 135, 0.4);
--  border-color: rgba(0, 48, 135, 0.6);
--}
--
--.radar-clip-progress {
--  flex: 1;
--  max-width: 200px;
--  height: 4px;
--  background: rgba(255, 255, 255, 0.1);
--  border-radius: 2px;
--  overflow: hidden;
--}
--
--.radar-clip-progress-bar {
--  height: 100%;
--  background: linear-gradient(90deg, #4a9eff, #64b5f6);
--  border-radius: 2px;
--  transition: width 0.1s linear;
--}
--
--@keyframes radar-spinner {
--  to { transform: rotate(360deg); }
--}
-diff --git a/index.html b/index.html
-index b75bbf6..68fb8da 100644
---- a/index.html
-+++ b/index.html
-@@ -6,6 +6,7 @@
- <title>hasWeather</title>
- <link rel="icon" href="hasWeather-low.png" type="image/png">
- <link rel="stylesheet" href="css/main.css">
-+<link rel="stylesheet" href="css/radar-player.css">
- </head>
- <body translate="no">
- 
-@@ -44,6 +45,7 @@
- <script src="js/api-openstreetmap.js"></script>
- <script src="js/api-nws.js"></script>
- <script src="js/api-radar.js"></script>
-+<script src="js/radar-player.js"></script>
- <script src="js/render.js"></script>
- <script src="js/charts.js"></script>
-   <script src="js/network-monitor.js"></script>
-diff --git a/js/api-radar.js b/js/api-radar.js
-index 790b8ad..8442f66 100644
---- a/js/api-radar.js
-+++ b/js/api-radar.js
-@@ -537,6 +537,60 @@ async function getRadarCacheSize() {
-   }
+@@ -578,3 +578,65 @@
+   width: 36px;
+   height: 36px;
  }
- 
-+// ===== BATCH PRE-FETCH FOR A RANGE OF FRAMES =====
-+// Fetch a contiguous range of frames for the radar player timeline
-+async function prefetchFramesInRange(lat, lon, layer, startIdx, endIdx) {
-+  const meta = getRadarMeta(lat, lon, layer);
-+  if (!meta || !meta.timestamps.length) return;
 +
-+  const results = [];
-+  for (let i = Math.max(0, startIdx); i <= Math.min(endIdx, meta.timestamps.length - 1); i++) {
-+    const timestamp = meta.timestamps[i];
-+    // Check cache first
-+    const cached = await getCachedRadarFrameAsDataURL(lat, lon, layer, timestamp);
-+    if (cached) continue; // Already cached
-+
-+    // Fetch from WMS
-+    const result = await fetchRadarImageForTimestamp(lat, lon, layer, timestamp);
-+    if (!result.error) {
-+      results.push({ index: i, timestamp, dataUrl: result.imageUrl });
-+    }
-+  }
-+  return results;
++/* ===== PLACEHOLDER CARD (before data loads) ===== */
++.city-card.placeholder {
++  background: rgba(255,255,255,0.02);
++  border-color: rgba(255,255,255,0.04);
 +}
 +
-+// ===== GET FRAME RANGE FOR PLAYBACK =====
-+// Get frames within a time range for the radar player
-+async function getFramesInRange(lat, lon, layer, startTimestamp, endTimestamp) {
-+  const meta = getRadarMeta(lat, lon, layer);
-+  if (!meta || !meta.timestamps.length) return [];
-+
-+  // Filter timestamps within range
-+  const filtered = meta.timestamps.filter(ts => ts >= startTimestamp && ts <= endTimestamp);
-+  const frames = [];
-+
-+  for (const ts of filtered) {
-+    const dataUrl = await getCachedRadarFrameAsDataURL(lat, lon, layer, ts);
-+    if (dataUrl) {
-+      frames.push({ timestamp: ts, dataUrl });
-+    }
-+  }
-+
-+  return frames;
++.city-card.placeholder::before {
++  display: none;
 +}
 +
-+// ===== CHECK IF ALL FRAMES IN RANGE ARE CACHED =====
-+async function areFramesCachedInRange(lat, lon, layer, startIdx, endIdx) {
-+  const meta = getRadarMeta(lat, lon, layer);
-+  if (!meta || !meta.timestamps.length) return false;
-+
-+  for (let i = Math.max(0, startIdx); i <= Math.min(endIdx, meta.timestamps.length - 1); i++) {
-+    const cached = await getCachedRadarFrameAsDataURL(lat, lon, layer, meta.timestamps[i]);
-+    if (!cached) return false;
-+  }
-+  return true;
++/* Placeholder city name with pulsing animation */
++.placeholder-name {
++  font-size: 1.3rem;
++  font-weight: 700;
++  color: rgba(255,255,255,0.5);
++  animation: placeholderPulse 2s ease-in-out infinite;
 +}
 +
- // ===== GLOBAL EXPORTS =====
- // Make all radar functions and constants available globally for non-module scripts
- window.RADAR_DEFAULT_LAYER = RADAR_DEFAULT_LAYER;
-@@ -545,6 +599,9 @@ window.fetchRadarImageForLocation = fetchRadarImageForLocation;
- window.fetchRadarImageForTimestamp = fetchRadarImageForTimestamp;
- window.getCachedRadarFrameAsDataURL = getCachedRadarFrameAsDataURL;
- window.getRadarFramesForClip = getRadarFramesForClip;
-+window.prefetchFramesInRange = prefetchFramesInRange;
-+window.getFramesInRange = getFramesInRange;
-+window.areFramesCachedInRange = areFramesCachedInRange;
- window.clearRadarCacheForLocation = clearRadarCacheForLocation;
- window.clearRadarCacheForLayer = clearRadarCacheForLayer;
- window.clearRadarCache = clearRadarCache;
++@keyframes placeholderPulse {
++  0%, 100% { opacity: 0.5; }
++  50% { opacity: 0.8; }
++}
++
++/* Placeholder state text */
++.placeholder-state {
++  font-size: 0.6rem;
++  color: rgba(255,255,255,0.25);
++  letter-spacing: 0.02em;
++  margin-top: 0.1rem;
++}
++
++/* Placeholder distance text */
++.placeholder-distance {
++  font-size: 0.6rem;
++  color: rgba(255,255,255,0.2);
++  margin-top: 0.1rem;
++}
++
++/* Placeholder card content layout */
++.placeholder-content {
++  display: flex;
++  flex-direction: column;
++  align-items: center;
++  justify-content: center;
++  min-height: 80px;
++  gap: 0.2rem;
++}
++
++/* Loading state for cards that have some data but not all */
++.city-card.loading-om {
++  opacity: 0.6;
++}
++
++.city-card.loading-nws {
++  opacity: 0.7;
++}
++
++/* Transition animation when OM data arrives - fade in weather content */
++.city-card.transitioning-to-full {
++  transition: opacity 0.3s ease, background 1s ease;
++}
 diff --git a/js/main.js b/js/main.js
-index 72b13b9..d358379 100644
+index d358379..452409c 100644
 --- a/js/main.js
 +++ b/js/main.js
-@@ -133,153 +133,172 @@ async function run() {
-    }
-  }
- 
--// ===== RADAR CARD =====
-+// ===== RADAR PLAYER =====
- async function loadRadarCard(lat, lon) {
-   const container = document.getElementById('radar-card-container');
-   if (!container) return;
- 
--  // Build radar card HTML
-+  // Build radar player HTML
-   const layerOptions = Object.entries(RADAR_LAYERS).map(([key, value]) => 
-     `<option value="${value}" ${value === RADAR_DEFAULT_LAYER ? 'selected' : ''}>${key.replace('_', ' ')}</option>`
-   ).join('');
- 
-+  const speedOptions = (window.SPEED_OPTIONS || [0.5, 1, 2, 4, 8]).map((speed, idx) => 
-+    `<option value="${speed}" ${idx === 1 ? 'selected' : ''}>${speed}x</option>`
-+  ).join('');
-+
-   container.innerHTML = `
--    <div class="radar-card" data-radar-lat="${lat.toFixed(4)}" data-radar-lon="${lon.toFixed(4)}">
--      <div class="radar-card-header">
--        <span class="radar-card-title">Radar</span>
--        <select class="radar-layer-select" title="Select radar layer">${layerOptions}</select>
--        <span class="radar-card-timestamp">Loading...</span>
-+    <div id="radar-player-card" class="radar-fade-in">
-+      <!-- Titlebar -->
-+      <div class="radar-player-header">
-+        <!-- Left: Playback Controls -->
-+        <div class="radar-header-section">
-+          <button class="radar-btn radar-btn-play radar-tooltip" id="radar-play-btn" data-tooltip="Play/Pause (Space)">▶</button>
-+          <span class="radar-speed-select" title="Playback speed">
-+            <select class="radar-speed-select" id="radar-speed-select" title="Speed">${speedOptions}</select>
-+          </span>
-+        </div>
-+        
-+        <div class="radar-header-divider"></div>
-+        
-+        <!-- Center: Zoom Controls -->
-+        <div class="radar-header-section">
-+          <button class="radar-btn radar-tooltip" id="radar-zoom-out-btn" data-tooltip="Zoom out (-)">−</button>
-+          <span class="radar-zoom-text" id="radar-zoom-text">100%</span>
-+          <button class="radar-btn radar-tooltip" id="radar-zoom-in-btn" data-tooltip="Zoom in (+)">+</button>
-+          <button class="radar-btn radar-tooltip" id="radar-reset-btn" data-tooltip="Reset view (0)">⟲</button>
-+        </div>
-+        
-+        <div class="radar-header-divider"></div>
-+        
-+        <!-- Right: Layer & Info -->
-+        <div class="radar-header-section">
-+          <select class="radar-layer-select" id="radar-layer-select" title="Radar layer">${layerOptions}</select>
-+          <span class="radar-timestamp" id="radar-timestamp">--:--</span>
-+          <button class="radar-btn radar-tooltip" id="radar-load-all-btn" data-tooltip="Load all cached frames">Load All</button>
-+          <button class="radar-btn radar-fullscreen-btn radar-tooltip" id="radar-fullscreen-btn" data-tooltip="Toggle fullscreen">⛶</button>
-+        </div>
-       </div>
--      <div class="radar-card-body">
--        <img class="radar-image" alt="Radar" />
-+      
-+      <!-- Canvas Display -->
-+      <div id="radar-canvas-container" class="radar-canvas-container">
-+        <canvas id="radar-canvas"></canvas>
-+        <div class="radar-loading-overlay" id="radar-loading-overlay">
-+          <div class="radar-spinner"></div>
-+          <span class="radar-loading-text" id="radar-loading-text">Loading radar...</span>
-+        </div>
-       </div>
--      <div class="radar-clip-controls">
--        <button class="radar-clip-btn radar-clip-play-btn" title="Play/pause clip">▶</button>
--        <span class="radar-clip-frame-label">0/0</span>
--        <div class="radar-clip-progress"><div class="radar-clip-progress-bar"></div></div>
-+      
-+      <!-- Prefetch Progress -->
-+      <div class="radar-prefetch-bar">
-+        <div class="radar-prefetch-progress" id="radar-prefetch-progress" style="width: 0%"></div>
-+      </div>
-+      <span class="radar-prefetch-text" id="radar-frame-count-text">0/0 frames</span>
-+      
-+      <!-- Timeline -->
-+      <div class="radar-timeline-container">
-+        <span class="radar-time-range" id="radar-time-range">--:-- — --:--</span>
-+        <div class="radar-timeline-progress-bar">
-+          <div class="radar-timeline-progress" id="radar-timeline-progress" style="width: 0%"></div>
-+        </div>
-+        <div class="radar-timeline" id="radar-timeline"></div>
-       </div>
-     </div>`;
- 
--  // Fetch and display radar image
--  await updateRadarImage(lat, lon);
-+  // Bind events
-+  bindRadarPlayerEvents();
- 
--  // Layer selector event
--  const layerSelect = container.querySelector('.radar-layer-select');
--  if (layerSelect) {
--    layerSelect.addEventListener('change', async (e) => {
--      e.stopPropagation();
--      // Clear cache for this layer and re-fetch
--      await clearRadarCacheForLayer(lat, lon, RADAR_DEFAULT_LAYER);
--      await updateRadarImage(lat, lon, e.target.value);
--    });
-+  // Initialize radar player engine
-+  if (window.RADAR_PLAYER) {
-+    window.RADAR_PLAYER.init(lat, lon);
+@@ -82,9 +82,25 @@ async function run() {
+     return;
    }
-+}
  
--  // Clip playback controls
--  const playBtn = container.querySelector('.radar-clip-play-btn');
-+function bindRadarPlayerEvents() {
-+  const container = document.getElementById('radar-card-container');
-+  if (!container) return;
-+
-+  // Play/Pause button
-+  const playBtn = document.getElementById('radar-play-btn');
-   if (playBtn) {
--    playBtn.addEventListener('click', async (e) => {
-+    playBtn.addEventListener('click', () => {
-+      if (window.RADAR_PLAYER) window.RADAR_PLAYER.togglePlayback();
-+    });
+-    // Always use OM as base for all cities
+-    weatherData = await fetchWeatherForCities(allCities);
++  // ===== PHASE 1: Render placeholder cards immediately =====
++  renderPlaceholderCards(allCities);
+ 
++  // ===== PHASE 2: Fetch OM weather data and update cards =====
++  weatherData = await fetchWeatherForCities(allCities);
++  
++  // Update placeholder cards with OM data as it arrives
++  if (weatherData.length > 0) {
++    updateCardsWithOMData(weatherData);
++    
++    // Draw charts after OM data arrives (cards are now visible)
++    setTimeout(() => {
++      drawAllCharts();
++    }, 100);
 +  }
 +
-+  // Speed selector
-+  const speedSelect = document.getElementById('radar-speed-select');
-+  if (speedSelect) {
-+    speedSelect.addEventListener('change', (e) => {
-       e.stopPropagation();
--      const meta = getRadarMeta(lat, lon, layerSelect?.value || RADAR_DEFAULT_LAYER);
--      if (!meta || !meta.timestamps.length) return;
--      
--      // Fetch last 10 frames for animation
--      const frames = await getRadarFramesForClip(lat, lon, layerSelect?.value || RADAR_DEFAULT_LAYER, 10);
--      if (!frames || !frames.length) return;
--
--      // Toggle playback
--      if (playBtn.classList.contains('active')) {
--        playBtn.classList.remove('active');
--        playBtn.textContent = '▶';
--        container.querySelector('.radar-clip-controls').classList.remove('active');
--        return;
-+      if (!window.RADAR_PLAYER) return;
-+      const state = window.RADAR_PLAYER.getState();
-+      state.speed = parseFloat(e.target.value);
-+      // If playing, restart the playback loop with new speed
-+      if (state.isPlaying) {
-+        window.RADAR_PLAYER.stopPlayback();
-+        window.RADAR_PLAYER.togglePlayback();
++  // ===== PHASE 3: Check NWS bounds and fetch NWS data where available =====
++  // Only start NWS checks if we have OM data (otherwise it's wasted work)
++  if (weatherData.length > 0) {
+     // Check NWS bounds for each city and fetch NWS data where available — sequential to respect rate limits
+     const nwsCities = [];
+     for (const city of weatherData) {
+@@ -125,8 +141,18 @@ async function run() {
        }
-+    });
+     }
+ 
+-   renderAll();
+-   
++    // Update OM cards with NWS ghost overlay data as it arrives
++    const nwsCitiesWithData = weatherData.filter(c => c.nwsData);
++    if (nwsCitiesWithData.length > 0) {
++      updateCardsWithNWSData(nwsCitiesWithData);
++      
++      // Draw ghost charts after NWS data arrives
++      setTimeout(() => {
++        drawGhostCharts();
++      }, 100);
++    }
 +  }
++
+    // After cities are rendered, load the radar card and fetch radar image
+    if (userLocation) {
+      loadRadarCard(userLocation.lat, userLocation.lon);
+diff --git a/js/render.js b/js/render.js
+index 1ca40cb..255dc7c 100644
+--- a/js/render.js
++++ b/js/render.js
+@@ -1,5 +1,232 @@
+ // ===== RENDER =====
  
--      playBtn.classList.add('active');
--      playBtn.textContent = '⏸';
--      container.querySelector('.radar-clip-controls').classList.add('active');
--      
--      // Start playback
--      let frameIdx = 0;
--      const progressBar = container.querySelector('.radar-clip-progress-bar');
--      const frameLabel = container.querySelector('.radar-clip-frame-label');
--      
--      function showNextFrame() {
--        if (!playBtn.classList.contains('active')) return;
--        
--        const frame = frames[frameIdx % frames.length];
--        const img = container.querySelector('.radar-image');
--        if (img && frame) {
--          img.src = frame.dataUrl;
--          img.style.display = 'block';
--          progressBar.style.width = `${((frameIdx + 1) / frames.length) * 100}%`;
--          frameLabel.textContent = `${frameIdx + 1}/${frames.length}`;
--        }
--        
--        frameIdx++;
--        setTimeout(showNextFrame, 500); // 2 FPS (radar updates every ~2 min)
--      }
--      
--      showNextFrame();
-+  // Zoom in button
-+  const zoomInBtn = document.getElementById('radar-zoom-in-btn');
-+  if (zoomInBtn) {
-+    zoomInBtn.addEventListener('click', () => {
-+      if (window.RADAR_PLAYER) window.RADAR_PLAYER.zoomIn();
-     });
-   }
--}
- 
--// Update radar image for current timestamp
--async function updateRadarImage(lat, lon, layer = null) {
--  const container = document.getElementById('radar-card-container');
--  if (!container) return;
-+  // Zoom out button
-+  const zoomOutBtn = document.getElementById('radar-zoom-out-btn');
-+  if (zoomOutBtn) {
-+    zoomOutBtn.addEventListener('click', () => {
-+      if (window.RADAR_PLAYER) window.RADAR_PLAYER.zoomOut();
-+    });
-+  }
- 
--  const card = container.querySelector('.radar-card');
--  const img = container.querySelector('.radar-image');
--  const timestampEl = container.querySelector('.radar-card-timestamp');
--
--  // Show loading state
--  card.classList.add('radar-loading');
--
--  try {
--    const result = await fetchRadarImageForLocation(lat, lon, layer || RADAR_DEFAULT_LAYER);
--    
--    if (result.error) {
--      console.warn('[Radar] Failed to load radar:', result.error);
--      timestampEl.textContent = 'Failed to load';
--      card.classList.remove('radar-loading');
--      return;
--    }
-+  // Reset view button
-+  const resetBtn = document.getElementById('radar-reset-btn');
-+  if (resetBtn) {
-+    resetBtn.addEventListener('click', () => {
-+      if (window.RADAR_PLAYER) window.RADAR_PLAYER.resetView();
-+    });
-+  }
- 
--    // Update timestamp display
--    if (result.timestamp) {
--      const date = new Date(result.timestamp);
--      timestampEl.textContent = date.toLocaleTimeString();
--    }
-+  // Layer selector
-+  const layerSelect = document.getElementById('radar-layer-select');
-+  if (layerSelect) {
-+    layerSelect.addEventListener('change', async (e) => {
-+      e.stopPropagation();
-+      if (!window.RADAR_PLAYER) return;
-+      await window.RADAR_PLAYER.switchLayer(e.target.value);
-+    });
-+  }
- 
--    // Remove loading spinner — either when image loads or immediately if it was cached
--    if (result.cached) {
--      card.classList.remove('radar-loading');
--    } else {
--      img.onload = () => {
--        card.classList.remove('radar-loading');
--      };
--      img.onerror = () => {
--        console.warn('[Radar] Image failed to load');
--        img.style.display = 'none';
--        timestampEl.textContent = 'Failed to load';
--        card.classList.remove('radar-loading');
--      };
--    }
-+  // Load all frames button
-+  const loadAllBtn = document.getElementById('radar-load-all-btn');
-+  if (loadAllBtn) {
-+    loadAllBtn.addEventListener('click', async () => {
-+      if (!window.RADAR_PLAYER) return;
-+      const state = window.RADAR_PLAYER.getState();
-+      // Pre-fetch all remaining frames
-+      for (let i = 0; i < state.allTimestamps.length; i++) {
-+        const timestamp = state.allTimestamps[i];
-+        const cached = await getCachedRadarFrameAsDataURL(state.lat, state.lon, state.layer, timestamp);
-+        if (!cached) {
-+          await fetchRadarImageForTimestamp(state.lat, state.lon, state.layer, timestamp);
-+        }
++// ===== PLACEHOLDER CARD RENDERING =====
++// Renders minimal city cards immediately after location is known, before any weather data arrives.
++
++function renderPlaceholderCards(cities) {
++  const grid = document.getElementById('city-grid');
++  if (!grid) return;
++
++  grid.innerHTML = '';
++
++  cities.forEach((city, i) => {
++    const card = document.createElement('div');
++    card.className = 'city-card placeholder';
++    card.dataset.cityName = city.name;
++    card.dataset.placeid = city.place_id || '';
++    card.dataset.citydist = city.distance != null ? city.distance : '';
++    card.dataset.citylat = city.latitude != null ? city.latitude : '';
++    card.dataset.citylon = city.longitude != null ? city.longitude : '';
++    card.style.animationDelay = `${i * 120}ms`;
++    
++    const suffix = city.latitude != null && city.longitude != null 
++      ? `${city.latitude}_${city.longitude}` 
++      : undefined;
++    card.innerHTML = renderPlaceholderCard(city, suffix);
++    grid.appendChild(card);
++  });
++}
++
++function renderPlaceholderCard(city, suffix) {
++  const safeName = city.place_id || suffix;
++  return `
++    <div class="placeholder-content">
++      <span class="placeholder-name">${escapeHTML(city.name)}</span>
++      <span class="placeholder-state">${escapeHTML(city.state)}</span>
++      ${city.distance != null ? `<span class="placeholder-distance">${Math.round(city.distance)} mi</span>` : ''}
++    </div>`;
++}
++
++// ===== INCREMENTAL OM DATA UPDATE =====
++// Updates placeholder cards with Open-Meteo weather data as it arrives.
++
++function updateCardsWithOMData(omWeatherData) {
++  // For each city in omWeatherData, find the matching card and update it
++  for (const cityData of omWeatherData) {
++    const card = findCardByCoords(cityData.latitude, cityData.longitude);
++    if (!card) continue;
++
++    // Remove placeholder class and add loading class for transition
++    card.classList.remove('placeholder');
++    card.classList.add('loading-om');
++    
++    // Build the full card HTML with OM data
++    const suffix = cityData.place_id || `${cityData.latitude || 0}_${cityData.longitude || 0}`;
++    const html = renderCityCard(cityData, suffix);
++    
++    // Fade out placeholder, then swap content
++    card.style.opacity = '0';
++    setTimeout(() => {
++      card.innerHTML = html;
++      card.classList.remove('loading-om');
++      
++      // Apply gradient background based on weather
++      const w = cityData.weather;
++      if (w && w.current) {
++        const code = w.current.weather_code || 0;
++        const bg = WMO_GRADIENTS[code] || WMO_GRADIENTS[0];
++        card.style.background = `linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.04)), ${bg}`;
 +      }
-+    });
++      
++      // Fade in
++      card.style.opacity = '1';
++      
++      // Draw chart for this card now that canvas exists (don't wait for global drawAllCharts)
++      const safeName = cityData.place_id || `${cityData.latitude || 0}_${cityData.longitude || 0}`;
++      setTimeout(() => {
++        drawMergedChart(`chart-merged-${safeName}`, cityData.weather, cityData.highTemp, cityData.lowTemp);
++        drawCombinedChart(`chart-combined-${safeName}`, cityData.weather);
++      }, 50);
++    }, 300);
 +  }
- 
--    // Update the radar image element
--    img.src = result.imageUrl;
--    
--    // Show the image — for cached images, CSS selector [src]:not([src=""]) will handle display
--    // For uncached images, the onload handler will set display: block
--    if (result.cached) {
--      // Cached data URLs may not trigger onload — ensure visibility immediately
--      img.style.display = 'block';
--    }
--  } catch (e) {
--    console.error('[Radar] Error loading radar:', e);
--    timestampEl.textContent = 'Failed to load';
--    card.classList.remove('radar-loading');
-+  // Fullscreen button
-+  const fullscreenBtn = document.getElementById('radar-fullscreen-btn');
-+  if (fullscreenBtn) {
-+    fullscreenBtn.addEventListener('click', () => {
-+      if (window.RADAR_PLAYER) window.RADAR_PLAYER.toggleFullscreen();
++}
++
++// ===== INCREMENTAL NWS DATA UPDATE =====
++// Updates OM cards with NWS ghost overlay data as it arrives.
++// Re-renders the full card HTML (OM + ghost) for affected cities.
++
++function updateCardsWithNWSData(nwsCityData) {
++  for (const cityData of nwsCityData) {
++    const card = findCardByCoords(cityData.latitude, cityData.longitude);
++    if (!card || !cityData.nwsData || !cityData.weather) continue;
++
++    // Add loading-nws class for transition
++    card.classList.add('loading-nws');
++    
++    // Build the full card HTML with OM + ghost data
++    const suffix = cityData.place_id || `${cityData.latitude || 0}_${cityData.longitude || 0}`;
++    const html = renderCityCard(cityData, suffix);
++    
++    // Fade out, swap content, fade in
++    card.style.opacity = '0';
++    setTimeout(() => {
++      card.innerHTML = html;
++      card.classList.remove('loading-nws');
++      
++      // Apply gradient background based on weather
++      const w = cityData.weather;
++      if (w && w.current) {
++        const code = w.current.weather_code || 0;
++        const bg = WMO_GRADIENTS[code] || WMO_GRADIENTS[0];
++        card.style.background = `linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.04)), ${bg}`;
++      }
++      
++      // Fade in
++      card.style.opacity = '1';
++      
++      // Draw ghost chart for this card now that canvas exists (don't wait for global drawGhostCharts)
++      const safeName = cityData.place_id || `${cityData.latitude || 0}_${cityData.longitude || 0}`;
++      setTimeout(() => {
++        drawGhostMergedChart(`chart-ghost-merged-${safeName}`, cityData.nwsData.weather, cityData.highTemp, cityData.lowTemp);
++      }, 50);
++    }, 200);
++  }
++}
++
++// ===== CARD LOOKUP BY COORDINATES =====
++// More reliable than matching by name (which can contain quotes/special chars)
++
++function findCardByCoords(lat, lon) {
++  const cards = document.querySelectorAll('.city-card');
++  for (const card of cards) {
++    const cardLat = parseFloat(card.dataset.citylat);
++    const cardLon = parseFloat(card.dataset.citylon);
++    if (!isNaN(cardLat) && !isNaN(cardLon) && Math.abs(lat - cardLat) < 0.01 && Math.abs(lon - cardLon) < 0.01) {
++      return card;
++    }
++  }
++  return null;
++}
++
++function buildNWSGhostOverlay(cityData, safeName) {
++  const hasNwsData = !!cityData.nwsData;
++  if (!hasNwsData) return '';
++  
++  const current = cityData.nwsData.weather?.current || {};
++  const hourly = cityData.nwsData.weather?.hourly || {};
++  const now = new Date();
++  const currentHour = now.getHours();
++
++  // Ghost temperature
++  const ghostTemp = current?.temperature_2m != null ? convertTemp(current.temperature_2m) :
++                    current?.temperature != null ? convertTemp(current.temperature) : '—';
++  
++  // Ghost weather icon
++  const ghostWeatherCode = current?.weather_code ?? current?.weatherCode ?? 0;
++  const isNwsDay = isDaytime(currentHour, parseDecimalTime(current?.sunrise || '', 6), parseDecimalTime(current?.sunset || '', 19));
++  const ghostIcon = isNwsDay ? getWeatherIcon(ghostWeatherCode) : getMoonIcon(ghostWeatherCode);
++
++  // Ghost details grid values
++  const ghostHumidity = current?.relative_humidity_2m ?? current?.relativeHumidity ?? '—';
++  const ghostWindSpeed = current?.wind_speed_10m != null ? `${Math.round(current.wind_speed_10m)} km/h` :
++                        current?.windSpeed != null ? `${Math.round(current.windSpeed)} km/h` : '';
++  const ghostWindDir = current?.wind_direction_10m ?? current?.windDirection ?? 0;
++  let ghostPressure = '—';
++  if (current?.surface_pressure != null) {
++    ghostPressure = current.surface_pressure;
++  } else if (current?.pressure != null) {
++    ghostPressure = current.pressure;
++  }
++  const ghostUv = '—';
++  let ghostVis = '—';
++  if (current?.visibility != null) {
++    ghostVis = current.visibilityUnit === 'mi' ? current.visibility.toFixed(1) : (current.visibility / 1609.34).toFixed(1);
++  }
++
++  // Ghost hourly forecast
++  const nwsTimeArr = hourly?.time || [];
++  let ghostHourlySlotsHTML = '';
++  for (let i = 0; i < 24; i++) {
++    const hIdx = nwsTimeArr.findIndex(t => {
++      const [datePart, timePart] = t.split('T');
++      return datePart === now.toISOString().split('T')[0] && timePart.startsWith(`T${String(currentHour + i).padStart(2, '0')}`);
 +    });
-   }
- }
- 
++    if (hIdx < 0 || hIdx >= nwsTimeArr.length) break;
++    const hTime = nwsTimeArr[hIdx]?.split('T')[1]?.split('+')[0]?.slice(0, 5);
++    const hTemp = hourly?.temperature_2m?.[hIdx] != null ? convertTemp(hourly.temperature_2m[hIdx]) :
++                  hourly?.temperature?.[hIdx] != null ? convertTemp(hourly.temperature[hIdx]) : '—';
++    const hCode = hourly?.weather_code?.[hIdx] ?? hourly?.weatherCode?.[hIdx] ?? 0;
++    const isGhostCurrent = i === 0;
++    const hHourDecimal = parseDecimalTime(hTime, 12);
++    const hIsDay = isDaytime(hHourDecimal, parseDecimalTime(current?.sunrise || '', 6), parseDecimalTime(current?.sunset || '', 19));
++    const hWind = hourly?.wind_speed_10m?.[hIdx] != null ? `${Math.round(hourly.wind_speed_10m[hIdx])} km/h` :
++                  hourly?.windSpeed?.[hIdx] != null ? `${Math.round(hourly.windSpeed[hIdx])} km/h` : '';
++    const hPrecip = hourly?.precipitation?.[hIdx] != null && hourly.precipitation[hIdx] > 0.1 
++      ? `${Math.round(hourly.precipitation[hIdx])}mm` : '';
++    ghostHourlySlotsHTML += `<div class="nws-ghost-hour-slot${isGhostCurrent ? ' current' : ''}">
++      <div class="nws-ghost-hour-icon">${isGhostCurrent ? ghostIcon : (hIsDay ? getWeatherIcon(hCode) : getMoonIcon(hCode))}</div>
++      <div class="nws-ghost-hour-temp">${Math.round(hTemp)}°</div>
++      ${hWind ? `<div class="nws-ghost-hour-wind">${hWind}</div>` : ''}
++      ${hPrecip ? `<div class="nws-ghost-hour-precip">${hPrecip}</div>` : ''}
++    </div>`;
++  }
++
++  // Ghost merged canvas
++  const ghostMergedCanvas = `<canvas class="chart-canvas chart-merged nws-ghost-chart" id="chart-ghost-merged-${safeName}" style="position:absolute;top:0;left:0;right:0;bottom:0;z-index:-1;pointer-events:none;"></canvas>`;
++
++  return {
++    headerHTML: `
++      <div class="nws-ghost nws-ghost-temp">${Math.round(ghostTemp)}°</div>
++      <div class="nws-ghost nws-ghost-icon">${ghostIcon}</div>`,
++    detailsHTML: `
++      <div class="nws-ghost nws-ghost-details">
++        <div class="nws-ghost-detail-cell"><span class="nws-ghost-detail-label">Humidity</span><span class="nws-ghost-detail-value">${ghostHumidity}%</span></div>
++        <div class="nws-ghost-detail-cell"><span class="nws-ghost-detail-label">Wind</span><span class="nws-ghost-detail-value">${ghostWindDir !== 0 ? getWindCompass(ghostWindDir) + ' ' + ghostWindSpeed : '—'}</span></div>
++        <div class="nws-ghost-detail-cell"><span class="nws-ghost-detail-label">Pressure</span><span class="nws-ghost-detail-value">${ghostPressure} hPa</span></div>
++        <div class="nws-ghost-detail-cell"><span class="nws-ghost-detail-label">UV Index</span><span class="nws-ghost-detail-value">${ghostUv}</span></div>
++        <div class="nws-ghost-detail-cell"><span class="nws-ghost-detail-label">Visibility</span><span class="nws-ghost-detail-value">${ghostVis} mi</span></div>
++      </div>`,
++    hourlyHTML: `
++      <div class="nws-ghost nws-ghost-hourly">
++        ${ghostHourlySlotsHTML}
++      </div>`,
++    ghostCanvas: ghostMergedCanvas,
++  };
++}
++
++// ===== FULL RENDER =====
++// Renders all city cards with complete data. Used for refresh/background updates.
++
+ // Parse time string as decimal hours so minutes are accounted for (e.g., "18:45" → 18.75)
+ function parseDecimalTime(timeStr, fallback) {
+   if (!timeStr) return fallback;

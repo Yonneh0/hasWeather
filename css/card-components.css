@@ -4,12 +4,12 @@
 .city-card {
   position: relative;
   background: rgba(255,255,255,0.04);
-  backdrop-filter: blur(16px) saturate(180%);
+  backdrop-filter: blur(16px) saturate(188%);
   border: 1px solid rgba(255,255,255,0.07);
   border-radius: 8px;
   padding: 0.5rem;
   overflow: visible;
-  transition: transform 0.3s, box-shadow 0.3s;
+  transition: transform 0.3s, box-shadow 0.3s, opacity 0.4s ease;
   animation: fadeInUp 0.6s ease forwards;
   opacity: 0;
 }
@@ -577,4 +577,66 @@
 .nws-ghost-hour-icon svg {
   width: 36px;
   height: 36px;
+}
+
+/* ===== PLACEHOLDER CARD (before data loads) ===== */
+.city-card.placeholder {
+  background: rgba(255,255,255,0.02);
+  border-color: rgba(255,255,255,0.04);
+}
+
+.city-card.placeholder::before {
+  display: none;
+}
+
+/* Placeholder city name with pulsing animation */
+.placeholder-name {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: rgba(255,255,255,0.5);
+  animation: placeholderPulse 2s ease-in-out infinite;
+}
+
+@keyframes placeholderPulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 0.8; }
+}
+
+/* Placeholder state text */
+.placeholder-state {
+  font-size: 0.6rem;
+  color: rgba(255,255,255,0.25);
+  letter-spacing: 0.02em;
+  margin-top: 0.1rem;
+}
+
+/* Placeholder distance text */
+.placeholder-distance {
+  font-size: 0.6rem;
+  color: rgba(255,255,255,0.2);
+  margin-top: 0.1rem;
+}
+
+/* Placeholder card content layout */
+.placeholder-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 80px;
+  gap: 0.2rem;
+}
+
+/* Loading state for cards that have some data but not all */
+.city-card.loading-om {
+  opacity: 0.6;
+}
+
+.city-card.loading-nws {
+  opacity: 0.7;
+}
+
+/* Transition animation when OM data arrives - fade in weather content */
+.city-card.transitioning-to-full {
+  transition: opacity 0.3s ease, background 1s ease;
 }

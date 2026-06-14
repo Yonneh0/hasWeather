@@ -136,6 +136,65 @@ function deduplicateCities(cities) {
   return deduped;
 }
 
+// ===== PER-CITY WEATHER FETCH (for incremental updates) =====
+async function fetchWeatherForCity(city) {
+  // Check cache first for this single city
+  const weatherCk = weatherCacheKey(city.latitude, city.longitude);
+  const aqiCk = aqiCacheKey(city.latitude, city.longitude);
+  
+  const cachedWeather = DataCache.get(weatherCk, 'weather');
+  const cachedAqi = DataCache.get(aqiCk, 'airQuality');
+  
+  // Cross-source: also check NWS keys for OM lookup
+  const crossSource = crossSourceGetWeather(city.latitude, city.longitude);
+  if (cachedWeather) {
+    return { ...city, source: 'open-meteo', weather: cachedWeather, aqi: cachedAqi || {} };
+  }
+  if (crossSource && crossSource.data.weather) {
+    const crossAqi = crossSourceGetAQI(city.latitude, city.longitude);
+    return { ...city, source: crossSource.source, weather: crossSource.data.weather, aqi: crossAqi?.data || {} };
+  }
+  
+  // Fetch weather for single city
+  try {
+    const weatherUrl = `${WEATHER_API}?latitude=${city.latitude}&longitude=${city.longitude}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m,surface_pressure,uv_index,visibility&hourly=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m&forecast_days=2&temperature_unit=celsius&wind_speed_unit=kmh&precipitation_unit=mm&timezone=auto`;
+    
+    const weatherRes = await retryWithBackoff(() => fetch(weatherUrl));
+    if (!weatherRes.ok) {
+      return { ...city, source: 'open-meteo', weather: null, aqi: {} };
+    }
+    
+    const weatherAll = await weatherRes.json();
+    
+    // Parse single-city weather response (flat object, no results array)
+    const cityWeather = {
+      current: weatherAll.current || {},
+      hourly: weatherAll.hourly || { time: [] },
+    };
+    
+    // Fetch AQI for single city
+    const aqiUrl = `${AIR_QUALITY_API}?latitude=${city.latitude}&longitude=${city.longitude}&current=us_aqi,pm2_5,european_aqi&timezone=auto`;
+    const aqiRes = await retryWithBackoff(() => fetch(aqiUrl));
+    const aqiData = await aqiRes.json();
+    
+    // Parse single-city AQI response (flat object, no results array)
+    const cityAqi = {
+      us_aqi: aqiData.current?.us_aqi ?? aqiData.us_aqi ?? null,
+      pm2_5: aqiData.current?.pm2_5 ?? aqiData.pm2_5 ?? null,
+      european_aqi: aqiData.current?.european_aqi ?? aqiData.european_aqi ?? null,
+    };
+    
+    // Cache results
+    DataCache.set(weatherCk, cityWeather, 'weather');
+    DataCache.set(aqiCk, cityAqi, 'airQuality');
+    
+    return { ...city, source: 'open-meteo', weather: cityWeather, aqi: cityAqi };
+  } catch (err) {
+    console.error(`[fetchWeatherForCity] Failed for ${city.name}:`, err);
+    return { ...city, source: 'open-meteo', weather: null, aqi: {} };
+  }
+}
+
 // ===== FETCH WEATHER FOR CITIES =====
 async function fetchWeatherForCities(cities) {
   // Check cache for each city individually — use cross-source lookup

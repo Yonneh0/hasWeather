@@ -9,6 +9,7 @@ const RADAR_DEFAULT_LAYER = 'conus_bref_qcd'; // MRMS Base Reflectivity (quality
 const RADAR_IMAGE_SIZE = 512;                  // Image dimension in pixels
 const RADAR_BBOX_RADIUS_KM = 200;              // Area around user location to capture (km)
 const RADAR_TTL = 5 * 60 * 1000;               // 5 minutes (radar updates every ~2 min)
+const RADAR_META_TTL = 30 * 60 * 1000;         // 30 minutes (metadata doesn't change often)
 
 // Available radar layers
 const RADAR_LAYERS = {
@@ -83,6 +84,78 @@ function radarLocationPrefix(lat, lon, layer) {
 // Cache the latest radar timestamp to avoid repeated GetCapabilities calls
 let _latestTimestampCache = null; // { timestamp: string, expiresAt: number }
 
+// ===== ALL RADAR TIMESTAMPS CACHE =====
+// Cache all available timestamps from GetCapabilities to populate the timeline
+let _allTimestampsCache = null; // { timestamps: string[], layer: string, expiresAt: number }
+
+// Parse all available timestamps from WMS GetCapabilities response
+function parseRadarTimestamps(capabilitiesText) {
+  const timestamps = [];
+  
+  // Parse all <Extent> elements with name="time" to find time values
+  const extentRegex = /<Extent[^>]+name="time"[^>]*>([^<]+)<\/Extent>/gi;
+  let match;
+  while ((match = extentRegex.exec(capabilitiesText)) !== null) {
+    // Timestamps can be comma-separated or space-separated
+    const timeValues = match[1].split(/[\s,]+/).map(t => t.trim()).filter(Boolean);
+    timestamps.push(...timeValues);
+  }
+  
+  // Also check for default attribute (most recent timestamp)
+  const defaultMatch = capabilitiesText.match(/<Extent[^>]+name="time"[^>]*default="([^"]+)"/i);
+  if (defaultMatch && defaultMatch[1] && !timestamps.includes(defaultMatch[1])) {
+    timestamps.push(defaultMatch[1]);
+  }
+  
+  // Validate and deduplicate timestamps
+  const validTimestamps = [];
+  for (const ts of timestamps) {
+    // Validate ISO8601 format
+    const date = new Date(ts);
+    if (!isNaN(date.getTime())) {
+      // Normalize to consistent ISO8601 format
+      validTimestamps.push(date.toISOString().replace(/\.\d+Z$/, 'Z'));
+    }
+  }
+  
+  // Deduplicate
+  return [...new Set(validTimestamps)].sort();
+}
+
+// Get ALL available timestamps for a layer (not just the latest)
+async function getRadarTimestampsForLayer(layer = RADAR_DEFAULT_LAYER) {
+  const cacheKey = `${layer}`;
+  
+  // Return cached timestamps if valid (30 min TTL — metadata rarely changes)
+  if (_allTimestampsCache && _allTimestampsCache.layer === layer && Date.now() < _allTimestampsCache.expiresAt) {
+    return [..._allTimestampsCache.timestamps];
+  }
+
+  try {
+    const url = `${RADAR_WMS_BASE}${layer}/wms?SERVICE=WMS&REQUEST=GetCapabilities&VERSION=1.1.1`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`WMS GetCapabilities failed: ${response.status}`);
+
+    const text = await response.text();
+    const timestamps = parseRadarTimestamps(text);
+    
+    if (timestamps.length > 0) {
+      _allTimestampsCache = {
+        timestamps,
+        layer,
+        expiresAt: Date.now() + 30 * 60 * 1000, // 30 min TTL
+      };
+      return timestamps;
+    }
+
+    throw new Error('Could not parse radar timestamps from GetCapabilities');
+  } catch (e) {
+    console.warn('[Radar] Failed to get radar timestamps:', e);
+    return [];
+  }
+}
+
+// Get the latest radar timestamp (convenience wrapper, uses same cache as getRadarTimestampsForLayer)
 async function getLatestRadarTimestamp() {
   // Return cached timestamp if valid (2 min TTL — matches radar update interval)
   if (_latestTimestampCache && Date.now() < _latestTimestampCache.expiresAt) {
@@ -106,18 +179,15 @@ async function getLatestRadarTimestamp() {
     }
 
     // If no default, parse the available times and use the last one
-    const timesMatch = text.match(/<Extent[^>]+name="time"[^>]*>([^<]+)<\/Extent>/i);
-    if (timesMatch) {
-      const times = timesMatch[1].split(',').map(t => t.trim()).filter(Boolean);
-      if (times.length > 0) {
-        // Sort and use the latest timestamp
-        times.sort();
-        _latestTimestampCache = {
-          timestamp: times[times.length - 1],
-          expiresAt: Date.now() + 2 * 60 * 1000,
-        };
-        return times[times.length - 1];
-      }
+    const times = parseRadarTimestamps(text);
+    if (times.length > 0) {
+      // Sort and use the latest timestamp
+      times.sort();
+      _latestTimestampCache = {
+        timestamp: times[times.length - 1],
+        expiresAt: Date.now() + 2 * 60 * 1000,
+      };
+      return times[times.length - 1];
     }
 
     throw new Error('Could not parse radar timestamps from GetCapabilities');
@@ -135,8 +205,8 @@ function getRadarMeta(lat, lon, layer) {
     const raw = localStorage.getItem(key);
     if (!raw) return null;
     const meta = JSON.parse(raw);
-    // Check if metadata is stale (older than TTL)
-    if (Date.now() - meta.lastUpdated > RADAR_TTL) {
+    // Check if metadata is stale (older than TTL — use longer TTL for metadata)
+    if (Date.now() - meta.lastUpdated > RADAR_META_TTL) {
       localStorage.removeItem(key);
       return null;
     }
@@ -608,3 +678,4 @@ window.clearRadarCache = clearRadarCache;
 window.invalidateRadarCache = invalidateRadarCache;
 window.getRadarMeta = getRadarMeta;
 window.getRadarCacheSize = getRadarCacheSize;
+window.getRadarTimestampsForLayer = getRadarTimestampsForLayer;
