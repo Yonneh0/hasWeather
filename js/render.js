@@ -59,11 +59,15 @@ function renderAll() {
     const suffix = data.latitude != null && data.longitude != null ? `${data.latitude}_${data.longitude}` : undefined;
     card.innerHTML = renderCityCard(data, suffix);
     grid.appendChild(card);
+
   });
 
    applyBackgrounds();
    
-   setTimeout(() => drawAllCharts(), 400);
+   setTimeout(() => {
+     drawAllCharts();
+     drawGhostCharts();
+   }, 400);
  }
 
 function applyBackgrounds() {
@@ -261,7 +265,6 @@ function renderCityCard(data, suffix) {
       const hPrecip = nwsHourly?.precipitation?.[hIdx] != null && nwsHourly.precipitation[hIdx] > 0.1 
         ? `${Math.round(nwsHourly.precipitation[hIdx])}mm` : '';
       ghostHourlySlotsHTML += `<div class="nws-ghost-hour-slot${isGhostCurrent ? ' current' : ''}">
-        <div class="nws-ghost-hour-time">${hTime}</div>
         <div class="nws-ghost-hour-icon">${isGhostCurrent ? ghostIcon : (hIsDay ? getWeatherIcon(hCode) : getMoonIcon(hCode))}</div>
         <div class="nws-ghost-hour-temp">${Math.round(hTemp)}°</div>
         ${hWind ? `<div class="nws-ghost-hour-wind">${hWind}</div>` : ''}
@@ -306,21 +309,24 @@ function renderCityCard(data, suffix) {
       </div>`;
   }
 
+  // Build ghost merged canvas element if NWS data is available (positioned behind OM chart that spans entire card)
+  const ghostMergedCanvasId = hasNwsData ? `chart-ghost-merged-${safeName}` : '';
+  const ghostMergedCanvas = hasNwsData
+    ? `<canvas class="chart-canvas chart-merged nws-ghost-chart" id="${ghostMergedCanvasId}" style="position:absolute;top:0;left:0;right:0;bottom:0;z-index:-1;pointer-events:none;"></canvas>`
+    : '';
+
   return `
+    ${ghostMergedCanvas}
     <canvas class="chart-canvas chart-merged" id="${mergedCanvasId}" style="position:absolute;top:0;left:0;right:0;bottom:0;z-index:0;pointer-events:none;"></canvas>
     <div style="position:relative;z-index:2;">
    <div class="city-header">
        ${ghostHeaderHTML}
        <div class="city-name-wrap">
-         <span class="city-name">${escapeHTML(data.name)}${FavoritesManager.has(data.place_id, data.latitude, data.longitude) ? '<span class="fav-star">★</span>' : ''}${nwsBadge}</span>
+          <span class="city-name">${escapeHTML(data.name)}${nwsBadge}</span>
          <span class="city-state">${escapeHTML(data.state)}</span>
        </div>
        <span class="current-temp-inline">${Math.round(curTemp)}°</span>
       <div class="current-weather-icon-inline">${curIconLarge}</div>
-    </div>
-    <div class="city-compass-row" style="display:flex;align-items:center;gap:0.4rem;margin-top:0.1rem;">
-      <span class="compass-heading">${escapeHTML(bearingToCompass(data.bearing))}</span>
-      <span class="compass-heading">${Math.round(data.distance)} mi</span>
     </div>
     <div class="combined-chart-row">
       <canvas class="combined-chart-canvas" id="${combinedCanvasId}"></canvas>
@@ -363,7 +369,49 @@ function renderCityCard(data, suffix) {
       <div class="hourly-title">24-Hour Forecast</div>
       <div class="hourly-row">${hourlyHTML}</div>
       ${ghostHourlyHTML}
-    </div>
+      </div>
     </div>`;
 }
+
+// ===== DRAW GHOST CHARTS =====
+function drawGhostCharts() {
+  weatherData.forEach((data) => {
+    if (!data.weather || !data.nwsData) return;
+    const hourly = data.nwsData.weather.hourly || {};
+    const safeName = data.place_id || `${data.latitude || 0}_${data.longitude || 0}`;
+    if (Object.keys(hourly).length === 0) return;
+
+    // Find current hour index in NWS hourly data to align with OM chart's time window
+    const nwsTimeArr = hourly.time || [];
+    const nwsCurrentDay = new Date().toISOString().split('T')[0];
+    const currentHour = new Date().getHours();
+    let currentIdx = -1;
+    if (nwsTimeArr.length > 0) {
+      // Find the index where the date matches current day and time starts with current hour
+      for (let i = 0; i < nwsTimeArr.length; i++) {
+        const t = nwsTimeArr[i];
+        const [datePart, timePart] = t.split('T');
+        if (datePart === nwsCurrentDay && timePart.startsWith(`T${String(currentHour).padStart(2, '0')}`)) {
+          currentIdx = i;
+          break;
+        }
+      }
+    }
+
+    // If no exact match found, fall back to first hour of current day
+    if (currentIdx === -1) {
+      for (let i = 0; i < nwsTimeArr.length; i++) {
+        const t = nwsTimeArr[i];
+        const [datePart] = t.split('T');
+        if (datePart === nwsCurrentDay) {
+          currentIdx = i;
+          break;
+        }
+      }
+    }
+
+    drawGhostMergedChart(`chart-ghost-merged-${safeName}`, data.nwsData.weather, data.highTemp, data.lowTemp, currentIdx >= 0 ? currentIdx : 0);
+  });
+}
+
 

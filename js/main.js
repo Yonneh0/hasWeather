@@ -7,7 +7,7 @@ let _nearbyCache = null;
 let _nearbyCacheTime = 0;
 let _toggleDebounceTimer = null;
 let _chartResizeTimer = null;
-let _maxCities = parseInt(localStorage.getItem('hasW_maxCities') ?? '6', 10);
+let _maxCities = MAX_CITIES; // Default: show nearest 6 cities
 
 // ===== INIT =====
 document.addEventListener('DOMContentLoaded', () => {
@@ -16,113 +16,18 @@ document.addEventListener('DOMContentLoaded', () => {
   const unitBtn = document.getElementById('unit-toggle');
   const refreshBtn = document.getElementById('refresh-btn');
   const gameBtn = document.getElementById('game-btn');
-  const favBtn = document.getElementById('fav-btn');
-  const favDropdown = document.getElementById('fav-dropdown');
-  const favSearch = document.getElementById('fav-search');
-  const favMaxCities = document.getElementById('fav-max-cities');
-  const favMaxVal = document.getElementById('fav-max-val');
-  const searchBtn = document.getElementById('search-btn');
-  const cityInput = document.getElementById('city-input');
 
   if (unitBtn) unitBtn.addEventListener('click', toggleUnit);
   if (refreshBtn) refreshBtn.addEventListener('click', refresh);
   if (gameBtn) gameBtn.addEventListener('click', toggleGame);
-  if (searchBtn) searchBtn.addEventListener('click', handleCitySearch);
-  if (cityInput) {
-    cityInput.addEventListener('keydown', e => {
-      if (e.key === 'Enter') handleCitySearch();
-    });
-  }
 
-  // Favorites button toggle
-  if (favBtn && favDropdown) {
-    favBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const isOpen = favDropdown.classList.toggle('open');
-      if (isOpen) {
-        // Refresh dropdown data on open
-        _allNearbyCities = [];
-        favSearch.value = '';
-        favSearch.focus();
-        renderFavDropdown(null);
-        // Position dropdown to stay on screen
-        requestAnimationFrame(() => {
-          const rect = favDropdown.getBoundingClientRect();
-          const btnRect = favBtn.getBoundingClientRect();
-          // Reset any previous positioning
-          favDropdown.style.left = '0';
-          favDropdown.style.right = 'auto';
-          favDropdown.style.top = '';
-          favDropdown.style.bottom = '';
-          // Check right edge overflow
-          if (rect.right > window.innerWidth) {
-            favDropdown.style.left = 'auto';
-            favDropdown.style.right = '0';
-          }
-          // Check bottom edge overflow
-          if (rect.bottom > window.innerHeight) {
-            favDropdown.style.top = 'auto';
-            favDropdown.style.bottom = `calc(100% + 0.5rem)`;
-          }
-        });
-      }
-    });
-
-    // Close dropdown on outside click
-    document.addEventListener('click', (e) => {
-      if (!favDropdown.contains(e.target) && e.target !== favBtn) {
-        favDropdown.classList.remove('open');
-      }
-    });
-
-    // Prevent dropdown clicks from closing
-    favDropdown.addEventListener('click', (e) => e.stopPropagation());
-  }
-
-  // Favorites search with debounce
-  let _searchDebounce = null;
-  if (favSearch) {
-    favSearch.addEventListener('input', () => {
-      clearTimeout(_searchDebounce);
-      _searchDebounce = setTimeout(() => {
-        const q = favSearch.value.trim();
-        renderFavDropdown(q || null);
-      }, 350);
-    });
-  }
-
-  // Max cities setting — realtime apply
-  if (favMaxCities) {
-    favMaxCities.value = _maxCities;
-    if (favMaxVal) favMaxVal.textContent = _maxCities;
-    favMaxCities.addEventListener('input', async () => {
-      _maxCities = parseInt(favMaxCities.value, 10);
-      localStorage.setItem('hasW_maxCities', _maxCities);
-      if (favMaxVal) favMaxVal.textContent = _maxCities;
-      // Re-fetch nearby cities and re-render
-      _nearbyCache = null;
-      _nearbyCacheTime = 0;
-      _allNearbyCities = [];
-      // Clear DataCache for nearby cities so fresh fetch happens
-      if (userLocation) {
-        const nearbyKey = `nearby_${DataCache._roundCoord(userLocation.lat)}_${DataCache._roundCoord(userLocation.lon)}`;
-        DataCache.invalidate(nearbyKey);
-      }
-      if (!isLoading) {
-        isLoading = true;
-        const btn = document.getElementById('refresh-btn');
-        if (btn) { btn.classList.add('spinning'); btn.disabled = true; }
-        await run();
-        if (btn) { btn.classList.remove('spinning'); btn.disabled = false; }
-        isLoading = false;
-      }
-    });
-  }
-
-  // Chart redraw on resize
+  // Chart redraw on resize (includes ghost charts)
   window.addEventListener('resize', () => {
     clearTimeout(_chartResizeTimer);
-    _chartResizeTimer = setTimeout(() => drawAllCharts(), CHART_RESIZE_DEBOUNCE_MS);
+    _chartResizeTimer = setTimeout(() => {
+      drawAllCharts();
+      drawGhostCharts();
+    }, CHART_RESIZE_DEBOUNCE_MS);
   });
 
    // Debug location preset buttons
@@ -164,58 +69,14 @@ async function run() {
   _nearbyCache = null;
   _nearbyCacheTime = 0;
 
-  // Load nearby cities + favorites, then render both
+  // Load nearby cities and display the nearest _maxCities
   const nearby = await findNearbyCities(userLocation.lat, userLocation.lon);
-  const favAll = FavoritesManager.getAll();
-
-  // Combine: nearby cities first, then favorites that aren't already in nearby
-  // Use BOTH place_id AND coordinate proximity matching to prevent duplicates
-  const allCities = [...nearby];
-  const seenPlaceIds = new Set(nearby.map(c => String(c.place_id)));
-  const seenCoords = new Set(nearby.map(c => {
-    const lat = c.latitude != null ? DataCache._roundCoord(c.latitude) : null;
-    const lon = c.longitude != null ? DataCache._roundCoord(c.longitude) : null;
-    return lat != null && lon != null ? `${lat},${lon}` : null;
-  }).filter(Boolean));
-
-  for (const fav of favAll) {
-    const favPlaceId = String(fav.place_id);
-    const favLat = fav.latitude != null ? DataCache._roundCoord(fav.latitude) : null;
-    const favLon = fav.longitude != null ? DataCache._roundCoord(fav.longitude) : null;
-
-    // Skip if place_id already seen (same physical city from same source)
-    if (seenPlaceIds.has(favPlaceId)) continue;
-
-    // Skip if coordinate proximity match (same physical city from different source)
-    const favCoordKey = favLat != null && favLon != null ? `${favLat},${favLon}` : null;
-    if (favCoordKey != null) {
-      let isCoordDuplicate = false;
-      for (const existingCoord of seenCoords) {
-        const [exLat, exLon] = existingCoord.split(',').map(Number);
-        // 0.01° tolerance (≈1km)
-        if (Math.abs(favLat - exLat) < 0.01 && Math.abs(favLon - exLon) < 0.01) {
-          isCoordDuplicate = true;
-          break;
-        }
-      }
-      if (isCoordDuplicate) continue;
-    }
-
-    allCities.push({
-      place_id: favPlaceId,
-      name: fav.name,
-      state: fav.state,
-      latitude: fav.latitude,
-      longitude: fav.longitude,
-      distance: haversine(userLocation.lat, userLocation.lon, fav.latitude, fav.longitude),
-      bearing: bearing(userLocation.lat, userLocation.lon, fav.latitude, fav.longitude),
-    });
-    seenPlaceIds.add(favPlaceId);
-    if (favCoordKey != null) seenCoords.add(favCoordKey);
-  }
-
-  // Sort all cities by distance from user (closest first)
-  allCities.sort((a, b) => a.distance - b.distance);
+  
+  // Sort by distance from user (closest first)
+  nearby.sort((a, b) => a.distance - b.distance);
+  
+  // Take only the nearest _maxCities cities
+  const allCities = nearby.slice(0, _maxCities);
 
   if (allCities.length === 0) {
     return;
@@ -265,6 +126,161 @@ async function run() {
     }
 
    renderAll();
+   
+   // After cities are rendered, load the radar card and fetch radar image
+   if (userLocation) {
+     loadRadarCard(userLocation.lat, userLocation.lon);
+   }
+ }
+
+// ===== RADAR CARD =====
+async function loadRadarCard(lat, lon) {
+  const container = document.getElementById('radar-card-container');
+  if (!container) return;
+
+  // Build radar card HTML
+  const layerOptions = Object.entries(RADAR_LAYERS).map(([key, value]) => 
+    `<option value="${value}" ${value === RADAR_DEFAULT_LAYER ? 'selected' : ''}>${key.replace('_', ' ')}</option>`
+  ).join('');
+
+  container.innerHTML = `
+    <div class="radar-card" data-radar-lat="${lat.toFixed(4)}" data-radar-lon="${lon.toFixed(4)}">
+      <div class="radar-card-header">
+        <span class="radar-card-title">Radar</span>
+        <select class="radar-layer-select" title="Select radar layer">${layerOptions}</select>
+        <span class="radar-card-timestamp">Loading...</span>
+      </div>
+      <div class="radar-card-body">
+        <img class="radar-image" alt="Radar" />
+      </div>
+      <div class="radar-clip-controls">
+        <button class="radar-clip-btn radar-clip-play-btn" title="Play/pause clip">▶</button>
+        <span class="radar-clip-frame-label">0/0</span>
+        <div class="radar-clip-progress"><div class="radar-clip-progress-bar"></div></div>
+      </div>
+    </div>`;
+
+  // Fetch and display radar image
+  await updateRadarImage(lat, lon);
+
+  // Layer selector event
+  const layerSelect = container.querySelector('.radar-layer-select');
+  if (layerSelect) {
+    layerSelect.addEventListener('change', async (e) => {
+      e.stopPropagation();
+      // Clear cache for this layer and re-fetch
+      await clearRadarCacheForLayer(lat, lon, RADAR_DEFAULT_LAYER);
+      await updateRadarImage(lat, lon, e.target.value);
+    });
+  }
+
+  // Clip playback controls
+  const playBtn = container.querySelector('.radar-clip-play-btn');
+  if (playBtn) {
+    playBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const meta = getRadarMeta(lat, lon, layerSelect?.value || RADAR_DEFAULT_LAYER);
+      if (!meta || !meta.timestamps.length) return;
+      
+      // Fetch last 10 frames for animation
+      const frames = await getRadarFramesForClip(lat, lon, layerSelect?.value || RADAR_DEFAULT_LAYER, 10);
+      if (!frames || !frames.length) return;
+
+      // Toggle playback
+      if (playBtn.classList.contains('active')) {
+        playBtn.classList.remove('active');
+        playBtn.textContent = '▶';
+        container.querySelector('.radar-clip-controls').classList.remove('active');
+        return;
+      }
+
+      playBtn.classList.add('active');
+      playBtn.textContent = '⏸';
+      container.querySelector('.radar-clip-controls').classList.add('active');
+      
+      // Start playback
+      let frameIdx = 0;
+      const progressBar = container.querySelector('.radar-clip-progress-bar');
+      const frameLabel = container.querySelector('.radar-clip-frame-label');
+      
+      function showNextFrame() {
+        if (!playBtn.classList.contains('active')) return;
+        
+        const frame = frames[frameIdx % frames.length];
+        const img = container.querySelector('.radar-image');
+        if (img && frame) {
+          img.src = frame.dataUrl;
+          img.style.display = 'block';
+          progressBar.style.width = `${((frameIdx + 1) / frames.length) * 100}%`;
+          frameLabel.textContent = `${frameIdx + 1}/${frames.length}`;
+        }
+        
+        frameIdx++;
+        setTimeout(showNextFrame, 500); // 2 FPS (radar updates every ~2 min)
+      }
+      
+      showNextFrame();
+    });
+  }
+}
+
+// Update radar image for current timestamp
+async function updateRadarImage(lat, lon, layer = null) {
+  const container = document.getElementById('radar-card-container');
+  if (!container) return;
+
+  const card = container.querySelector('.radar-card');
+  const img = container.querySelector('.radar-image');
+  const timestampEl = container.querySelector('.radar-card-timestamp');
+
+  // Show loading state
+  card.classList.add('radar-loading');
+
+  try {
+    const result = await fetchRadarImageForLocation(lat, lon, layer || RADAR_DEFAULT_LAYER);
+    
+    if (result.error) {
+      console.warn('[Radar] Failed to load radar:', result.error);
+      timestampEl.textContent = 'Failed to load';
+      card.classList.remove('radar-loading');
+      return;
+    }
+
+    // Update timestamp display
+    if (result.timestamp) {
+      const date = new Date(result.timestamp);
+      timestampEl.textContent = date.toLocaleTimeString();
+    }
+
+    // Remove loading spinner — either when image loads or immediately if it was cached
+    if (result.cached) {
+      card.classList.remove('radar-loading');
+    } else {
+      img.onload = () => {
+        card.classList.remove('radar-loading');
+      };
+      img.onerror = () => {
+        console.warn('[Radar] Image failed to load');
+        img.style.display = 'none';
+        timestampEl.textContent = 'Failed to load';
+        card.classList.remove('radar-loading');
+      };
+    }
+
+    // Update the radar image element
+    img.src = result.imageUrl;
+    
+    // Show the image — for cached images, CSS selector [src]:not([src=""]) will handle display
+    // For uncached images, the onload handler will set display: block
+    if (result.cached) {
+      // Cached data URLs may not trigger onload — ensure visibility immediately
+      img.style.display = 'block';
+    }
+  } catch (e) {
+    console.error('[Radar] Error loading radar:', e);
+    timestampEl.textContent = 'Failed to load';
+    card.classList.remove('radar-loading');
+  }
 }
 
 // ===== GAME TOGGLE =====

@@ -2,6 +2,22 @@
 
 ## Changelog
 
+### 2026-06-13 — Remove Favorites System and City Search (Major Simplification)
+
+This release removes the favorites system and city search functionality. The app now simply displays the nearest 6 cities based on user location.
+
+**Changes:**
+- **Favorites Removed**: All favorites button, dropdown, search, and city management logic removed
+- **City Search Removed**: Location prompt modal and city input functionality removed
+- **Favorites UI Deleted**: `js/favorites.js` deleted entirely
+- **Favorites CSS Removed**: All `.fav-*` CSS classes removed from `interactive.css`
+- **Favorites References Removed**: FavoritesManager references removed from `render.js`
+
+**Fixes:**
+1. Removed all favorites system code and references
+2. Removed city search functionality and location prompt modal
+3. Cleaned up localStorage keys for favorites (hasW_favorites, hasW_favDetails)
+
 ### 2026-06-13 — Per-City NWS Enhancement Toggle (Major Refactor)
 
 This release replaces the global source toggle (NWS vs OM for ALL cities) with per-city NWS enhancement toggles. The changes consolidate `favorites-ui.js` into `favorites.js`, restructure the CSS, and refactor the API fetching logic to always use OM as base data with optional NWS enhancement where available.
@@ -34,8 +50,6 @@ This release replaces the global source toggle (NWS vs OM for ALL cities) with p
 10. Fixed source badge always showing "OM" for cities without NWS bounds
 11. Conditional cache invalidation by source type during background refresh
 
-
-single file weather app, by Half-Assed Solutions.
 completely self-contained single file weather app, that uses public sources, with proper local caching, to provide reliable comprehensive weather information, with 0 ads. Brought to you by `Carls' Jr`.
 
 ## Features
@@ -44,7 +58,7 @@ completely self-contained single file weather app, that uses public sources, wit
 - Dual data source architecture: Open-Meteo as base for all cities, NWS as supplemental where available (enhanced mode)
 - Weather data from Open-Meteo API (temperature, humidity, wind, precipitation, UV index, visibility, surface pressure, air quality, 24-hour hourly forecast) + NWS API (current conditions, hourly forecast, alerts)
 - localStorage-based caching with configurable TTLs per data type (15 min for weather/AQI, 24h for geocoding/IP, 10 min for nearby cities) and LRU eviction (default: 500 entries per type)
-- Favorites system using place_id with deduplication and proximity checking — includes search, categorization by distance from user, and regional/state capital classification
+- Nearby city discovery via Nominatim with bearing-based diversity selection and automatic display of up to 6 nearest cities
 - °F/°C unit toggle with debouncing
 - Fullscreen toggle button (hidden by default, shown when supported)
 - Animated SVG weather icons (20+ weather types with glow, rotation, drift, shake, bob, and particle animations)
@@ -115,7 +129,7 @@ css/
   main.css               7 lines — entry point (imports all modular CSS)
   layout.css           183 lines — core layout & structural styles (header, city grid, modal, loading, text glow)
   card-components.css  436 lines — card display components (city card, hourly forecast, canvas charts)
-  interactive.css      528 lines — interactive elements (favorites dropdown, SVG weather icons, network outage panel)
+   interactive.css      410 lines — interactive elements (SVG weather icons, network outage panel)
   donkey-runner.css    740 lines — minigame panel styling & animations
 js/
   api-nws.js          1162 lines — NWS API client (gridpoint data, observation stations, alerts) with rate limiting and cross-source lookup
@@ -125,12 +139,11 @@ js/
   charts.js            302 lines — canvas chart rendering (merged chart, combined chart, particles)
   constants.js          72 lines — shared constants (WMO codes & gradients)
   donkey-runner.js    2581 lines — Donkey Runner minigame engine (canvas-based runner)
-   favorites-ui.js      592 lines — favorites dropdown UI, city management & FavoritesManager
   icons.js             289 lines — animated SVG weather icons
   main.js              252 lines — entry point (state + DOM init + event bindings + game toggle + run orchestration)
   network-monitor.js   331 lines — network outage detection, animated error panel, auto-retry
   render.js            255 lines — DOM rendering (city cards, hourly forecast) with cross-source field mapping
-  utils.js             375 lines — utility functions (unit conversion, haversine, bearing, wind compass, day/night check, location prompt, source toggle, refresh, background refresh, IP-based location fallback (ipinfo.io))
+   utils.js             340 lines — utility functions (unit conversion, haversine, bearing, wind compass, day/night check, refresh, background refresh, IP-based location fallback (ipinfo.io))
 rag-docs/
   air-quality-api.md      167 lines — documentation for the air-quality endpoint
   geocoding-api.md        137 lines — documentation for the geocoding endpoint
@@ -184,8 +197,6 @@ Additional `localStorage` keys used by the app:
 
 | Key                     | Purpose                                  |
 |-------------------------|------------------------------------------|
-| `hasW_favorites`        | Array of favorited place_id strings       |
-| `hasW_favDetails`       | Map of `{ place_id → {name, state, lat, lon} }` |
 | `hasW_maxCities`        | User-configured max city count (default: 6) |
 | `hasW_donkeyHighScore`  | Donkey Runner minigame high score         |
 
