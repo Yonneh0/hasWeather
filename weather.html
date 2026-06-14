@@ -2747,13 +2747,13 @@ body.donkey-fullscreen .donkey-panel.donkey-hidden {
 <div id="radar-card-container" class="radar-card-wrapper"></div>
 
 <script>
-var LOCAL_CONFIG_REFRESH_INTERVAL_SECONDS = 1;
+var LOCAL_CONFIG_REFRESH_INTERVAL_SECONDS = 0;
 
-var LOCAL_SENSOR_TIMESTAMP = '1942-06-14T09:30:00.000Z';
-var LOCAL_SENSOR_TEMPERATURE = "-48c";
-var LOCAL_SENSOR_WIND_SPEED = "42kph";
-var LOCAL_SENSOR_WIND_GUST = "111k";
-var LOCAL_SENSOR_WIND_DIRECTION_DEGREES = 245;
+//var LOCAL_SENSOR_TIMESTAMP = '1942-06-14T09:30:00.000Z';
+//var LOCAL_SENSOR_TEMPERATURE = "-48c";
+//var LOCAL_SENSOR_WIND_SPEED = "42kph";
+//var LOCAL_SENSOR_WIND_GUST = "111k";
+//var LOCAL_SENSOR_WIND_DIRECTION_DEGREES = 245;
 
 </script>
 <script>
@@ -12633,7 +12633,7 @@ async function loadRadarCard(lat, lon) {
           <select class="radar-layer-select" id="radar-layer-select" title="Radar layer">${layerOptions}</select>
           <span class="radar-timestamp" id="radar-timestamp">--:--</span>
           <button class="radar-btn radar-btn-pins radar-tooltip" id="radar-pins-btn" data-tooltip="Toggle location pins (G)" title="Pins">📌</button>
-          <button class="radar-btn radar-tooltip" id="radar-grid-btn" data-tooltip="Toggle grid (G)" title="Grid">▦</button>
+          <button class="radar-btn radar-tooltip" id="radar-grid-btn" data-tooltip="Toggle grid (Shift+G)" title="Grid">▦</button>
           <button class="radar-btn radar-tooltip" id="radar-load-all-btn" data-tooltip="Load all cached frames">Load All</button>
           <button class="radar-btn radar-fullscreen-btn radar-tooltip" id="radar-fullscreen-btn" data-tooltip="Toggle fullscreen">⛶</button>
         </div>
