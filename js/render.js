@@ -94,8 +94,6 @@ function renderCityCard(data, suffix) {
   const hourly = w.hourly || {};
   const aqiData = aqiLabel(a?.us_aqi ?? null);
 
-  // Check if this city has NWS data active (per-city toggle) — use data.nwsActive for consistency
-  const nwsActiveForCity = data.nwsActive === true;
   const curTemp = current?.temperature_2m != null ? convertTemp(current.temperature_2m) :
                   current?.temperature != null ? convertTemp(current.temperature) : '—';
   const curWeatherCode = current?.weather_code ?? current?.weatherCode ?? 0;
@@ -170,18 +168,11 @@ function renderCityCard(data, suffix) {
     </div>`;
   }
 
-    // Badge reflects each city's actual data source (OM base, NWS-only, or NWS-enhanced)
-    // Always show a default "OM" badge for cities without NWS enhancement
-    const nwsBoundsAvailable = !!data.nwsBounds;
-    const sourceBadge = (data.source === 'enhanced')
-      ? '<span class="source-badge enhanced">ENHANCED</span>'
-      : (data.source === 'nws' && nwsActiveForCity)
-        ? '<span class="source-badge enhanced">ENHANCED</span>'
-        : '<span class="source-badge open-meteo">OM</span>';
-
-    // NWS toggle button HTML — show when NWS bounds are available or city already has NWS active from cross-session persistence
-    const nwsToggleBtn = ((nwsBoundsAvailable || nwsActiveForCity) && data.place_id !== '') 
-      ? `<span class="nws-toggle-btn" data-placeid="${escapeHTML(data.place_id)}" title="Toggle NWS enhancement">⚡</span>` : '';
+    // NOAA badge — show when NWS data is available for this city
+    const hasNwsData = !!data.nwsData;
+    const nwsBadge = hasNwsData 
+      ? `<span class="nws-badge" title="NWS data available"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 74 74"><path fill="#003087" d="M70.17,20.61c-5.27,7.93-14,19-24.19,22.69l-1.26.53a2.86,2.86,0,0,0,.77.23h1.2c2.58-.1,6.3-1.19,7.06,1.43A30.55,30.55,0,0,0,39,49.41c-4.61,2.53-10.45,4.81-14.27,1.26,3.06-.41,8.71-2.26,10.7-4.07C19.25,46.38,12.06,36.3,7,30.79c-1.82-2.11-3.69-3.88-5.6-4.06a37,37,0,1,0,68.74-6.12Z"/><path fill="#fff" d="M7,30.77c5,5.51,12.22,15.58,28.42,15.81-2,1.8-7.64,3.65-10.7,4.07C28.53,54.22,34.41,52,39,49.39a30.46,30.46,0,0,1,14.69-3.87C53,42.9,49.23,44,46.65,44.08h-1.2a2.63,2.63,0,0,1-.77-.23l1.26-.52C56.1,39.54,64.85,28.54,70.13,20.55a35.57,35.57,0,0,0-3.78-6c-9.52,1.74-12.6,15.68-18,22.59-7.16,10.08-14,7.85-21.27,1.13S14.44,19.61,6.77,15.54A37.06,37.06,0,0,0,1.38,26.72C3.34,26.91,5.21,28.68,7,30.77Z"/><path fill="#003087" d="M27.1,38.26c7.22,6.72,14.11,8.92,21.28-1.14,5.45-6.91,8.5-20.85,18-22.59a37,37,0,0,0-59.58,1C14.49,19.61,19.88,31.65,27.1,38.26Z"/></svg></span>`
+      : '<span class="source-badge open-meteo">OM</span>';
 
   const safeName = data.place_id || suffix;
   const mergedCanvasId = `chart-merged-${safeName}`;
@@ -206,15 +197,124 @@ function renderCityCard(data, suffix) {
   const windStats = chartStats(wind);
   const rainStats = chartStats(rain);
 
+  // Build ghost overlay HTML when NWS data is available
+  let ghostHeaderHTML = '';
+  let ghostDetailsHTML = '';
+  let ghostHourlyHTML = '';
+  if (hasNwsData) {
+    const nwsCurrent = data.nwsData?.weather?.current || {};
+    const nwsHourly = data.nwsData?.weather?.hourly || {};
+    
+    // Ghost temperature (offset from OM temp)
+    const ghostTemp = nwsCurrent?.temperature_2m != null ? convertTemp(nwsCurrent.temperature_2m) :
+                      nwsCurrent?.temperature != null ? convertTemp(nwsCurrent.temperature) : '—';
+    
+    // Ghost weather icon
+    const ghostWeatherCode = nwsCurrent?.weather_code ?? nwsCurrent?.weatherCode ?? 0;
+    const isNwsDay = isDaytime(currentHour, sunriseTime, sunsetTime);
+    const ghostIcon = isNwsDay ? getWeatherIcon(ghostWeatherCode) : getMoonIcon(ghostWeatherCode);
+    
+    // Ghost details grid values
+    const ghostHumidity = nwsCurrent?.relative_humidity_2m ?? nwsCurrent?.relativeHumidity ?? '—';
+    const ghostWindSpeed = nwsCurrent?.wind_speed_10m != null ? `${Math.round(nwsCurrent.wind_speed_10m)} km/h` :
+                          nwsCurrent?.windSpeed != null ? `${Math.round(nwsCurrent.windSpeed)} km/h` : '';
+    const ghostWindDir = nwsCurrent?.wind_direction_10m ?? nwsCurrent?.windDirection ?? 0;
+    let ghostPressure = '—';
+    if (nwsCurrent?.surface_pressure != null) {
+      ghostPressure = nwsCurrent.surface_pressure;
+    } else if (nwsCurrent?.pressure != null) {
+      ghostPressure = nwsCurrent.pressure;
+    }
+    // NWS doesn't provide UV Index
+    const ghostUv = '—';
+    let ghostVis = '—';
+    if (nwsCurrent?.visibility != null) {
+      if (nwsCurrent.visibilityUnit === 'mi') {
+        ghostVis = nwsCurrent.visibility.toFixed(1);
+      } else {
+        ghostVis = (nwsCurrent.visibility / 1609.34).toFixed(1);
+      }
+    }
+    
+    // Ghost hourly forecast
+    const nwsTimeArr = nwsHourly?.time || [];
+    const nwsCurrentDay = now.toISOString().split('T')[0];
+    const nwsCurrentIdx = nwsTimeArr.findIndex(t => {
+      const [datePart, timePart] = t.split('T');
+      return datePart === nwsCurrentDay && timePart.startsWith(`T${String(currentHour).padStart(2, '0')}`);
+    });
+    
+    // Build ghost hourly slots
+    let ghostHourlySlotsHTML = '';
+    for (let i = 0; i < 24; i++) {
+      const hIdx = nwsCurrentIdx >= 0 ? nwsCurrentIdx + i : currentHour + i;
+      if (hIdx < 0 || hIdx >= nwsTimeArr.length) break;
+      const hTime = nwsTimeArr[hIdx]?.split('T')[1]?.split('+')[0]?.slice(0, 5);
+      const hTemp = nwsHourly?.temperature_2m?.[hIdx] != null ? convertTemp(nwsHourly.temperature_2m[hIdx]) :
+                    nwsHourly?.temperature?.[hIdx] != null ? convertTemp(nwsHourly.temperature[hIdx]) : '—';
+      const hCode = nwsHourly?.weather_code?.[hIdx] ?? nwsHourly?.weatherCode?.[hIdx] ?? 0;
+      const isGhostCurrent = i === 0;
+      const hHourDecimal = parseDecimalTime(hTime, 12);
+      const hIsDay = isDaytime(hHourDecimal, sunriseTime, sunsetTime);
+      const hWind = nwsHourly?.wind_speed_10m?.[hIdx] != null ? `${Math.round(nwsHourly.wind_speed_10m[hIdx])} km/h` :
+                    nwsHourly?.windSpeed?.[hIdx] != null ? `${Math.round(nwsHourly.windSpeed[hIdx])} km/h` : '';
+      const hPrecip = nwsHourly?.precipitation?.[hIdx] != null && nwsHourly.precipitation[hIdx] > 0.1 
+        ? `${Math.round(nwsHourly.precipitation[hIdx])}mm` : '';
+      ghostHourlySlotsHTML += `<div class="nws-ghost-hour-slot${isGhostCurrent ? ' current' : ''}">
+        <div class="nws-ghost-hour-time">${hTime}</div>
+        <div class="nws-ghost-hour-icon">${isGhostCurrent ? ghostIcon : (hIsDay ? getWeatherIcon(hCode) : getMoonIcon(hCode))}</div>
+        <div class="nws-ghost-hour-temp">${Math.round(hTemp)}°</div>
+        ${hWind ? `<div class="nws-ghost-hour-wind">${hWind}</div>` : ''}
+        ${hPrecip ? `<div class="nws-ghost-hour-precip">${hPrecip}</div>` : ''}
+      </div>`;
+    }
+    
+    // Ghost header elements (positioned relative to city-header)
+    ghostHeaderHTML = `
+      <div class="nws-ghost nws-ghost-temp">${Math.round(ghostTemp)}°</div>
+      <div class="nws-ghost nws-ghost-icon">${ghostIcon}</div>`;
+    
+    // Ghost details grid (positioned relative to details-grid)
+    ghostDetailsHTML = `
+      <div class="nws-ghost nws-ghost-details">
+        <div class="nws-ghost-detail-cell">
+          <span class="nws-ghost-detail-label">Humidity</span>
+          <span class="nws-ghost-detail-value">${ghostHumidity}%</span>
+        </div>
+        <div class="nws-ghost-detail-cell">
+          <span class="nws-ghost-detail-label">Wind</span>
+          <span class="nws-ghost-detail-value">${ghostWindDir !== 0 ? getWindCompass(ghostWindDir) + ' ' + ghostWindSpeed : '—'}</span>
+        </div>
+        <div class="nws-ghost-detail-cell">
+          <span class="nws-ghost-detail-label">Pressure</span>
+          <span class="nws-ghost-detail-value">${ghostPressure} hPa</span>
+        </div>
+        <div class="nws-ghost-detail-cell">
+          <span class="nws-ghost-detail-label">UV Index</span>
+          <span class="nws-ghost-detail-value">${ghostUv}</span>
+        </div>
+        <div class="nws-ghost-detail-cell">
+          <span class="nws-ghost-detail-label">Visibility</span>
+          <span class="nws-ghost-detail-value">${ghostVis} mi</span>
+        </div>
+      </div>`;
+    
+    // Ghost hourly forecast (positioned relative to hourly-section)
+    ghostHourlyHTML = `
+      <div class="nws-ghost nws-ghost-hourly">
+        ${ghostHourlySlotsHTML}
+      </div>`;
+  }
+
   return `
     <canvas class="chart-canvas chart-merged" id="${mergedCanvasId}" style="position:absolute;top:0;left:0;right:0;bottom:0;z-index:0;pointer-events:none;"></canvas>
     <div style="position:relative;z-index:2;">
    <div class="city-header">
+       ${ghostHeaderHTML}
        <div class="city-name-wrap">
-         <span class="city-name">${escapeHTML(data.name)}${FavoritesManager.has(data.place_id, data.latitude, data.longitude) ? '<span class="fav-star">★</span>' : ''}${sourceBadge}</span>
+         <span class="city-name">${escapeHTML(data.name)}${FavoritesManager.has(data.place_id, data.latitude, data.longitude) ? '<span class="fav-star">★</span>' : ''}${nwsBadge}</span>
          <span class="city-state">${escapeHTML(data.state)}</span>
        </div>
-       ${nwsToggleBtn}
        <span class="current-temp-inline">${Math.round(curTemp)}°</span>
       <div class="current-weather-icon-inline">${curIconLarge}</div>
     </div>
@@ -250,7 +350,8 @@ function renderCityCard(data, suffix) {
         </div>
       </div>
     </div>
-    <div class="details-grid">
+    <div class="details-grid" style="position:relative;">
+      ${ghostDetailsHTML}
       <div class="detail-cell"><span class="detail-label">Humidity</span><span class="detail-value">${humidity}%</span></div>
       <div class="detail-cell"><span class="detail-label">Wind</span><span class="detail-value">${windDir !== 0 ? getWindCompass(windDir) + ' ' + windSpeed : '—'}</span></div>
       <div class="detail-cell"><span class="detail-label">Pressure</span><span class="detail-value">${pressure} hPa</span></div>
@@ -258,9 +359,10 @@ function renderCityCard(data, suffix) {
       <div class="detail-cell"><span class="detail-label">Visibility</span><span class="detail-value">${vis} mi</span></div>
       <div class="detail-cell"><span class="detail-label">AQI (PM2.5)</span><span class="detail-value"><span class="aqi-badge ${aqiData.cls}">${aqiData.label}</span> ${pm25}</span></div>
     </div>
-    <div class="hourly-section">
+    <div class="hourly-section" style="position:relative;">
       <div class="hourly-title">24-Hour Forecast</div>
       <div class="hourly-row">${hourlyHTML}</div>
+      ${ghostHourlyHTML}
     </div>
     </div>`;
 }

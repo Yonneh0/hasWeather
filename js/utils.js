@@ -131,7 +131,7 @@ async function handleCitySearch() {
 }
 
 // ===== NWS BOUNDS CHECK =====
-// Track NWS bounds availability per city (checked lazily when rendering card)
+// Track NWS bounds availability per city (checked during initial fetch)
 const _nwsBoundsCache = {}; // { lat,lon: Promise<boolean> | { value: boolean, expiresAt: number } }
 const NWS_BOUNDS_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour TTL
 
@@ -166,188 +166,6 @@ async function isNwsBoundsAvailable(lat, lon) {
   // Replace with TTL entry after resolution
   _nwsBoundsCache[key] = { value: result, expiresAt: Date.now() + NWS_BOUNDS_CACHE_TTL_MS };
   return result;
-}
-
-// ===== PER-CITY NWS TOGGLE =====
-// Per-city toggle allows users to switch individual city cards from Open-Meteo (OM) base data
-// to NWS-enhanced data. The toggle state is persisted to localStorage for cross-session
-// persistence, so user preferences are remembered across app reloads.
-//
-// Note: _nwsActive state and saveNwsActiveState() are declared in cache.js as global state.
-
-// In-flight guard: prevent concurrent toggles for the same city (Fix #2)
-const _nwsToggleInFlight = {}; // { placeId: Promise | null }
-
-/**
- * Toggle NWS enhancement for a city card.
- * 
- * When the user clicks the NWS toggle button (⚡) on a city card, this function:
- * 1. If NWS is currently active: deactivates and switches to OM display (no network traffic)
- * 2. If NWS is not active: checks geographic bounds, cached data, and NWS API availability
- *    before attempting to fetch from the NWS API
- * 
- * Visual feedback is provided for all outcomes: green (success), red (error), amber (outside bounds).
- * 
- * @param {string} placeId - The unique place_id of the city card
- */
-async function toggleCityNws(placeId) {
-   // Show processing feedback immediately before checking in-flight guard
-   showNwsToggleFeedback(placeId, 'processing');
-
-   // Prevent concurrent toggles for the same city (Fix #2)
-   if (_nwsToggleInFlight[placeId]) return;
-
-   const city = weatherData.find(c => c.place_id === placeId);
-   if (!city) return;
-
-   if (_nwsActive[placeId]) {
-     // Deactivate — just swap to OM display, no network traffic
-     _nwsActive[placeId] = false;
-     city.nwsActive = false;
-     city.source = 'open-meteo';
-     saveNwsActiveState();
-     renderAll();
-     return;
-   }
-
-   // Activate — check geographic bounds first (no API call for obvious non-NWS cities)
-   if (city.latitude < 17 || city.latitude > 71 || city.longitude < -170 || city.longitude > -65) {
-     showNwsToggleFeedback(placeId, 'bounds');
-     return;
-   }
-
-    // Check for cached NWS data first (avoid redundant API calls)
-    const ck = nwsCacheKey(city.latitude, city.longitude);
-    const cachedNws = DataCache.get(ck, 'nwsCityData');
-    if (cachedNws && cachedNws.weather) {
-      // Merge cached NWS data into the city object so toggle actually shows NWS data (Fix #5)
-      const nwsCurrent = cachedNws.weather.current || {};
-      const nwsHourly = cachedNws.weather.hourly || {};
-      // Preserve OM precipitation since NWS hourly doesn't have it
-      const omHourly = city.weather?.hourly || {};
-      city.source = 'nws';
-      city.nwsActive = true;
-      city.weather = {
-        current: { ...city.weather?.current, ...nwsCurrent },
-        hourly: {
-          time: nwsHourly.time || omHourly.time || [],
-          temperature: nwsHourly.temperature ?? omHourly.temperature_2m ?? [],
-          weather_code: nwsHourly.weather_code ?? omHourly.weather_code ?? [],
-          precipitation: omHourly.precipitation ?? omHourly.precipitation_mm ?? [],
-          wind_speed_10m: nwsHourly.wind_speed_10m ?? omHourly.wind_speed_10m ?? [],
-          wind_direction_10m: nwsHourly.wind_direction_10m ?? omHourly.wind_direction_10m ?? [],
-          relative_humidity_2m: nwsHourly.relative_humidity_2m ?? omHourly.relative_humidity_2m ?? [],
-        },
-      };
-      if (cachedNws.aqi) city.aqi = cachedNws.aqi;
-      _nwsActive[placeId] = true;
-      saveNwsActiveState();
-      renderAll();
-      showNwsToggleFeedback(placeId, 'success'); // Fix #14: Show feedback on cache hit activation
-      return;
-    }
-
-   // Check NWS bounds — use cached result if available
-   const hasNws = await isNwsBoundsAvailable(city.latitude, city.longitude);
-   if (!hasNws) {
-     showNwsToggleFeedback(placeId, 'bounds');
-     return;
-   }
-
-   // Cache the bounds result on the city object
-   city.nwsBounds = true;
-
-   // Set in-flight guard — store the actual fetch promise so concurrent toggles can share it
-   _nwsToggleInFlight[placeId] = (async () => {
-     try {
-       // Fetch from NWS API
-       const nwsData = await fetchForCity(city.latitude, city.longitude);
-      if (!nwsData) {
-        // NWS returned no data — deactivate toggle with visual feedback
-        _nwsActive[placeId] = false;
-        city.nwsActive = false;
-        city.source = 'open-meteo';
-        saveNwsActiveState();
-        renderAll();
-        showNwsToggleFeedback(placeId, 'error');
-        return;
-      }
-      // Validate that NWS data has a valid current condition (partial data = not usable)
-      if (!nwsData.current) {
-        _nwsActive[placeId] = false;
-        city.nwsActive = false;
-        city.source = 'open-meteo';
-        saveNwsActiveState();
-        renderAll();
-        // Show bounds-style feedback for incomplete data (not a full error — just insufficient data)
-        showNwsToggleFeedback(placeId, 'bounds');
-        return;
-      }
-      DataCache.set(ck, nwsData, 'nwsCityData');
-      _nwsActive[placeId] = true;
-      city.nwsActive = true;
-      city.source = 'nws';
-      saveNwsActiveState();
-      renderAll();
-      showNwsToggleFeedback(placeId, 'success');
-    } catch (err) {
-      // NWS fetch failed — show visual feedback and deactivate toggle
-      _nwsActive[placeId] = false;
-      city.nwsActive = false;
-      city.source = 'open-meteo';
-      saveNwsActiveState();
-      renderAll();
-      showNwsToggleFeedback(placeId, 'error');
-      console.error('[NWS] Failed to fetch data for city:', placeId, err);
-    } finally {
-      // Clear in-flight guard (Fix #2)
-      delete _nwsToggleInFlight[placeId];
-    }
-   })();
-
-   await _nwsToggleInFlight[placeId];
- }
-
-// ===== NWS TOGGLE VISUAL FEEDBACK =====
-
-// Visual feedback types: 'success' (green), 'error' (red), 'bounds' (amber - city outside NWS bounds), 'processing' (blue - already toggling)
-const FEEDBACK_STYLES = Object.freeze({ // Fix #12: Freeze to prevent accidental mutation
-  success:    { bg: 'rgba(70, 200, 100, 0.5)', border: 'rgba(70, 200, 100, 0.6)', text: '#fff', title: 'NWS enhancement active!' },
-  error:      { bg: 'rgba(200, 70, 70, 0.5)', border: 'rgba(200, 70, 70, 0.6)', text: '#fff', title: 'NWS enhancement unavailable' },
-  bounds:     { bg: 'rgba(200, 180, 50, 0.5)', border: 'rgba(200, 180, 50, 0.6)', text: '#fff', title: 'Outside NWS coverage area' },
-  processing: { bg: 'rgba(70, 130, 255, 0.5)', border: 'rgba(70, 130, 255, 0.6)', text: '#fff', title: 'Processing toggle...' },
-});
-
-// Track pending feedback timeouts to prevent timing conflicts (Fix #12)
-const _feedbackTimeouts = {}; // { placeId: timeoutId }
-
-function showNwsToggleFeedback(placeId, type) {
-  const btn = document.querySelector(`.nws-toggle-btn[data-placeid="${CSS.escape(String(placeId))}"]`);
-  if (!btn) return;
-  
-  // Clear any pending feedback for this city (Fix #12: prevent timing conflict)
-  if (_feedbackTimeouts[placeId]) {
-    clearTimeout(_feedbackTimeouts[placeId]);
-    delete _feedbackTimeouts[placeId];
-  }
-  
-  const style = FEEDBACK_STYLES[type];
-  if (!style) return;
-  
-  // Set inline styles to override CSS class defaults
-  btn.style.background = style.bg;
-  btn.style.borderColor = style.border;
-  btn.style.color = style.text;
-  btn.title = style.title;
-  
-  _feedbackTimeouts[placeId] = setTimeout(() => {
-    // Remove inline styles to restore CSS class-based defaults
-    btn.style.background = '';
-    btn.style.borderColor = '';
-    btn.style.color = '';
-    btn.title = 'Toggle NWS enhancement'; // Fix #13: Restore default title instead of removing it
-    delete _feedbackTimeouts[placeId];
-  }, 1500);
 }
 
 // ===== BACKGROUND REFRESH =====
@@ -414,21 +232,12 @@ function startBackgroundRefresh() {
     // Only refresh if we have weather data
     if (weatherData.length === 0) return;
     
-    // Invalidate caches for all cities (conditional by source type to avoid unnecessary ops)
+    // Invalidate OM caches for all cities (NWS is always fetched where available)
     for (const city of weatherData) {
-      if (city.source === 'nws') {
-        // NWS-only cities — only invalidate NWS cache
-        const nwsCityCk = nwsCacheKey(city.latitude, city.longitude);
-        DataCache.invalidate(nwsCityCk);
-      } else {
-        // OM cities — invalidate OM caches and any NWS cache that might exist (for cross-source)
-        const weatherCk = weatherCacheKey(city.latitude, city.longitude);
-        const aqiCk = aqiCacheKey(city.latitude, city.longitude);
-        const nwsCityCk = nwsCacheKey(city.latitude, city.longitude);
-        DataCache.invalidate(weatherCk);
-        DataCache.invalidate(aqiCk);
-        DataCache.invalidate(nwsCityCk);
-      }
+      const weatherCk = weatherCacheKey(city.latitude, city.longitude);
+      const aqiCk = aqiCacheKey(city.latitude, city.longitude);
+      DataCache.invalidate(weatherCk);
+      DataCache.invalidate(aqiCk);
     }
     
     // Re-fetch data silently

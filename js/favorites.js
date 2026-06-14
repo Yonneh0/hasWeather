@@ -1,6 +1,4 @@
 // ===== FAVORITES DROPDOWN =====
-// Note: This file depends on _nwsActive and saveNwsActiveState() from cache.js.
-// These are only accessed after DOMContentLoaded events fire, so by that time cache.js has loaded.
 
 let _allNearbyCities = []; // 20 nearest cities for dropdown (with place_id)
 
@@ -384,46 +382,23 @@ async function addFavoriteCard(city) {
   if (!weatherResult?.[0]?.weather) return;
   let data = weatherResult[0];
 
-   // Restore NWS toggle state for this city (cross-session persistence).
-   // Only restore if cached NWS data exists and is fresh (Fix #4: Validate cache before restoring).
-   if (_nwsActive[data.place_id] === true) {
-     const ck = nwsCacheKey(data.latitude, data.longitude);
-     const cachedNws = DataCache.get(ck, 'nwsCityData');
-     if (cachedNws && cachedNws.weather && cachedNws.weather.current) {
-       // Merge cached NWS data into the city object so toggle actually shows NWS data (Fix #9)
-       const nwsCurrent = cachedNws.weather.current || {};
-       const nwsHourly = cachedNws.weather.hourly || {};
-       // Preserve OM precipitation since NWS hourly doesn't have it
-       const omHourly = data.weather?.hourly || {};
-       data.source = 'nws';
-       data.nwsActive = true;
-       data.weather = {
-         current: { ...data.weather?.current, ...nwsCurrent },
-         hourly: {
-           time: nwsHourly.time || omHourly.time || [],
-           temperature: nwsHourly.temperature ?? omHourly.temperature_2m ?? [],
-           weather_code: nwsHourly.weather_code ?? omHourly.weather_code ?? [],
-           precipitation: omHourly.precipitation ?? omHourly.precipitation_mm ?? [],
-           wind_speed_10m: nwsHourly.wind_speed_10m ?? omHourly.wind_speed_10m ?? [],
-           wind_direction_10m: nwsHourly.wind_direction_10m ?? omHourly.wind_direction_10m ?? [],
-           relative_humidity_2m: nwsHourly.relative_humidity_2m ?? omHourly.relative_humidity_2m ?? [],
-         },
-       };
-       if (cachedNws.aqi) data.aqi = cachedNws.aqi;
-       saveNwsActiveState();
-     } else {
-       // Clear stale toggle preference — no valid NWS data available
-       delete _nwsActive[data.place_id];
-       saveNwsActiveState();
-     }
-   }
-   // Set nwsBounds so toggle button shows immediately (even if not restoring)
-   // Await the bounds check to ensure nwsBounds is a boolean, not a Promise
+   // Check NWS bounds for this city and fetch NWS data where available
    if (data.latitude != null && data.longitude != null) {
      data.nwsBounds = await isNwsBoundsAvailable(data.latitude, data.longitude);
    }
 
-  const grid = document.getElementById('city-grid');
+   // Fetch NWS data if bounds are available
+   if (data.nwsBounds) {
+     const nwsData = await fetchForCity(data.latitude, data.longitude).catch(() => null);
+     if (nwsData && nwsData.current) {
+       const nwsAppData = nwsToAppData(data, nwsData);
+       if (nwsAppData) {
+         data.nwsData = nwsAppData;
+       }
+     }
+   }
+
+   const grid = document.getElementById('city-grid');
   if (!grid) return;
 
   const card = document.createElement('div');
