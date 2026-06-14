@@ -192,6 +192,7 @@ async function loadRadarCard(lat, lon) {
         <div class="radar-header-section">
           <select class="radar-layer-select" id="radar-layer-select" title="Radar layer">${layerOptions}</select>
           <span class="radar-timestamp" id="radar-timestamp">--:--</span>
+          <button class="radar-btn radar-btn-pins radar-tooltip" id="radar-pins-btn" data-tooltip="Toggle location pins" title="Pins">📌</button>
           <button class="radar-btn radar-tooltip" id="radar-load-all-btn" data-tooltip="Load all cached frames">Load All</button>
           <button class="radar-btn radar-fullscreen-btn radar-tooltip" id="radar-fullscreen-btn" data-tooltip="Toggle fullscreen">⛶</button>
         </div>
@@ -316,6 +317,34 @@ function bindRadarPlayerEvents() {
     fullscreenBtn.addEventListener('click', () => {
       if (window.RADAR_PLAYER) window.RADAR_PLAYER.toggleFullscreen();
     });
+  }
+
+  // Pin toggle button
+  const pinsBtn = document.getElementById('radar-pins-btn');
+  if (pinsBtn) {
+    pinsBtn.addEventListener('click', () => {
+      if (window.RADAR_PLAYER) window.RADAR_PLAYER.togglePins();
+    });
+  }
+
+  // Update pins when weather data changes
+  const updatePinsObserver = new MutationObserver(() => {
+    if (weatherData.length > 0 && userLocation && window.RADAR_PLAYER) {
+      window.RADAR_PLAYER.updatePins(weatherData, userLocation);
+    }
+  });
+  
+  // Observe city-grid for changes to trigger pin updates
+  const cityGrid = document.getElementById('city-grid');
+  if (cityGrid) {
+    updatePinsObserver.observe(cityGrid, { childList: true, subtree: true });
+  }
+  
+  // Also update pins after weather data loads
+  if (weatherData.length > 0 && userLocation && window.RADAR_PLAYER) {
+    setTimeout(() => {
+      window.RADAR_PLAYER.updatePins(weatherData, userLocation);
+    }, 500);
   }
 }
 

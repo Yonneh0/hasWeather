@@ -563,6 +563,33 @@ function invalidateRadarCache(lat, lon) {
   } catch { /* ignore */ }
 }
 
+// ===== COORDINATE CONVERSION FOR PINS =====
+// Convert lat/lon to pixel position within the radar image (512x512 canvas)
+function latLonToPixel(lat, lon, latCenter, lonCenter, radiusKm) {
+  const bbox = latLonToBboxEPSG3857(latCenter, lonCenter, radiusKm);
+  const [minx, miny, maxx, maxy] = bbox;
+  
+  const x = lonToX(lon);
+  const y = latToY(lat);
+  
+  // Convert to pixel position (inverted Y for canvas)
+  const pixelX = ((x - minx) / (maxx - minx)) * RADAR_IMAGE_SIZE;
+  const pixelY = RADAR_IMAGE_SIZE - ((y - miny) / (maxy - miny)) * RADAR_IMAGE_SIZE;
+  
+  return { x: pixelX, y: pixelY };
+}
+
+// Check if a lat/lon point is within the radar image bounds
+function latLonInBounds(lat, lon, latCenter, lonCenter, radiusKm) {
+  const bbox = latLonToBboxEPSG3857(latCenter, lonCenter, radiusKm);
+  const [minx, miny, maxx, maxy] = bbox;
+  
+  const x = lonToX(lon);
+  const y = latToY(lat);
+  
+  return x >= minx && x <= maxx && y >= miny && y <= maxy;
+}
+
 // ===== RADAR CACHE CLEAR =====
 // Clear all radar cache entries (used during manual refresh or storage cleanup)
 async function clearRadarCache() {
@@ -665,6 +692,9 @@ async function areFramesCachedInRange(lat, lon, layer, startIdx, endIdx) {
 // Make all radar functions and constants available globally for non-module scripts
 window.RADAR_DEFAULT_LAYER = RADAR_DEFAULT_LAYER;
 window.RADAR_LAYERS = RADAR_LAYERS;
+window.RADAR_BBOX_RADIUS_KM = RADAR_BBOX_RADIUS_KM;
+window.latLonToPixel = latLonToPixel;
+window.latLonInBounds = latLonInBounds;
 window.fetchRadarImageForLocation = fetchRadarImageForLocation;
 window.fetchRadarImageForTimestamp = fetchRadarImageForTimestamp;
 window.getCachedRadarFrameAsDataURL = getCachedRadarFrameAsDataURL;
