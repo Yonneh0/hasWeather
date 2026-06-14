@@ -1,5 +1,128 @@
 /* ===== CARD-COMPONENTS - Card-related display components ===== */
 
+/* ===== LOCAL SENSOR BAR ===== */
+.sensor-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.5rem 1.5rem;
+  background: rgba(255,255,255,0.04);
+  backdrop-filter: blur(16px) saturate(188%);
+  border-top: 1px solid rgba(255,255,255,0.07);
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+}
+
+/* Info line (note + timestamp + source) - centered */
+.sensor-bar > :first-child {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  padding: 0 0.5rem;
+  width: 100%;
+}
+
+.sensor-info-note,
+.sensor-info-timestamp,
+.sensor-info-source {
+  justify-content: center;
+  align-items: center;
+  font-size: 0.6rem;
+  color: rgba(255,255,255,0.35);
+  white-space: nowrap;
+  display: flex;
+}
+
+.sensor-expiry-warning {
+  font-size: 0.75rem;
+  color: rgba(255,80,80,0.8);
+  text-align: center;
+  padding: 0.3rem 0;
+}
+
+/* Sensor items - centered flex row */
+.sensor-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.5rem;
+}
+
+/* Individual sensor item - compact size */
+.sensor-item {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: 6px;
+  background: rgba(0,0,0,0.18);
+  flex-shrink: 0;
+  transition: opacity 0.3s ease;
+}
+
+.sensor-item.hidden {
+  opacity: 0;
+  pointer-events: none;
+  height: 0;
+  padding: 0;
+  margin: 0;
+  overflow: hidden;
+}
+
+/* Location item - wider to accommodate combined coords */
+.sensor-location {
+  flex-basis: auto;
+}
+
+.sensor-icon {
+  font-size: 0.7rem;
+  line-height: 1;
+}
+
+.sensor-label {
+  font-size: 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(255,255,255,0.35);
+  white-space: nowrap;
+}
+
+.sensor-value {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: rgba(255,255,255,0.85);
+  white-space: nowrap;
+}
+
+.sensor-value.hot {
+  color: #ff8c42;
+}
+
+.sensor-value.cool {
+  color: #6cb4ee;
+}
+
+.sensor-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Sensor bar responsive */
+@media (max-width: 900px) {
+  .sensor-bar {
+    gap: 0.5rem;
+    padding: 0.4rem 1rem;
+  }
+}
+
+/* ===== CARD-COMPONENTS - Card-related display components ===== */
+
 /* ===== CITY CARD ===== */
 .city-card {
   position: relative;

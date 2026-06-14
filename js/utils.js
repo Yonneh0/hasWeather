@@ -142,29 +142,41 @@ let _bgRefreshTimer = null;
 // Get the shortest remaining TTL across all cities' weather + AQI caches
 function getCityShortestTTL(city) {
   let shortest = Infinity;
-  const weatherKey = weatherCacheKey(city.latitude, city.longitude);
-  const aqiKey = aqiCacheKey(city.latitude, city.longitude);
-  
-  // Check weather cache
+  const lat = city.latitude;
+  const lon = city.longitude;
+
+  // Check consolidated cache key (weatherAqi) first — this is the new format
+  const consolidatedKey = weatherAqiCacheKey(lat, lon);
+  const consolidatedEntry = localStorage.getItem(`hasw_cache_${consolidatedKey}`);
+  if (consolidatedEntry) {
+    const entry = JSON.parse(consolidatedEntry);
+    const ttl = DataCache.TTL[entry.type] || DataCache.TTL.weather;
+    const remaining = ttl - (Date.now() - entry.timestamp);
+    if (remaining < shortest) shortest = remaining;
+  }
+
+  // Check legacy weather cache key (backward compatibility)
+  const weatherKey = weatherCacheKey(lat, lon);
   const weatherEntry = localStorage.getItem(`hasw_cache_${weatherKey}`);
-  if (weatherEntry) {
+  if (weatherEntry && !consolidatedEntry) {
     const entry = JSON.parse(weatherEntry);
     const ttl = DataCache.TTL[entry.type] || DataCache.TTL.weather;
     const remaining = ttl - (Date.now() - entry.timestamp);
     if (remaining < shortest) shortest = remaining;
   }
-  
-  // Check AQI cache
+
+  // Check legacy AQI cache key (backward compatibility)
+  const aqiKey = aqiCacheKey(lat, lon);
   const airEntry = localStorage.getItem(`hasw_cache_${aqiKey}`);
-  if (airEntry) {
+  if (airEntry && !consolidatedEntry) {
     const entry = JSON.parse(airEntry);
     const ttl = DataCache.TTL[entry.type] || DataCache.TTL.airQuality;
     const remaining = ttl - (Date.now() - entry.timestamp);
     if (remaining < shortest) shortest = remaining;
   }
-  
+
   // Check NWS cache — only nwsPoint entries matter (they have the longest TTL among NWS types)
-  const nwsPointKey = nwsPointCacheKey(city.latitude, city.longitude);
+  const nwsPointKey = nwsPointCacheKey(lat, lon);
   const nwsEntry = localStorage.getItem(`hasw_cache_${nwsPointKey}`);
   if (nwsEntry) {
     const entry = JSON.parse(nwsEntry);
@@ -172,7 +184,7 @@ function getCityShortestTTL(city) {
     const remaining = ttl - (Date.now() - entry.timestamp);
     if (remaining < shortest) shortest = remaining;
   }
-  
+
   // Default to 15 minutes if no cache — NWS rate limits at 1 req/sec, so use a conservative default
   return shortest === Infinity ? 15 * 60 * 1000 : shortest;
 }
@@ -202,6 +214,9 @@ function startBackgroundRefresh() {
     
     // Invalidate OM caches for all cities (NWS is always fetched where available)
     for (const city of weatherData) {
+      const consolidatedKey = weatherAqiCacheKey(city.latitude, city.longitude);
+      DataCache.invalidate(consolidatedKey);
+      // Also invalidate legacy keys for backward compatibility
       const weatherCk = weatherCacheKey(city.latitude, city.longitude);
       const aqiCk = aqiCacheKey(city.latitude, city.longitude);
       DataCache.invalidate(weatherCk);
@@ -222,6 +237,8 @@ function toggleUnit() {
     const btn = document.getElementById('unit-toggle');
     if (btn) btn.textContent = `°${unit}`;
     renderAll();
+    // Notify other modules that the unit changed
+    window.dispatchEvent(new CustomEvent('unitChanged', { detail: { unit } }));
   }, TOGGLE_DEBOUNCE_MS);
 }
 

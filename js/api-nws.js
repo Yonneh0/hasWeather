@@ -734,7 +734,9 @@ function nwsToAppData(city, nwsData) {
   };
 
   // Cross-source missing fields from OM cache (pressure, visibility, UV Index)
-  const omWeather = DataCache.get(weatherCacheKey(city.latitude, city.longitude), 'weather');
+  // Try consolidated cache key first, then fall back to legacy weather key
+  const omWeather = DataCache.get(weatherAqiCacheKey(city.latitude, city.longitude), 'weatherAqi')?.weather 
+    || DataCache.get(weatherCacheKey(city.latitude, city.longitude), 'weather');
   if (omWeather && omWeather.current) {
     // Merge missing pressure from OM
     if (!nwsHasPressure && omWeather.current.surface_pressure != null) {

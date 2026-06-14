@@ -1,0 +1,112 @@
+// weather-local.js - Local sensor data override file
+// =========================================
+// Edit values below to inject local sensor readings into the weather display.
+// Set any value to null to hide that sensor from the UI.
+//
+// The sensor bar appears directly below the header row, styled like city cards.
+// Only sensors with non-null values are displayed.
+//
+// === CONFIGURATION ===
+
+// Refresh interval in seconds (0 = disabled, no auto-refresh)
+var LOCAL_CONFIG_REFRESH_INTERVAL_SECONDS = 30;
+
+// Data expiry - ISO 8601 timestamp. When the current time exceeds this value,
+// the entire sensor bar is hidden (stale data). Set to null to disable expiry.
+var LOCAL_SENSOR_TTL = null;
+
+// =========================================
+// === INFO / META ===
+
+// Displayed as a note across the top of the sensor bar
+var LOCAL_SENSOR_NOTE = 'Local weather station - Charlotte area';
+
+// Data source label (e.g., "Weather Station", "Arduino", "Raspberry Pi")
+var LOCAL_SENSOR_DATA_SOURCE = 'Davis Vantage Pro2';
+
+// Timestamp when the data was recorded (ISO 8601)
+var LOCAL_SENSOR_TIMESTAMP = '2026-06-14T09:30:00.000Z';
+
+// =========================================
+// === TEMPERATURE SENSOR ===
+
+// Current temperature - Fahrenheit takes precedence if both set
+var LOCAL_SENSOR_TEMPERATURE_FAHRENHEIT = 72.5;
+
+// Current temperature - Celsius (ignored if FAHRENHEIT is also set)
+var LOCAL_SENSOR_TEMPERATURE_CELSIUS = null;
+
+// "Feels like" temperature in Celsius
+var LOCAL_SENSOR_FEELSLIKE_CELSIUS = null;
+
+// "Feels like" temperature in Fahrenheit (overrides CELSIUS if both set)
+var LOCAL_SENSOR_FEELSLIKE_FAHRENHEIT = null;
+
+// Dew point in Celsius
+var LOCAL_SENSOR_DEWPOINT_CELSIUS = null;
+
+// =========================================
+// === WIND SENSORS ===
+
+// Wind speed in km/h - mph takes precedence if both set
+var LOCAL_SENSOR_WIND_SPEED_KMH = null;
+
+// Wind speed in mph
+var LOCAL_SENSOR_WIND_SPEED_MPH = 11.2;
+
+// Wind gust speed in mph (shown below wind reading when present)
+var LOCAL_SENSOR_WIND_GUST_MPH = 18.4;
+
+// Wind gust speed in km/h (shown below wind reading when present)
+var LOCAL_SENSOR_WIND_GUST_KMH = null;
+
+// Wind direction in degrees (0=N, 90=E, 180=S, 270=W)
+var LOCAL_SENSOR_WIND_DIRECTION_DEGREES = 245;
+
+// =========================================
+// === HUMIDITY SENSOR ===
+
+// Relative humidity as percentage (0-100)
+var LOCAL_SENSOR_HUMIDITY_PERCENT = 67;
+
+// =========================================
+// === PRESSURE SENSOR ===
+
+// Atmospheric pressure in hPa/mbar - INHG takes precedence if both set
+var LOCAL_SENSOR_PRESSURE_HPA = null;
+
+// Atmospheric pressure in inches of mercury
+var LOCAL_SENSOR_PRESSURE_INHG = 29.92;
+
+// =========================================
+// === GPS / LOCATION SENSORS ===
+
+// Current latitude (-90 to 90)
+var LOCAL_SENSOR_LATITUDE = 35.2271;
+
+// Current longitude (-180 to 180)
+var LOCAL_SENSOR_LONGITUDE = -80.8431;
+
+// =========================================
+// === ADDITIONAL SENSORS (optional) ===
+
+// UV Index (0+)
+var LOCAL_SENSOR_UV_INDEX = 4.2;
+
+// Visibility distance in km - MI takes precedence if both set
+var LOCAL_SENSOR_VISIBILITY_KM = null;
+
+// Visibility distance in miles
+var LOCAL_SENSOR_VISIBILITY_MI = 10.0;
+
+// Rainfall amount in mm - INCHES takes precedence if both set
+var LOCAL_SENSOR_RAINFALL_MM = null;
+
+// Rainfall amount in inches
+var LOCAL_SENSOR_RAINFALL_INCHES = 0.15;
+
+// Solar radiation in W/m² (useful for solar panel monitoring)
+var LOCAL_SENSOR_SOLARRADIATION = 420;
+
+// Soil moisture percentage (0-100, useful for garden/agriculture sensors)
+var LOCAL_SENSOR_SOIL_MOISTURE_PERCENT = 62;
