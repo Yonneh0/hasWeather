@@ -30,35 +30,33 @@ var LOCAL_SENSOR_TIMESTAMP = '2026-06-14T09:30:00.000Z';
 // =========================================
 // === TEMPERATURE SENSOR ===
 
-// Current temperature - Fahrenheit takes precedence if both set
-var LOCAL_SENSOR_TEMPERATURE_FAHRENHEIT = 72.5;
+// Current temperature - accepts a plain number (°F by default) or a string with unit:
+//   "72.5" → 72.5°F
+//   "22.5C" → 22.5°C
+var LOCAL_SENSOR_TEMPERATURE = 72.5;
 
-// Current temperature - Celsius (ignored if FAHRENHEIT is also set)
-var LOCAL_SENSOR_TEMPERATURE_CELSIUS = null;
+// "Feels like" temperature - accepts a plain number (°F by default) or a string with unit:
+//   "68" → 68°F
+//   "20C" → 20°C
+var LOCAL_SENSOR_FEELSLIKE = null;
 
-// "Feels like" temperature in Celsius
-var LOCAL_SENSOR_FEELSLIKE_CELSIUS = null;
-
-// "Feels like" temperature in Fahrenheit (overrides CELSIUS if both set)
-var LOCAL_SENSOR_FEELSLIKE_FAHRENHEIT = null;
-
-// Dew point in Celsius
-var LOCAL_SENSOR_DEWPOINT_CELSIUS = null;
+// Dew point - accepts a plain number (°F by default) or a string with unit:
+//   "55" → 55°F
+//   "13C" → 13°C
+var LOCAL_SENSOR_DEWPOINT = null;
 
 // =========================================
 // === WIND SENSORS ===
 
-// Wind speed in km/h - mph takes precedence if both set
-var LOCAL_SENSOR_WIND_SPEED_KMH = null;
+// Wind speed - accepts a plain number (mph by default) or a string with unit:
+//   "12" → 12 mph
+//   "19km/h", "19kph", "19k" → 19 km/h
+var LOCAL_SENSOR_WIND_SPEED = "11.2mph";
 
-// Wind speed in mph
-var LOCAL_SENSOR_WIND_SPEED_MPH = 11.2;
-
-// Wind gust speed in mph (shown below wind reading when present)
-var LOCAL_SENSOR_WIND_GUST_MPH = 18.4;
-
-// Wind gust speed in km/h (shown below wind reading when present)
-var LOCAL_SENSOR_WIND_GUST_KMH = null;
+// Wind gust - accepts a plain number (mph by default) or a string with unit:
+//   "18" → 18 mph
+//   "29km/h", "29kph", "29k" → 29 km/h
+var LOCAL_SENSOR_WIND_GUST = "18.4mph";
 
 // Wind direction in degrees (0=N, 90=E, 180=S, 270=W)
 var LOCAL_SENSOR_WIND_DIRECTION_DEGREES = 245;
@@ -72,11 +70,10 @@ var LOCAL_SENSOR_HUMIDITY_PERCENT = 67;
 // =========================================
 // === PRESSURE SENSOR ===
 
-// Atmospheric pressure in hPa/mbar - INHG takes precedence if both set
-var LOCAL_SENSOR_PRESSURE_HPA = null;
-
-// Atmospheric pressure in inches of mercury
-var LOCAL_SENSOR_PRESSURE_INHG = 29.92;
+// Atmospheric pressure - accepts a plain number (inHg by default) or a string with unit:
+//   "30.02" → 30.02 inHg
+//   "1017hPa", "1017hpa" → 1017 hPa
+var LOCAL_SENSOR_PRESSURE = 29.92;
 
 // =========================================
 // === GPS / LOCATION SENSORS ===
@@ -93,17 +90,15 @@ var LOCAL_SENSOR_LONGITUDE = -80.8431;
 // UV Index (0+)
 var LOCAL_SENSOR_UV_INDEX = 4.2;
 
-// Visibility distance in km - MI takes precedence if both set
-var LOCAL_SENSOR_VISIBILITY_KM = null;
+// Visibility - accepts a plain number (mi by default) or a string with unit:
+//   "10" → 10 mi
+//   "16km" → 16 km
+var LOCAL_SENSOR_VISIBILITY = "10mi";
 
-// Visibility distance in miles
-var LOCAL_SENSOR_VISIBILITY_MI = 10.0;
-
-// Rainfall amount in mm - INCHES takes precedence if both set
-var LOCAL_SENSOR_RAINFALL_MM = null;
-
-// Rainfall amount in inches
-var LOCAL_SENSOR_RAINFALL_INCHES = 0.15;
+// Rainfall - accepts a plain number (inches by default) or a string with unit:
+//   "0.15" → 0.15 in
+//   "4mm" → 4 mm
+var LOCAL_SENSOR_RAINFALL = "0.15in";
 
 // Solar radiation in W/m² (useful for solar panel monitoring)
 var LOCAL_SENSOR_SOLARRADIATION = 420;

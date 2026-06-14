@@ -135,6 +135,8 @@
   transition: transform 0.3s, box-shadow 0.3s, opacity 0.4s ease;
   animation: fadeInUp 0.6s ease forwards;
   opacity: 0;
+  margin-right: 2rem;
+  margin-top: 1rem;
 }
 .city-card:hover {
   transform: translateY(-4px);
