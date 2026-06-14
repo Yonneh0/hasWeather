@@ -213,12 +213,12 @@ body {
 .city-card {
   position: relative;
   background: rgba(255,255,255,0.04);
-  backdrop-filter: blur(16px) saturate(180%);
+  backdrop-filter: blur(16px) saturate(188%);
   border: 1px solid rgba(255,255,255,0.07);
   border-radius: 8px;
   padding: 0.5rem;
   overflow: visible;
-  transition: transform 0.3s, box-shadow 0.3s;
+  transition: transform 0.3s, box-shadow 0.3s, opacity 0.4s ease;
   animation: fadeInUp 0.6s ease forwards;
   opacity: 0;
 }
@@ -786,6 +786,68 @@ body {
 .nws-ghost-hour-icon svg {
   width: 36px;
   height: 36px;
+}
+
+/* ===== PLACEHOLDER CARD (before data loads) ===== */
+.city-card.placeholder {
+  background: rgba(255,255,255,0.02);
+  border-color: rgba(255,255,255,0.04);
+}
+
+.city-card.placeholder::before {
+  display: none;
+}
+
+/* Placeholder city name with pulsing animation */
+.placeholder-name {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: rgba(255,255,255,0.5);
+  animation: placeholderPulse 2s ease-in-out infinite;
+}
+
+@keyframes placeholderPulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 0.8; }
+}
+
+/* Placeholder state text */
+.placeholder-state {
+  font-size: 0.6rem;
+  color: rgba(255,255,255,0.25);
+  letter-spacing: 0.02em;
+  margin-top: 0.1rem;
+}
+
+/* Placeholder distance text */
+.placeholder-distance {
+  font-size: 0.6rem;
+  color: rgba(255,255,255,0.2);
+  margin-top: 0.1rem;
+}
+
+/* Placeholder card content layout */
+.placeholder-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 80px;
+  gap: 0.2rem;
+}
+
+/* Loading state for cards that have some data but not all */
+.city-card.loading-om {
+  opacity: 0.6;
+}
+
+.city-card.loading-nws {
+  opacity: 0.7;
+}
+
+/* Transition animation when OM data arrives - fade in weather content */
+.city-card.transitioning-to-full {
+  transition: opacity 0.3s ease, background 1s ease;
 }
 /* ===== INTERACTIVE - Interactive elements and visual effects ===== */
 
@@ -3461,6 +3523,65 @@ function deduplicateCities(cities) {
   return deduped;
 }
 
+// ===== PER-CITY WEATHER FETCH (for incremental updates) =====
+async function fetchWeatherForCity(city) {
+  // Check cache first for this single city
+  const weatherCk = weatherCacheKey(city.latitude, city.longitude);
+  const aqiCk = aqiCacheKey(city.latitude, city.longitude);
+  
+  const cachedWeather = DataCache.get(weatherCk, 'weather');
+  const cachedAqi = DataCache.get(aqiCk, 'airQuality');
+  
+  // Cross-source: also check NWS keys for OM lookup
+  const crossSource = crossSourceGetWeather(city.latitude, city.longitude);
+  if (cachedWeather) {
+    return { ...city, source: 'open-meteo', weather: cachedWeather, aqi: cachedAqi || {} };
+  }
+  if (crossSource && crossSource.data.weather) {
+    const crossAqi = crossSourceGetAQI(city.latitude, city.longitude);
+    return { ...city, source: crossSource.source, weather: crossSource.data.weather, aqi: crossAqi?.data || {} };
+  }
+  
+  // Fetch weather for single city
+  try {
+    const weatherUrl = `${WEATHER_API}?latitude=${city.latitude}&longitude=${city.longitude}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m,surface_pressure,uv_index,visibility&hourly=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m&forecast_days=2&temperature_unit=celsius&wind_speed_unit=kmh&precipitation_unit=mm&timezone=auto`;
+    
+    const weatherRes = await retryWithBackoff(() => fetch(weatherUrl));
+    if (!weatherRes.ok) {
+      return { ...city, source: 'open-meteo', weather: null, aqi: {} };
+    }
+    
+    const weatherAll = await weatherRes.json();
+    
+    // Parse single-city weather response (flat object, no results array)
+    const cityWeather = {
+      current: weatherAll.current || {},
+      hourly: weatherAll.hourly || { time: [] },
+    };
+    
+    // Fetch AQI for single city
+    const aqiUrl = `${AIR_QUALITY_API}?latitude=${city.latitude}&longitude=${city.longitude}&current=us_aqi,pm2_5,european_aqi&timezone=auto`;
+    const aqiRes = await retryWithBackoff(() => fetch(aqiUrl));
+    const aqiData = await aqiRes.json();
+    
+    // Parse single-city AQI response (flat object, no results array)
+    const cityAqi = {
+      us_aqi: aqiData.current?.us_aqi ?? aqiData.us_aqi ?? null,
+      pm2_5: aqiData.current?.pm2_5 ?? aqiData.pm2_5 ?? null,
+      european_aqi: aqiData.current?.european_aqi ?? aqiData.european_aqi ?? null,
+    };
+    
+    // Cache results
+    DataCache.set(weatherCk, cityWeather, 'weather');
+    DataCache.set(aqiCk, cityAqi, 'airQuality');
+    
+    return { ...city, source: 'open-meteo', weather: cityWeather, aqi: cityAqi };
+  } catch (err) {
+    console.error(`[fetchWeatherForCity] Failed for ${city.name}:`, err);
+    return { ...city, source: 'open-meteo', weather: null, aqi: {} };
+  }
+}
+
 // ===== FETCH WEATHER FOR CITIES =====
 async function fetchWeatherForCities(cities) {
   // Check cache for each city individually — use cross-source lookup
@@ -4644,6 +4765,7 @@ const RADAR_DEFAULT_LAYER = 'conus_bref_qcd'; // MRMS Base Reflectivity (quality
 const RADAR_IMAGE_SIZE = 512;                  // Image dimension in pixels
 const RADAR_BBOX_RADIUS_KM = 200;              // Area around user location to capture (km)
 const RADAR_TTL = 5 * 60 * 1000;               // 5 minutes (radar updates every ~2 min)
+const RADAR_META_TTL = 30 * 60 * 1000;         // 30 minutes (metadata doesn't change often)
 
 // Available radar layers
 const RADAR_LAYERS = {
@@ -4718,6 +4840,78 @@ function radarLocationPrefix(lat, lon, layer) {
 // Cache the latest radar timestamp to avoid repeated GetCapabilities calls
 let _latestTimestampCache = null; // { timestamp: string, expiresAt: number }
 
+// ===== ALL RADAR TIMESTAMPS CACHE =====
+// Cache all available timestamps from GetCapabilities to populate the timeline
+let _allTimestampsCache = null; // { timestamps: string[], layer: string, expiresAt: number }
+
+// Parse all available timestamps from WMS GetCapabilities response
+function parseRadarTimestamps(capabilitiesText) {
+  const timestamps = [];
+  
+  // Parse all <Extent> elements with name="time" to find time values
+  const extentRegex = /<Extent[^>]+name="time"[^>]*>([^<]+)<\/Extent>/gi;
+  let match;
+  while ((match = extentRegex.exec(capabilitiesText)) !== null) {
+    // Timestamps can be comma-separated or space-separated
+    const timeValues = match[1].split(/[\s,]+/).map(t => t.trim()).filter(Boolean);
+    timestamps.push(...timeValues);
+  }
+  
+  // Also check for default attribute (most recent timestamp)
+  const defaultMatch = capabilitiesText.match(/<Extent[^>]+name="time"[^>]*default="([^"]+)"/i);
+  if (defaultMatch && defaultMatch[1] && !timestamps.includes(defaultMatch[1])) {
+    timestamps.push(defaultMatch[1]);
+  }
+  
+  // Validate and deduplicate timestamps
+  const validTimestamps = [];
+  for (const ts of timestamps) {
+    // Validate ISO8601 format
+    const date = new Date(ts);
+    if (!isNaN(date.getTime())) {
+      // Normalize to consistent ISO8601 format
+      validTimestamps.push(date.toISOString().replace(/\.\d+Z$/, 'Z'));
+    }
+  }
+  
+  // Deduplicate
+  return [...new Set(validTimestamps)].sort();
+}
+
+// Get ALL available timestamps for a layer (not just the latest)
+async function getRadarTimestampsForLayer(layer = RADAR_DEFAULT_LAYER) {
+  const cacheKey = `${layer}`;
+  
+  // Return cached timestamps if valid (30 min TTL — metadata rarely changes)
+  if (_allTimestampsCache && _allTimestampsCache.layer === layer && Date.now() < _allTimestampsCache.expiresAt) {
+    return [..._allTimestampsCache.timestamps];
+  }
+
+  try {
+    const url = `${RADAR_WMS_BASE}${layer}/wms?SERVICE=WMS&REQUEST=GetCapabilities&VERSION=1.1.1`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`WMS GetCapabilities failed: ${response.status}`);
+
+    const text = await response.text();
+    const timestamps = parseRadarTimestamps(text);
+    
+    if (timestamps.length > 0) {
+      _allTimestampsCache = {
+        timestamps,
+        layer,
+        expiresAt: Date.now() + 30 * 60 * 1000, // 30 min TTL
+      };
+      return timestamps;
+    }
+
+    throw new Error('Could not parse radar timestamps from GetCapabilities');
+  } catch (e) {
+    console.warn('[Radar] Failed to get radar timestamps:', e);
+    return [];
+  }
+}
+
+// Get the latest radar timestamp (convenience wrapper, uses same cache as getRadarTimestampsForLayer)
 async function getLatestRadarTimestamp() {
   // Return cached timestamp if valid (2 min TTL — matches radar update interval)
   if (_latestTimestampCache && Date.now() < _latestTimestampCache.expiresAt) {
@@ -4741,18 +4935,15 @@ async function getLatestRadarTimestamp() {
     }
 
     // If no default, parse the available times and use the last one
-    const timesMatch = text.match(/<Extent[^>]+name="time"[^>]*>([^<]+)<\/Extent>/i);
-    if (timesMatch) {
-      const times = timesMatch[1].split(',').map(t => t.trim()).filter(Boolean);
-      if (times.length > 0) {
-        // Sort and use the latest timestamp
-        times.sort();
-        _latestTimestampCache = {
-          timestamp: times[times.length - 1],
-          expiresAt: Date.now() + 2 * 60 * 1000,
-        };
-        return times[times.length - 1];
-      }
+    const times = parseRadarTimestamps(text);
+    if (times.length > 0) {
+      // Sort and use the latest timestamp
+      times.sort();
+      _latestTimestampCache = {
+        timestamp: times[times.length - 1],
+        expiresAt: Date.now() + 2 * 60 * 1000,
+      };
+      return times[times.length - 1];
     }
 
     throw new Error('Could not parse radar timestamps from GetCapabilities');
@@ -4770,8 +4961,8 @@ function getRadarMeta(lat, lon, layer) {
     const raw = localStorage.getItem(key);
     if (!raw) return null;
     const meta = JSON.parse(raw);
-    // Check if metadata is stale (older than TTL)
-    if (Date.now() - meta.lastUpdated > RADAR_TTL) {
+    // Check if metadata is stale (older than TTL — use longer TTL for metadata)
+    if (Date.now() - meta.lastUpdated > RADAR_META_TTL) {
       localStorage.removeItem(key);
       return null;
     }
@@ -5243,6 +5434,7 @@ window.clearRadarCache = clearRadarCache;
 window.invalidateRadarCache = invalidateRadarCache;
 window.getRadarMeta = getRadarMeta;
 window.getRadarCacheSize = getRadarCacheSize;
+window.getRadarTimestampsForLayer = getRadarTimestampsForLayer;
 
 </script>
 <script>
@@ -5362,6 +5554,32 @@ window.getRadarCacheSize = getRadarCacheSize;
     }
   }
 
+  function showErrorOverlay(text) {
+    const loadingOverlay = document.getElementById('radar-loading-overlay');
+    if (!loadingOverlay) return;
+    loadingOverlay.classList.remove('hidden');
+    const spinner = loadingOverlay.querySelector('.radar-spinner');
+    if (spinner) spinner.style.display = 'none';
+    const loadingText = document.getElementById('radar-loading-text');
+    if (loadingText) {
+      loadingText.textContent = text || 'Error loading radar';
+      loadingText.style.color = '#ff4444';
+    }
+  }
+
+  function hideErrorOverlay() {
+    const loadingOverlay = document.getElementById('radar-loading-overlay');
+    if (!loadingOverlay) return;
+    loadingOverlay.classList.add('hidden');
+    const spinner = loadingOverlay.querySelector('.radar-spinner');
+    if (spinner) spinner.style.display = '';
+    const loadingText = document.getElementById('radar-loading-text');
+    if (loadingText) {
+      loadingText.textContent = 'Loading radar...';
+      loadingText.style.color = '';
+    }
+  }
+
   // ===== CANVAS EVENTS =====
   function setupCanvasEvents() {
     if (!canvas) return;
@@ -5396,19 +5614,29 @@ window.getRadarCacheSize = getRadarCacheSize;
       }
     });
 
-    // Scroll to zoom
+    // Scroll to zoom (zoom-to-point)
     canvas.addEventListener('wheel', (e) => {
       e.preventDefault();
       const delta = e.deltaY > 0 ? -1 : 1;
       const newZoom = Math.max(0, Math.min(ZOOM_LEVELS.length - 1, state.zoomLevel + delta));
       if (newZoom !== state.zoomLevel) {
-        zoomTo(newZoom);
+        zoomTo(newZoom, e.clientX, e.clientY);
       }
     }, { passive: false });
 
-    // Double-click to reset view
-    canvas.addEventListener('dblclick', () => {
-      resetView();
+    // Double-click to reset view (zoom-to-point for reset)
+    canvas.addEventListener('dblclick', (e) => {
+      if (isImageLoaded()) {
+        // Reset zoom first, then pan at the click point
+        const newZoom = 0;
+        zoomTo(newZoom, e.clientX, e.clientY);
+        state.panX = 0;
+        state.panY = 0;
+        updateZoomUI();
+        renderCanvas();
+      } else {
+        resetView();
+      }
     });
 
     // Resize observer
@@ -5464,20 +5692,38 @@ window.getRadarCacheSize = getRadarCacheSize;
     if (progressBar) progressBar.style.width = '0%';
     if (progressText) progressText.textContent = 'Loading radar...';
 
-    // First, get the latest timestamp from WMS to initialize the timeline
-    const latestTimestamp = await getLatestRadarTimestamp();
-    if (latestTimestamp) {
-      state.allTimestamps = [latestTimestamp];
+    // Try to load cached timestamps from metadata first
+    let meta = getRadarMeta(state.lat, state.lon, state.layer);
+    
+    // If no metadata cache, fetch all timestamps from WMS GetCapabilities
+    if (!meta || !meta.timestamps || meta.timestamps.length === 0) {
+      const allTimestamps = await getRadarTimestampsForLayer(state.layer);
+      if (allTimestamps && allTimestamps.length > 0) {
+        // Save to metadata cache for future use
+        meta = { timestamps: allTimestamps, layer: state.layer, lat: state.lat, lon: state.lon, lastUpdated: Date.now() };
+        setRadarMeta(state.lat, state.lon, state.layer, null);
+      }
     }
 
-    // Try to load cached timestamps from metadata
-    const meta = getRadarMeta(state.lat, state.lon, state.layer);
+    // Set timestamps from metadata (or WMS if no cache)
     if (meta && meta.timestamps && meta.timestamps.length > 0) {
       state.allTimestamps = [...meta.timestamps].sort();
+    } else {
+      // No timestamps available — show error
+      const loadingText = document.getElementById('radar-loading-text');
+      if (loadingText) loadingText.textContent = 'No radar data available';
+      showErrorOverlay('No radar data available for this location');
+      return;
     }
 
-    // Fetch the latest frame first
-    await loadCurrentFrame();
+    // Fetch the latest frame first (last in sorted timestamps)
+    const loadResult = await loadCurrentFrame();
+    
+    // Check if the frame loaded successfully
+    if (!loadResult && state.allTimestamps.length > 0) {
+      showErrorOverlay('Failed to load radar image');
+      return;
+    }
 
     // Hide loading overlay after initial frame loads
     hideLoadingOverlay();
@@ -5655,12 +5901,38 @@ window.getRadarCacheSize = getRadarCacheSize;
   }
 
   // ===== ZOOM =====
-  function zoomTo(zoomLevel) {
+  function zoomTo(zoomLevel, centerX, centerY) {
     if (zoomLevel < 0 || zoomLevel >= ZOOM_LEVELS.length) return;
     const oldZoom = state.zoomLevel;
     state.zoomLevel = zoomLevel;
     const newZoom = ZOOM_LEVELS[zoomLevel];
     const oldZoomFactor = ZOOM_LEVELS[oldZoom] || 1;
+
+    // Zoom-to-point: adjust pan so the point under the mouse stays in place
+    if (centerX != null && centerY != null && isImageLoaded()) {
+      const rect = canvas.getBoundingClientRect();
+      const mouseX = centerX - rect.left;
+      const mouseY = centerY - rect.top;
+      
+      // Calculate the offset of the zoom point from the center before zoom
+      const imgW = 512 * (canvasWidth / 512) * oldZoomFactor;
+      const imgH = 512 * (canvasHeight / 512) * oldZoomFactor;
+      const centerXOffset = (canvas.width - imgW) / 2 + state.panX;
+      const centerYOffset = (canvas.height - imgH) / 2 + state.panY;
+      
+      const pointOffsetX = mouseX - centerXOffset;
+      const pointOffsetY = mouseY - centerYOffset;
+      
+      // Calculate new image size after zoom
+      const newImgW = 512 * (canvasWidth / 512) * newZoom;
+      const newImgH = 512 * (canvasHeight / 512) * newZoom;
+      const newCenterXOffset = (canvas.width - newImgW) / 2 + state.panX;
+      const newCenterYOffset = (canvas.height - newImgH) / 2 + state.panY;
+      
+      // Adjust pan to keep the point in place
+      state.panX += pointOffsetX * (newZoom / oldZoomFactor - 1);
+      state.panY += pointOffsetY * (newZoom / oldZoomFactor - 1);
+    }
 
     // Update canvas size based on zoom
     const container = document.getElementById('radar-canvas-container');
@@ -5826,43 +6098,52 @@ window.getRadarCacheSize = getRadarCacheSize;
   // ===== TIMELINE =====
   function updateTimelineUI() {
     const timelineContainer = document.getElementById('radar-timeline');
-    const loadingOverlay = document.getElementById('radar-loading-overlay');
     if (!timelineContainer || !state.allTimestamps.length) return;
 
-    // Clear existing dots
-    while (timelineContainer.firstChild) {
-      timelineContainer.removeChild(timelineContainer.firstChild);
-    }
-
-    // Create dots for each timestamp
-    state.allTimestamps.forEach((timestamp, idx) => {
-      const dot = document.createElement('div');
-      dot.className = 'radar-timeline-dot';
-      if (idx === state.currentFrameIndex) {
-        dot.classList.add('active');
+    // Only rebuild dots if we don't have any yet (e.g., first load or layer change)
+    const existingDots = timelineContainer.querySelectorAll('.radar-timeline-dot');
+    if (existingDots.length !== state.allTimestamps.length) {
+      // Need to create dots
+      while (timelineContainer.firstChild) {
+        timelineContainer.removeChild(timelineContainer.firstChild);
       }
 
-      // Check if frame is cached
-      const isCached = getCachedRadarFrameAsDataURL(state.lat, state.lon, state.layer, timestamp) !== null;
-      if (!isCached) {
-        dot.classList.add('uncached');
-      }
+      // Create dots for each timestamp
+      state.allTimestamps.forEach((timestamp, idx) => {
+        const dot = document.createElement('div');
+        dot.className = 'radar-timeline-dot';
+        if (idx === state.currentFrameIndex) {
+          dot.classList.add('active');
+        }
 
-      // Format time for tooltip
-      const date = new Date(timestamp);
-      const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      dot.title = `${timeStr}`;
-      dot.dataset.timestamp = timestamp;
-      dot.dataset.index = idx;
+        // Check if frame is cached
+        const isCached = getCachedRadarFrameAsDataURL(state.lat, state.lon, state.layer, timestamp) !== null;
+        if (!isCached) {
+          dot.classList.add('uncached');
+        }
 
-      // Click to seek
-      dot.addEventListener('click', () => {
-        if (state.isPlaying) stopPlayback();
-        loadFrameByIndex(parseInt(dot.dataset.index));
+        // Format time for tooltip
+        const date = new Date(timestamp);
+        const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        dot.title = `${timeStr}`;
+        dot.dataset.timestamp = timestamp;
+        dot.dataset.index = idx;
+
+        // Click to seek
+        dot.addEventListener('click', () => {
+          if (state.isPlaying) stopPlayback();
+          loadFrameByIndex(parseInt(dot.dataset.index));
+        });
+
+        timelineContainer.appendChild(dot);
       });
-
-      timelineContainer.appendChild(dot);
-    });
+    } else {
+      // Just update active/cached classes on existing dots (efficient!)
+      const dots = timelineContainer.querySelectorAll('.radar-timeline-dot');
+      dots.forEach((dot, idx) => {
+        dot.classList.toggle('active', idx === state.currentFrameIndex);
+      });
+    }
 
     // Update time range display
     const timeRange = document.getElementById('radar-time-range');
@@ -5921,6 +6202,9 @@ window.getRadarCacheSize = getRadarCacheSize;
       let pct = (e.clientX - rect.left) / rect.width;
       pct = Math.max(0, Math.min(1, pct));
 
+      // Guard against empty timestamps array
+      if (!state.allTimestamps.length) return;
+
       // Calculate which frame index to seek to
       const targetIdx = Math.round(pct * (state.allTimestamps.length - 1));
 
@@ -5952,8 +6236,20 @@ window.getRadarCacheSize = getRadarCacheSize;
   function updateTimestampDisplay(timestamp) {
     const timestampEl = document.getElementById('radar-timestamp');
     const loadingOverlay = document.getElementById('radar-loading-overlay');
-    if (!timestampEl || !timestamp) return;
+    if (!timestampEl) return;
+    
+    // Guard against null/invalid timestamps
+    if (!timestamp) {
+      timestampEl.textContent = '--:--';
+      return;
+    }
+    
     const date = new Date(timestamp);
+    if (isNaN(date.getTime())) {
+      timestampEl.textContent = '--:--';
+      return;
+    }
+    
     timestampEl.textContent = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     
     // Hide loading overlay when timestamp is set
@@ -6035,21 +6331,27 @@ window.getRadarCacheSize = getRadarCacheSize;
     state.frames = null;
     loadedImage = null;
 
-    // Get timestamps for new layer from WMS (not just metadata)
-    const newTimestamp = await getLatestRadarTimestamp();
-    if (newTimestamp) {
-      state.allTimestamps = [newTimestamp];
-    }
-    const meta = getRadarMeta(state.lat, state.lon, state.layer);
-    if (meta && meta.timestamps && meta.timestamps.length > 0) {
-      state.allTimestamps = [...meta.timestamps].sort();
+    // Get timestamps for new layer from WMS (not just metadata) — use all timestamps, not just latest
+    const allTimestamps = await getRadarTimestampsForLayer(layer);
+    if (allTimestamps && allTimestamps.length > 0) {
+      state.allTimestamps = [...allTimestamps].sort();
+    } else {
+      // Fallback: try metadata cache, then latest timestamp
+      const meta = getRadarMeta(state.lat, state.lon, state.layer);
+      if (meta && meta.timestamps && meta.timestamps.length > 0) {
+        state.allTimestamps = [...meta.timestamps].sort();
+      } else {
+        const latestTimestamp = await getLatestRadarTimestamp();
+        if (latestTimestamp) {
+          state.allTimestamps = [latestTimestamp];
+        }
+      }
     }
 
-    // Update UI
+    // Update UI - set layer select value WITHOUT triggering another change event
     const layerSelect = document.getElementById('radar-layer-select');
     if (layerSelect) {
-      const option = layerSelect.querySelector(`option[value="${layer}"]`);
-      if (option) option.selected = true;
+      layerSelect.value = layer;
     }
 
     updateZoomUI();
@@ -6057,7 +6359,14 @@ window.getRadarCacheSize = getRadarCacheSize;
     // Show loading overlay for layer switch
     state.isLoading = true;
     showLoadingOverlay('Switching layer...');
-    await loadCurrentFrame();
+    
+    const loadResult = await loadCurrentFrame();
+    if (!loadResult && state.allTimestamps.length > 0) {
+      showErrorOverlay('Failed to load radar image');
+      hideErrorOverlay();
+      return;
+    }
+    
     hideLoadingOverlay();
     state.isLoading = false;
     state.isLoaded = true;
@@ -6159,6 +6468,236 @@ window.getRadarCacheSize = getRadarCacheSize;
 </script>
 <script>
 // ===== RENDER =====
+
+// ===== PLACEHOLDER CARD RENDERING =====
+// Renders minimal city cards immediately after location is known, before any weather data arrives.
+
+function renderPlaceholderCards(cities) {
+  const grid = document.getElementById('city-grid');
+  if (!grid) return;
+
+  grid.innerHTML = '';
+
+  cities.forEach((city, i) => {
+    const card = document.createElement('div');
+    card.className = 'city-card placeholder';
+    card.dataset.cityName = city.name;
+    card.dataset.placeid = city.place_id || '';
+    card.dataset.citydist = city.distance != null ? city.distance : '';
+    card.dataset.citylat = city.latitude != null ? city.latitude : '';
+    card.dataset.citylon = city.longitude != null ? city.longitude : '';
+    card.style.animationDelay = `${i * 120}ms`;
+    
+    const suffix = city.latitude != null && city.longitude != null 
+      ? `${city.latitude}_${city.longitude}` 
+      : undefined;
+    card.innerHTML = renderPlaceholderCard(city, suffix);
+    grid.appendChild(card);
+  });
+}
+
+function renderPlaceholderCard(city, suffix) {
+  const safeName = city.place_id || suffix;
+  return `
+    <div class="placeholder-content">
+      <span class="placeholder-name">${escapeHTML(city.name)}</span>
+      <span class="placeholder-state">${escapeHTML(city.state)}</span>
+      ${city.distance != null ? `<span class="placeholder-distance">${Math.round(city.distance)} mi</span>` : ''}
+    </div>`;
+}
+
+// ===== INCREMENTAL OM DATA UPDATE =====
+// Updates placeholder cards with Open-Meteo weather data as it arrives.
+
+function updateCardsWithOMData(omWeatherData) {
+  // For each city in omWeatherData, find the matching card and update it
+  for (const cityData of omWeatherData) {
+    const card = findCardByCoords(cityData.latitude, cityData.longitude);
+    if (!card) continue;
+
+    // Remove placeholder class and add loading class for transition
+    card.classList.remove('placeholder');
+    card.classList.add('loading-om');
+    
+    // Build the full card HTML with OM data
+    const suffix = cityData.place_id || `${cityData.latitude || 0}_${cityData.longitude || 0}`;
+    const html = renderCityCard(cityData, suffix);
+    
+    // Fade out placeholder, then swap content
+    card.style.opacity = '0';
+    setTimeout(() => {
+      card.innerHTML = html;
+      card.classList.remove('loading-om');
+      
+      // Apply gradient background based on weather
+      const w = cityData.weather;
+      if (w && w.current) {
+        const code = w.current.weather_code || 0;
+        const bg = WMO_GRADIENTS[code] || WMO_GRADIENTS[0];
+        card.style.background = `linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.04)), ${bg}`;
+      }
+      
+      // Fade in
+      card.style.opacity = '1';
+      
+      // Draw chart for this card now that canvas exists (don't wait for global drawAllCharts)
+      const safeName = cityData.place_id || `${cityData.latitude || 0}_${cityData.longitude || 0}`;
+      setTimeout(() => {
+        drawMergedChart(`chart-merged-${safeName}`, cityData.weather, cityData.highTemp, cityData.lowTemp);
+        drawCombinedChart(`chart-combined-${safeName}`, cityData.weather);
+      }, 50);
+    }, 300);
+  }
+}
+
+// ===== INCREMENTAL NWS DATA UPDATE =====
+// Updates OM cards with NWS ghost overlay data as it arrives.
+// Re-renders the full card HTML (OM + ghost) for affected cities.
+
+function updateCardsWithNWSData(nwsCityData) {
+  for (const cityData of nwsCityData) {
+    const card = findCardByCoords(cityData.latitude, cityData.longitude);
+    if (!card || !cityData.nwsData || !cityData.weather) continue;
+
+    // Add loading-nws class for transition
+    card.classList.add('loading-nws');
+    
+    // Build the full card HTML with OM + ghost data
+    const suffix = cityData.place_id || `${cityData.latitude || 0}_${cityData.longitude || 0}`;
+    const html = renderCityCard(cityData, suffix);
+    
+    // Fade out, swap content, fade in
+    card.style.opacity = '0';
+    setTimeout(() => {
+      card.innerHTML = html;
+      card.classList.remove('loading-nws');
+      
+      // Apply gradient background based on weather
+      const w = cityData.weather;
+      if (w && w.current) {
+        const code = w.current.weather_code || 0;
+        const bg = WMO_GRADIENTS[code] || WMO_GRADIENTS[0];
+        card.style.background = `linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.04)), ${bg}`;
+      }
+      
+      // Fade in
+      card.style.opacity = '1';
+      
+      // Draw OM chart on the new canvas (card innerHTML was replaced, destroying old canvas)
+      const safeName = cityData.place_id || `${cityData.latitude || 0}_${cityData.longitude || 0}`;
+      setTimeout(() => {
+        drawMergedChart(`chart-merged-${safeName}`, cityData.weather, cityData.highTemp, cityData.lowTemp);
+        drawCombinedChart(`chart-combined-${safeName}`, cityData.weather);
+        // Draw ghost chart for this card now that canvas exists
+        drawGhostMergedChart(`chart-ghost-merged-${safeName}`, cityData.nwsData.weather, cityData.highTemp, cityData.lowTemp);
+      }, 50);
+    }, 200);
+  }
+}
+
+// ===== CARD LOOKUP BY COORDINATES =====
+// More reliable than matching by name (which can contain quotes/special chars)
+
+function findCardByCoords(lat, lon) {
+  const cards = document.querySelectorAll('.city-card');
+  for (const card of cards) {
+    const cardLat = parseFloat(card.dataset.citylat);
+    const cardLon = parseFloat(card.dataset.citylon);
+    if (!isNaN(cardLat) && !isNaN(cardLon) && Math.abs(lat - cardLat) < 0.01 && Math.abs(lon - cardLon) < 0.01) {
+      return card;
+    }
+  }
+  return null;
+}
+
+function buildNWSGhostOverlay(cityData, safeName) {
+  const hasNwsData = !!cityData.nwsData;
+  if (!hasNwsData) return '';
+  
+  const current = cityData.nwsData.weather?.current || {};
+  const hourly = cityData.nwsData.weather?.hourly || {};
+  const now = new Date();
+  const currentHour = now.getHours();
+
+  // Ghost temperature
+  const ghostTemp = current?.temperature_2m != null ? convertTemp(current.temperature_2m) :
+                    current?.temperature != null ? convertTemp(current.temperature) : '—';
+  
+  // Ghost weather icon
+  const ghostWeatherCode = current?.weather_code ?? current?.weatherCode ?? 0;
+  const isNwsDay = isDaytime(currentHour, parseDecimalTime(current?.sunrise || '', 6), parseDecimalTime(current?.sunset || '', 19));
+  const ghostIcon = isNwsDay ? getWeatherIcon(ghostWeatherCode) : getMoonIcon(ghostWeatherCode);
+
+  // Ghost details grid values
+  const ghostHumidity = current?.relative_humidity_2m ?? current?.relativeHumidity ?? '—';
+  const ghostWindSpeed = current?.wind_speed_10m != null ? `${Math.round(current.wind_speed_10m)} km/h` :
+                        current?.windSpeed != null ? `${Math.round(current.windSpeed)} km/h` : '';
+  const ghostWindDir = current?.wind_direction_10m ?? current?.windDirection ?? 0;
+  let ghostPressure = '—';
+  if (current?.surface_pressure != null) {
+    ghostPressure = current.surface_pressure;
+  } else if (current?.pressure != null) {
+    ghostPressure = current.pressure;
+  }
+  const ghostUv = '—';
+  let ghostVis = '—';
+  if (current?.visibility != null) {
+    ghostVis = current.visibilityUnit === 'mi' ? current.visibility.toFixed(1) : (current.visibility / 1609.34).toFixed(1);
+  }
+
+  // Ghost hourly forecast
+  const nwsTimeArr = hourly?.time || [];
+  let ghostHourlySlotsHTML = '';
+  for (let i = 0; i < 24; i++) {
+    const hIdx = nwsTimeArr.findIndex(t => {
+      const [datePart, timePart] = t.split('T');
+      return datePart === now.toISOString().split('T')[0] && timePart.startsWith(`T${String(currentHour + i).padStart(2, '0')}`);
+    });
+    if (hIdx < 0 || hIdx >= nwsTimeArr.length) break;
+    const hTime = nwsTimeArr[hIdx]?.split('T')[1]?.split('+')[0]?.slice(0, 5);
+    const hTemp = hourly?.temperature_2m?.[hIdx] != null ? convertTemp(hourly.temperature_2m[hIdx]) :
+                  hourly?.temperature?.[hIdx] != null ? convertTemp(hourly.temperature[hIdx]) : '—';
+    const hCode = hourly?.weather_code?.[hIdx] ?? hourly?.weatherCode?.[hIdx] ?? 0;
+    const isGhostCurrent = i === 0;
+    const hHourDecimal = parseDecimalTime(hTime, 12);
+    const hIsDay = isDaytime(hHourDecimal, parseDecimalTime(current?.sunrise || '', 6), parseDecimalTime(current?.sunset || '', 19));
+    const hWind = hourly?.wind_speed_10m?.[hIdx] != null ? `${Math.round(hourly.wind_speed_10m[hIdx])} km/h` :
+                  hourly?.windSpeed?.[hIdx] != null ? `${Math.round(hourly.windSpeed[hIdx])} km/h` : '';
+    const hPrecip = hourly?.precipitation?.[hIdx] != null && hourly.precipitation[hIdx] > 0.1 
+      ? `${Math.round(hourly.precipitation[hIdx])}mm` : '';
+    ghostHourlySlotsHTML += `<div class="nws-ghost-hour-slot${isGhostCurrent ? ' current' : ''}">
+      <div class="nws-ghost-hour-icon">${isGhostCurrent ? ghostIcon : (hIsDay ? getWeatherIcon(hCode) : getMoonIcon(hCode))}</div>
+      <div class="nws-ghost-hour-temp">${Math.round(hTemp)}°</div>
+      ${hWind ? `<div class="nws-ghost-hour-wind">${hWind}</div>` : ''}
+      ${hPrecip ? `<div class="nws-ghost-hour-precip">${hPrecip}</div>` : ''}
+    </div>`;
+  }
+
+  // Ghost merged canvas
+  const ghostMergedCanvas = `<canvas class="chart-canvas chart-merged nws-ghost-chart" id="chart-ghost-merged-${safeName}" style="position:absolute;top:0;left:0;right:0;bottom:0;z-index:-1;pointer-events:none;"></canvas>`;
+
+  return {
+    headerHTML: `
+      <div class="nws-ghost nws-ghost-temp">${Math.round(ghostTemp)}°</div>
+      <div class="nws-ghost nws-ghost-icon">${ghostIcon}</div>`,
+    detailsHTML: `
+      <div class="nws-ghost nws-ghost-details">
+        <div class="nws-ghost-detail-cell"><span class="nws-ghost-detail-label">Humidity</span><span class="nws-ghost-detail-value">${ghostHumidity}%</span></div>
+        <div class="nws-ghost-detail-cell"><span class="nws-ghost-detail-label">Wind</span><span class="nws-ghost-detail-value">${ghostWindDir !== 0 ? getWindCompass(ghostWindDir) + ' ' + ghostWindSpeed : '—'}</span></div>
+        <div class="nws-ghost-detail-cell"><span class="nws-ghost-detail-label">Pressure</span><span class="nws-ghost-detail-value">${ghostPressure} hPa</span></div>
+        <div class="nws-ghost-detail-cell"><span class="nws-ghost-detail-label">UV Index</span><span class="nws-ghost-detail-value">${ghostUv}</span></div>
+        <div class="nws-ghost-detail-cell"><span class="nws-ghost-detail-label">Visibility</span><span class="nws-ghost-detail-value">${ghostVis} mi</span></div>
+      </div>`,
+    hourlyHTML: `
+      <div class="nws-ghost nws-ghost-hourly">
+        ${ghostHourlySlotsHTML}
+      </div>`,
+    ghostCanvas: ghostMergedCanvas,
+  };
+}
+
+// ===== FULL RENDER =====
+// Renders all city cards with complete data. Used for refresh/background updates.
 
 // Parse time string as decimal hours so minutes are accounted for (e.g., "18:45" → 18.75)
 function parseDecimalTime(timeStr, fallback) {
@@ -10014,28 +10553,49 @@ async function run() {
     return;
   }
 
-    // Always use OM as base for all cities
-    weatherData = await fetchWeatherForCities(allCities);
+  // ===== PHASE 1: Render placeholder cards immediately + start radar loading =====
+  renderPlaceholderCards(allCities);
+  
+  // Start radar card loading as soon as location is known (don't wait for weather data)
+  if (userLocation) {
+    loadRadarCard(userLocation.lat, userLocation.lon);
+  }
 
-    // Check NWS bounds for each city and fetch NWS data where available — sequential to respect rate limits
-    const nwsCities = [];
-    for (const city of weatherData) {
-      if (city.latitude != null && city.longitude != null) {
-        // Quick bounds filter first (no API call for obvious non-NWS cities)
-        if (city.latitude >= 17 && city.latitude <= 71 && city.longitude >= -170 && city.longitude <= -65) {
-          city.nwsBounds = await isNwsBoundsAvailable(city.latitude, city.longitude);
-        } else {
-          city.nwsBounds = false;
-        }
-      } else {
-        city.nwsBounds = false;
-      }
-
-      // Queue cities that have NWS bounds for data fetching
-      if (city.nwsBounds) {
-        nwsCities.push(city);
-      }
+  // ===== PHASE 2: Fetch OM weather data for each city in parallel and update cards incrementally =====
+  const omResults = await Promise.allSettled(
+    allCities.map(city => fetchWeatherForCity(city).catch(() => null))
+  );
+  
+  weatherData = [];
+  for (let i = 0; i < allCities.length; i++) {
+    if (omResults[i].status === 'fulfilled' && omResults[i].value) {
+      weatherData.push(omResults[i].value);
+      
+      // Update this card immediately as OM data arrives (also draws charts)
+      updateCardsWithOMData([omResults[i].value]);
     }
+  }
+
+  // ===== PHASE 3: Check NWS bounds and fetch NWS data where available — in parallel =====
+  if (weatherData.length > 0) {
+    // Check all bounds in parallel (only for cities within US lat/lon range)
+    const boundsPromises = weatherData.map(async (city) => {
+      if (city.latitude != null && city.longitude != null &&
+          city.latitude >= 17 && city.latitude <= 71 &&
+          city.longitude >= -170 && city.longitude <= -65) {
+        const inBounds = await isNwsBoundsAvailable(city.latitude, city.longitude);
+        return { city, nwsBounds: inBounds };
+      }
+      return { city, nwsBounds: false };
+    });
+    
+    const boundsResults = await Promise.all(boundsPromises);
+    for (const { city, nwsBounds } of boundsResults) {
+      city.nwsBounds = nwsBounds;
+    }
+    
+    // Queue cities that have NWS bounds for data fetching
+    const nwsCities = weatherData.filter(c => c.nwsBounds);
 
     // Fetch NWS data for all queued cities in parallel
     if (nwsCities.length > 0) {
@@ -10043,7 +10603,7 @@ async function run() {
         nwsCities.map(city => fetchForCity(city.latitude, city.longitude).catch(() => null))
       );
 
-      // Store NWS data on each city object as separate from OM data
+      // Store NWS data on each city object as separate from OM data, updating cards incrementally
       for (let i = 0; i < nwsCities.length; i++) {
         const city = nwsCities[i];
         const result = nwsResults[i];
@@ -10052,17 +10612,15 @@ async function run() {
           const nwsAppData = nwsToAppData(city, result.value);
           if (nwsAppData) {
             city.nwsData = nwsAppData;
+            
+            // Update this card immediately as NWS data arrives (also draws charts)
+            updateCardsWithNWSData([city]);
           }
         }
       }
     }
+  }
 
-   renderAll();
-   
-   // After cities are rendered, load the radar card and fetch radar image
-   if (userLocation) {
-     loadRadarCard(userLocation.lat, userLocation.lon);
-   }
  }
 
 // ===== RADAR PLAYER =====
