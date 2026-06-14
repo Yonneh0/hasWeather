@@ -196,6 +196,9 @@ async function loadRadarCard(lat, lon) {
           <button class="radar-btn radar-tooltip" id="radar-load-all-btn" data-tooltip="Load all cached frames">Load All</button>
           <button class="radar-btn radar-fullscreen-btn radar-tooltip" id="radar-fullscreen-btn" data-tooltip="Toggle fullscreen">⛶</button>
         </div>
+        
+        <!-- Coordinate readout section -->
+        <div id="radar-coord-readout-section" class="radar-header-section"></div>
       </div>
       
       <!-- Canvas Display -->

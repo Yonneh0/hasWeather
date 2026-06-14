@@ -688,6 +688,191 @@ async function areFramesCachedInRange(lat, lon, layer, startIdx, endIdx) {
   return true;
 }
 
+// ===== COORDINATE FORMAT OPTIONS =====
+const COORD_FORMATS = [
+  { value: 'mgrs', label: 'MGRS' },
+  { value: 'latlng', label: 'Lat/Lng' },
+  { value: 'utm', label: 'UTM' },
+  { value: 'dms', label: 'DMS' },
+  { value: 'geohash', label: 'Geohash' },
+];
+
+// ===== MGRS CONVERSION =====
+const MGRS_ZONE_ROWS = 'CDEFGHJKLMNPQRSTUVWX'; // excludes I and O
+const MGRS_100K_SQUARES = [
+  'ABCDEFGH', 'JKLMNPQR', 'STUVWXYZ', // 0-2 (even zone, even hemisphere)
+  'BCDEFGH', 'CDEFGH', 'DEFGH',       // shifted for odd zones
+];
+
+// MGRS 100km square lookup by zone and hemisphere
+const MGRS_100K_SQUARES_TABLE = [
+  ['ABCDEFGH', 'JKLMNPQR', 'STUVWXYZ'], // Zone even, Hemisphere N
+  ['BCDEFGH', 'CDEFGH', 'DEFGH'],       // Zone odd, Hemisphere N (shifted)
+  ['JKLMNOPQ', 'RSTUVWXY', 'ABCDEFGH'], // Zone even, Hemisphere S
+  ['KLMNPQR', 'MNOPQR', 'NOPQR'],       // Zone odd, Hemisphere S (shifted)
+];
+
+// MGRS column letter by 100km index
+const MGRS_COL_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'; // skips I
+
+function latLonToMGRS(lat, lon) {
+  const zone = getUTMZone(lat, lon);
+  const hemisphere = lat >= 0 ? 'N' : 'S';
+  
+  // Get UTM easting and northing
+  const utm = latLonToUTMLatLon(lat, lon);
+  const [easting, northing] = utm;
+  
+  // Determine 100km square
+  const zoneOdd = (zone % 2) !== 0;
+  const colIndex = Math.floor((easting % 5000000) / 100000);
+  const rowIndex = Math.floor(((hemisphere === 'N' ? northing : northing - 1000000) % 4000000) / 100000);
+  
+  // Get column letter (A-Z excluding I)
+  const colLetter = MGRS_COL_LETTERS[colIndex];
+  
+  // Get row letter (A-H, excluding I)
+  const rowLetters = 'ABCDEFGH';
+  const rowLetter = rowLetters[rowIndex % 8];
+  
+  // 100km square identifier
+  const hundredKmSquare = `${colLetter}${rowLetter}`;
+  
+  // Determine precision (5 digits = ~1m accuracy)
+  const precisionDigits = 5;
+  const precisionFactor = Math.pow(10, precisionDigits);
+  
+  const eastingStr = String(Math.round(((easting % 100000) / 100000) * precisionFactor)).padStart(precisionDigits, '0');
+  const northingStr = String(Math.round(((northing % 100000) / 100000) * precisionFactor)).padStart(precisionDigits, '0');
+  
+  return `${zone}${hemisphere} ${hundredKmSquare} ${eastingStr} ${northingStr}`;
+}
+
+function getUTMZone(lat, lon) {
+  // Zone number: (floor((lon + 180) / 6)) + 1
+  const zoneNum = Math.floor((lon + 180) / 6) + 1;
+  
+  // Special cases for Norway and Svalbard
+  if (lat >= 56 && lat < 64 && lon >= 3 && lon < 12) return 32;
+  if (lat >= 72 && lat < 84 && lon >= 0 && lon < 42) {
+    if (lon < 9) return 31;
+    if (lon < 21) return 32;
+    if (lon < 33) return 33;
+    return 35;
+  }
+  
+  return zoneNum;
+}
+
+// ===== UTM CONVERSION =====
+function latLonToUTMLatLon(lat, lon) {
+  const zone = getUTMZone(lat, lon);
+  const hemisphere = lat >= 0 ? 'N' : 'S';
+  
+  // UTM constants
+  const k0 = 0.9996; // scale factor
+  const a = 6378137; // semi-major axis (WGS84)
+  const e2 = 0.00669437999014; // eccentricity squared
+  
+  // Central meridian of zone
+  const lonOrigin = (zone - 1) * 6 - 180 + 3;
+  
+  // Convert to radians
+  const phi = lat * Math.PI / 180;
+  const lam = (lon - lonOrigin) * Math.PI / 180;
+  
+  // Radius of curvature
+  const N = a / Math.sqrt(1 - e2 * Math.sin(phi) * Math.sin(phi));
+  
+  // Northing and easting
+  const A = lam * Math.cos(phi);
+  
+  const M = a * (
+    (1 - e2/4 - 3*e2*e2/64 - 5*e2*e2*e2/256) * phi
+    - (3*e2/8 + 3*e2*e2/32 + 45*e2*e2*e2/1024) * Math.sin(2*phi)
+    + (15*e2*e2/256 + 45*e2*e2*e2/1024) * Math.sin(4*phi)
+    - (35*e2*e2*e2/3072) * Math.sin(6*phi)
+  );
+  
+  const T = Math.tan(phi) * Math.tan(phi);
+  const C = e2 / (1 - e2) * Math.cos(phi) * Math.cos(phi);
+  const R = a * (1 - e2) / Math.pow(1 - e2 * Math.sin(phi) * Math.sin(phi), 1.5);
+  
+  let easting = k0 * N * (A + (1 - T + C) * A*A*A/6 + (5 - 18*T + T*T + 72*C - 58*e2/(1-e2)) * A*A*A*A*A/120) + 500000;
+  
+  let northing;
+  if (hemisphere === 'N') {
+    northing = k0 * (M + N * Math.tan(phi) * (A*A/2 + (5 - T + 9*C + 4*C*C) * A*A*A*A/24 + (61 - 58*T + T*T + 600*C - 330*e2/(1-e2)) * A*A*A*A*A*A/720));
+  } else {
+    northing = k0 * (M + N * Math.tan(phi) * (A*A/2 + (5 - T + 9*C + 4*C*C) * A*A*A*A/24 + (61 - 58*T + T*T + 600*C - 330*e2/(1-e2)) * A*A*A*A*A*A/720)) + 10000000;
+  }
+  
+  return [easting, northing];
+}
+
+// ===== DMS CONVERSION =====
+function latLngToDMS(lat, lng) {
+  const latDMS = toDMSType(lat, 'lat');
+  const lngDMS = toDMSType(lng, 'lng');
+  return `${latDMS}, ${lngDMS}`;
+}
+
+function toDMSType(value, type) {
+  const direction = value < 0 ? (type === 'lat' ? 'S' : 'W') : (type === 'lat' ? 'N' : 'E');
+  const absValue = Math.abs(value);
+  
+  const degrees = Math.floor(absValue);
+  const minutesFloat = (absValue - degrees) * 60;
+  const minutes = Math.floor(minutesFloat);
+  const seconds = Math.round((minutesFloat - minutes) * 60);
+  
+  return `${degrees}°${String(minutes).padStart(2, '0')}'${String(seconds).padStart(2, '0')}\"${direction}`;
+}
+
+// ===== GEOHASH CONVERSION =====
+function latLngToGeohash(lat, lon, precision = 6) {
+  const base32 = '0123456789bcdefghjkmnpqrstuvwxyz';
+  let latRange = [-90, 90];
+  let lonRange = [-180, 180];
+  let isLon = true;
+  let charIndex = 0;
+  let bit = 0;
+  let geohash = '';
+  
+  while (geohash.length < precision) {
+    let mid;
+    
+    if (isLon) {
+      mid = (lonRange[0] + lonRange[1]) / 2;
+      if (lon > mid) {
+        charIndex |= (1 << (4 - bit));
+        lonRange[0] = mid;
+      } else {
+        lonRange[1] = mid;
+      }
+    } else {
+      mid = (latRange[0] + latRange[1]) / 2;
+      if (lat > mid) {
+        charIndex |= (1 << (4 - bit));
+        latRange[0] = mid;
+      } else {
+        latRange[1] = mid;
+      }
+    }
+    
+    isLon = !isLon;
+    bit++;
+    
+    if (bit === 5) {
+      geohash += base32[charIndex];
+      charIndex = 0;
+      bit = 0;
+    }
+  }
+  
+  return geohash;
+}
+
 // ===== GLOBAL EXPORTS =====
 // Make all radar functions and constants available globally for non-module scripts
 window.RADAR_DEFAULT_LAYER = RADAR_DEFAULT_LAYER;
@@ -709,3 +894,27 @@ window.invalidateRadarCache = invalidateRadarCache;
 window.getRadarMeta = getRadarMeta;
 window.getRadarCacheSize = getRadarCacheSize;
 window.getRadarTimestampsForLayer = getRadarTimestampsForLayer;
+// Coordinate conversion exports
+window.COORD_FORMATS = COORD_FORMATS;
+window.latLonToMGRS = latLonToMGRS;
+window.latLonToUTMLatLon = latLonToUTMLatLon;
+window.latLngToDMS = latLngToDMS;
+window.latLngToGeohash = latLngToGeohash;
+
+// ===== COORDINATE FORMATTER =====
+function formatCoordinate(lat, lon, format) {
+  switch (format) {
+    case 'mgrs': return latLonToMGRS(lat, lon);
+    case 'latlng': return `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+    case 'utm': {
+      const utm = latLonToUTMLatLon(lat, lon);
+      const [easting, northing] = utm;
+      const zone = getUTMZone(lat, lon);
+      const hemisphere = lat >= 0 ? 'N' : 'S';
+      return `Zone ${zone}${hemisphere} ${easting.toFixed(1)}E ${northing.toFixed(1)}N`;
+    }
+    case 'dms': return latLngToDMS(lat, lon);
+    case 'geohash': return latLngToGeohash(lat, lon);
+    default: return latLonToMGRS(lat, lon);
+  }
+}

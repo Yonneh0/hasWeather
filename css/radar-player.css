@@ -425,6 +425,68 @@
   opacity: 1;
 }
 
+/* ===== COORDINATE READOUT OVERLAY ===== */
+.radar-coord-readout {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  background: rgba(13, 13, 26, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 0.6rem;
+  color: rgba(255, 255, 255, 0.7);
+  font-family: monospace;
+  z-index: 5;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.radar-coord-readout .coord-format-select {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.55rem;
+  padding: 1px 3px;
+  cursor: pointer;
+  height: 20px;
+  min-width: 48px;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.radar-coord-readout .coord-format-select:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.radar-coord-readout .zoom-level {
+  color: #4a9eff;
+  font-weight: bold;
+  font-size: 0.6rem;
+  min-width: 36px;
+  text-align: center;
+}
+
+/* Mouseover coordinate tooltip */
+.radar-mouse-coord-tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: rgba(13, 13, 26, 0.9);
+  border: 1px solid rgba(74, 158, 255, 0.3);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 0.6rem;
+  color: #4a9eff;
+  font-family: monospace;
+  z-index: 10;
+  white-space: nowrap;
+  display: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
 /* ===== ANIMATIONS ===== */
 @keyframes radar-spinner {
   to { transform: rotate(360deg); }
@@ -460,6 +522,43 @@
 .radar-timeline-container.playing .radar-timeline-progress {
   background: linear-gradient(90deg, #4a9eff, #7cc4f8);
   box-shadow: 0 0 8px rgba(74, 158, 255, 0.3);
+}
+
+/* ===== COORDINATE FORMAT SELECT (header version) ===== */
+.coord-format-select {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(74, 158, 255, 0.3);
+  border-radius: 3px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.5rem;
+  padding: 1px 2px;
+  cursor: pointer;
+  height: 20px;
+  min-width: 36px;
+}
+
+.coord-format-select:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* ===== COORDINATE READOUT (header version) ===== */
+.radar-header-coord-readout {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.55rem;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.radar-header-coord-readout span {
+  font-family: monospace;
+  white-space: nowrap;
+}
+
+.radar-header-coord-readout .zoom-level {
+  color: #4a9eff;
+  font-weight: 600;
+  margin-left: 2px;
 }
 
 /* ===== RESPONSIVE ===== */

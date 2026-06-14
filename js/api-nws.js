@@ -4,6 +4,31 @@
 const NWS_API = 'https://api.weather.gov';
 const NWS_USER_AGENT = 'hasWeather/1.0 (https://github.com/Yonneh0/hasWeather)';
 
+// ===== NWS Fetch Configuration =====
+const NWS_FETCH_TIMEOUT_MS = 10000;
+const NWS_RATE_LIMIT_RETRIES = 3;
+const NWS_RATE_LIMIT_BACKOFF_BASE_MS = 2000;
+const NWS_RATE_LIMIT_BACKOFF_EXPONENT = 2;
+
+// ===== Duration Constants (milliseconds) =====
+const MS_PER_DAY = 86400000;
+const MS_PER_HOUR = 3600000;
+const MS_PER_MINUTE = 60000;
+
+// ===== Unit Conversion Constants =====
+const METERS_PER_MILE = 1609.34;
+const CELSIUS_TO_FAHRENHEIT_OFFSET = 32;
+const CELSIUS_TO_FAHRENHEIT_FACTOR = 9 / 5;
+const MPS_TO_KMH = 3.6;
+const MPH_TO_KMH = 1.60934;
+const INHG_TO_HPA = 33.8639;
+const MM_TO_INCHES = 25.4;
+const PA_TO_HPA_DIVISOR = 100;
+const METERS_TO_FEET = 3.28084;
+
+// ===== Snowfall Conversion Ratio (mm of precipitation → inches of snow) =====
+const SNOWFALL_CONVERSION_FACTOR = 10;
+
 // NWS forecast period descriptions mapped to WMO weather codes
 // Maps shortForecast keywords to WMO codes that drive existing SVG icons
 function nwsForecastToWmo(shortForecast) {
@@ -62,7 +87,7 @@ function nwsWeatherToWmo(weatherArray) {
   // Find the most severe weather event
   const priority = [
     'tornado', 'severe thunderstorm', 'severe thunderstorms', 'tstm',
-    'thunderstorm', 'thunder', 'hail', 'hail',
+    'thunderstorm', 'thunder', 'hail',
     'heavy rain', 'rain', 'heavy showers', 'showers',
     'freezing rain', 'freezing drizzle',
     'snow', 'heavy snow', 'snow showers',
@@ -112,7 +137,7 @@ async function nwsFetch(url, maxRetries = 3) {
   await _nwsRateLimiter.waitForSlot();
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 10000); // 10s timeout
+  const timeout = setTimeout(() => controller.abort(), NWS_FETCH_TIMEOUT_MS);
 
   try {
     const response = await fetch(url, {
@@ -123,7 +148,7 @@ async function nwsFetch(url, maxRetries = 3) {
     // Handle 429 rate limiting with exponential backoff
     if (response.status === 429) {
       if (maxRetries <= 0) throw new Error('NWS API rate limited (429)');
-      const waitMs = Math.pow(2, 3 - maxRetries) * 2000; // 16s, 8s, 4s
+      const waitMs = Math.pow(NWS_RATE_LIMIT_BACKOFF_EXPONENT, NWS_RATE_LIMIT_RETRIES - maxRetries) * NWS_RATE_LIMIT_BACKOFF_BASE_MS; // 16s, 8s, 4s
       console.log(`[NWS] Rate limited, waiting ${waitMs}ms before retry`);
       await new Promise(r => setTimeout(r, waitMs));
       return await nwsFetch(url, maxRetries - 1);
@@ -189,10 +214,8 @@ async function fetchForecast(wfo, x, y) {
     // NWS returns dewpoint in Celsius even with units=us
     dewpoint: p.dewpoint?.value != null ? convertObsTempToF(p.dewpoint.value, p.dewpoint.unitCode) : null,
     dewpointUnit: p.dewpoint?.unitCode == null ? 'F' : p.dewpoint.unitCode,
-    // windSpeed is a string like "10 mph" - parse to number
     windSpeed: parseWindSpeedString(p.windSpeed),
     windSpeedUnit: 'mph',
-    // windGust is a string like "20 mph" - parse to number
     windGust: parseWindSpeedString(p.windGust),
     windGustUnit: 'mph',
     windDirection: p.windDirection,
@@ -224,10 +247,8 @@ async function fetchHourlyForecast(wfo, x, y) {
     // NWS returns dewpoint in Celsius even with units=us
     dewpoint: p.dewpoint?.value != null ? convertObsTempToF(p.dewpoint.value, p.dewpoint.unitCode) : null,
     dewpointUnit: p.dewpoint?.unitCode == null ? 'F' : p.dewpoint.unitCode,
-    // windSpeed is a string like "10 mph" - parse to number
     windSpeed: parseWindSpeedString(p.windSpeed),
     windSpeedUnit: 'mph',
-    // windGust is a string like "20 mph" - parse to number
     windGust: parseWindSpeedString(p.windGust),
     windGustUnit: 'mph',
     windDirection: p.windDirection,
@@ -508,22 +529,22 @@ function isNwsUnitInInchesHg(unitCode) {
 // Convert Celsius to Fahrenheit
 function celsiusToFahrenheit(c) {
   if (c == null) return null;
-  return Math.round((c * 9 / 5) + 32);
+  return Math.round((c * CELSIUS_TO_FAHRENHEIT_FACTOR) + CELSIUS_TO_FAHRENHEIT_OFFSET);
 }
 
 // Convert meters to miles
 function metersToMiles(m) {
   if (m == null) return null;
-  return Math.round(m / 1609.34 * 10) / 10;
+  return Math.round(m / METERS_PER_MILE * 10) / 10;
 }
 
-// Convert m/s to km/h
+// Convert meters per second to km/h
 function mpsToKmh(ms) {
   if (ms == null) return null;
-  return Math.round(ms * 3.6);
+  return Math.round(ms * MPS_TO_KMH);
 }
 
-// Convert km/h to km/h (no conversion needed)
+// Return km/h value unchanged
 function kmhToKmh(kmh) {
   if (kmh == null) return null;
   return Math.round(kmh);
@@ -532,7 +553,7 @@ function kmhToKmh(kmh) {
 // Convert mph to km/h
 function mphToKmh(mph) {
   if (mph == null) return null;
-  return Math.round(mph * 1.60934);
+  return Math.round(mph * MPH_TO_KMH);
 }
 
 // Convert wind speed to km/h based on unit code
@@ -548,7 +569,7 @@ function convertWindSpeedToKmh(speed, unitCode) {
 // Convert inHg to hPa
 function inhgToHpa(inhg) {
   if (inhg == null) return null;
-  return Math.round(inhg * 33.8639);
+  return Math.round(inhg * INHG_TO_HPA);
 }
 
 // Convert hPa to hPa (no conversion needed)
@@ -569,26 +590,25 @@ function convertPressureToHpa(pressure, unitCode) {
 // Convert mm to inches
 function mmToInches(mm) {
   if (mm == null) return null;
-  return Math.round(mm / 25.4 * 100) / 100;
+  return Math.round(mm / MM_TO_INCHES * 100) / 100;
 }
 
-// Convert mm to inches (for snowfall)
+// Convert mm precipitation to inches of snowfall (~10:1 ratio)
 function mmToInchesSnow(mm) {
   if (mm == null) return null;
-  // Roughly: 1 inch of rain = ~10 inches of snow
-  return Math.round(mm / 25.4 * 10) / 10;
+  return Math.round(mm / MM_TO_INCHES * SNOWFALL_CONVERSION_FACTOR) / 10;
 }
 
-// Convert Pa to hPa
+// Convert pascals to hPa
 function paToHpa(pa) {
   if (pa == null) return null;
-  return Math.round(pa / 100);
+  return Math.round(pa / PA_TO_HPA_DIVISOR);
 }
 
 // Convert meters to feet
 function metersToFeet(m) {
   if (m == null) return null;
-  return Math.round(m * 3.28084);
+  return Math.round(m * METERS_TO_FEET);
 }
 
 // Parse a NWS validTime string like "2026-06-13T06:00:00+00:00/PT2H" into start/end timestamps
@@ -599,13 +619,14 @@ function parseNwsValidTime(vt) {
   const startStr = vt.substring(0, slashIdx);
   const durationStr = vt.substring(slashIdx + 1);
   const start = new Date(startStr).getTime();
+
   // Parse duration like PT2H, PT1H, P1DT6H etc.
   let durationMs = 0;
   const dMatch = durationStr.match(/P(?:(\d+)D)?(?:(\d+)H)?(?:(\d+)M)?/);
   if (dMatch) {
-    if (dMatch[1]) durationMs += parseInt(dMatch[1]) * 86400000;
-    if (dMatch[2]) durationMs += parseInt(dMatch[2]) * 3600000;
-    if (dMatch[3]) durationMs += parseInt(dMatch[3]) * 60000;
+    if (dMatch[1]) durationMs += parseInt(dMatch[1]) * MS_PER_DAY;
+    if (dMatch[2]) durationMs += parseInt(dMatch[2]) * MS_PER_HOUR;
+    if (dMatch[3]) durationMs += parseInt(dMatch[3]) * MS_PER_MINUTE;
   }
   return { start, end: start + durationMs };
 }
@@ -643,7 +664,9 @@ function convertObsTempToF(c, unitCode) {
 // Convert observation station wind speed to mph based on unit code
 function convertObsWindToMph(speed, unitCode) {
   if (speed == null) return null;
+  // km/h → mph: multiply by 0.621371
   if (unitCode === NWS_UNIT_KM_H) return Math.round(speed * 0.621371);
+  // m/s → mph: multiply by 2.23694
   if (unitCode === NWS_UNIT_MS) return Math.round(speed * 2.23694);
   // Default: assume mph
   return Math.round(speed);
@@ -669,12 +692,10 @@ function nwsToAppData(city, nwsData) {
   const needsVisConversion = current.visibilityUnit === NWS_UNIT_M;
   const needsPrecipConversion = current.quantitativePrecipitationUnit === NWS_UNIT_MM;
 
-  // Build current conditions object
-  // Temperature is already in Celsius (NWS gridpoint always returns Celsius)
-  // Store as Celsius so convertTemp() can convert to F or C based on user preference
+  // Build current conditions object (NWS always returns Celsius)
   const temp = current.temperature;
 
-  // Convert wind speed to km/h for the app
+  // Convert wind speed from m/s to km/h for the app
   const windSpeed = convertWindSpeedToKmh(current.windSpeed, current.windSpeedUnit);
 
   // Convert visibility from meters to miles for the app
@@ -689,11 +710,10 @@ function nwsToAppData(city, nwsData) {
   // Convert snowfall from mm to inches for the app
   const snow = mmToInchesSnow(current.snowfallAmount);
 
-  // Dewpoint is already in Celsius (NWS gridpoint always returns Celsius)
-  // Store as Celsius so convertTemp() can convert to F or C based on user preference
+  // Store dewpoint as Celsius — convertTemp() handles conversion to F or C
   const dewpoint = current.dewpoint;
 
-  // Convert wind gust from m/s to km/h for the app (same as wind speed conversion)
+  // Convert wind gust from m/s to km/h for the app
   const windGust = convertWindSpeedToKmh(current.windGust, current.windGustUnit);
 
   // Check if NWS fields are missing — we'll try to cross-source them from OM cache
@@ -703,7 +723,7 @@ function nwsToAppData(city, nwsData) {
 
   const currentApp = {
     temperature_2m: temp,
-    temperatureUnit: 'C', // Always store Celsius — convertTemp() converts from Celsius
+    temperatureUnit: 'C', // Always store Celsius — convertTemp() handles conversion to F or C
     relative_humidity_2m: current.relativeHumidity,
     wind_speed_10m: windSpeed,
     wind_direction_10m: current.windDirection,
@@ -753,16 +773,15 @@ function nwsToAppData(city, nwsData) {
     }
   }
 
-  // Build hourly forecast array (NWS hourly is already in order)
+  // Build hourly forecast array (NWS hourly is already sorted)
   const hourlyTimes = hourly.map(p => p.startTime);
-  // NWS hourly with units=us returns temperature in Fahrenheit — convert to Celsius
-  // convertTemp() always converts from Celsius, so we must store in Celsius
+  // NWS hourly with units=us returns Fahrenheit — convert to Celsius for storage
   const hourlyTemps = hourly.map(p => {
     const f = p.temperature;
-    return f != null ? (f - 32) * 5 / 9 : null;
+    return f != null ? (f - CELSIUS_TO_FAHRENHEIT_OFFSET) * CELSIUS_TO_FAHRENHEIT_FACTOR : null;
   });
   const hourlyHumidity = hourly.map(p => p.relativeHumidity);
-  // NWS hourly windSpeed is a string like "2 mph" - extract numeric value and convert mph → km/h
+  // Parse windSpeed strings ("2 mph", "10 mph") and convert mph → km/h
   const hourlyWind = hourly.map(p => {
     const mphVal = parseWindSpeedString(p.windSpeed);
     return mphVal != null ? mphToKmh(mphVal) : null;
