@@ -708,7 +708,7 @@ body {
 .combined-chart-row {
   position: relative;
   margin-bottom: 0.6rem;
-  margin-top: 2rem;
+  margin-top: 3rem;
 }
 .combined-chart-canvas {
   top: 12px;
@@ -5737,8 +5737,9 @@ window.getRadarTimestampsForLayer = getRadarTimestampsForLayer;
   const ZOOM_LEVELS = [1, 1.5, 2, 3];
   
   // Pin rendering constants
-  const PIN_SIZE_BASE = 12; // base pin radius in pixels
+  const PIN_SIZE_BASE = 16; // base pin radius in pixels (increased from 12 for better visibility)
   const PIN_SIZE_SCALE = 0.5; // scale factor for pin size at higher zoom levels
+  const MIN_PIN_SIZE = 8; // minimum pin radius in pixels to prevent pins from disappearing at low zoom
   const PIN_LABEL_MIN_ZOOM = 1.5; // minimum zoom to show labels
   const PIN_LABEL_MAX_ZOOM = 3; // maximum zoom before labels get too big
   // Expose speed options globally so main.js can use them
@@ -5832,6 +5833,9 @@ window.getRadarTimestampsForLayer = getRadarTimestampsForLayer;
     const rect = container.getBoundingClientRect();
     canvasWidth = Math.min(rect.width, 512);
     canvasHeight = canvasWidth;
+    // Set CSS size to match intrinsic size so getBoundingClientRect() returns the correct dimensions
+    canvas.style.width = canvasWidth + 'px';
+    canvas.style.height = canvasHeight + 'px';
     canvas.width = canvasWidth;
     canvas.height = canvasHeight;
   }
@@ -6208,40 +6212,48 @@ window.getRadarTimestampsForLayer = getRadarTimestampsForLayer;
     const newZoom = ZOOM_LEVELS[zoomLevel];
     const oldZoomFactor = ZOOM_LEVELS[oldZoom] || 1;
 
+    // Update canvas size based on zoom FIRST (before zoom calculation)
+    const container = document.getElementById('radar-canvas-container');
+    if (container) {
+      const rect = container.getBoundingClientRect();
+      canvasWidth = Math.min(rect.width, 512);
+      canvasHeight = canvasWidth;
+      // Set CSS size to match intrinsic size so getBoundingClientRect() returns the correct dimensions
+      canvas.style.width = canvasWidth + 'px';
+      canvas.style.height = canvasHeight + 'px';
+      canvas.width = canvasWidth;
+      canvas.height = canvasHeight;
+    }
+
     // Zoom-to-point: adjust pan so the point under the mouse stays in place
     if (centerX != null && centerY != null && isImageLoaded()) {
       const rect = canvas.getBoundingClientRect();
       const mouseX = centerX - rect.left;
       const mouseY = centerY - rect.top;
       
-      // Calculate the offset of the zoom point from the center before zoom
-      const imgW = 512 * (canvasWidth / 512) * oldZoomFactor;
-      const imgH = 512 * (canvasHeight / 512) * oldZoomFactor;
-      const centerXOffset = (canvas.width - imgW) / 2 + state.panX;
-      const centerYOffset = (canvas.height - imgH) / 2 + state.panY;
+      // Calculate image dimensions at old zoom and its top-left corner in canvas space
+      const scaleOld = (rect.width / 512) * oldZoomFactor;
+      const imgW = 512 * scaleOld;
+      const imgH = 512 * scaleOld;
+      const imgTopLeftX = (rect.width - imgW) / 2 + state.panX;
+      const imgTopLeftY = (rect.height - imgH) / 2 + state.panY;
       
-      const pointOffsetX = mouseX - centerXOffset;
-      const pointOffsetY = mouseY - centerYOffset;
+      // Calculate where the mouse point is in image-local coordinates (0-512 space)
+      const pointInImageX = (mouseX - imgTopLeftX) / scaleOld;
+      const pointInImageY = (mouseY - imgTopLeftY) / scaleOld;
       
-      // Calculate new image size after zoom
-      const newImgW = 512 * (canvasWidth / 512) * newZoom;
-      const newImgH = 512 * (canvasHeight / 512) * newZoom;
-      const newCenterXOffset = (canvas.width - newImgW) / 2 + state.panX;
-      const newCenterYOffset = (canvas.height - newImgH) / 2 + state.panY;
+      // After zoom, that same image-local point should be under the mouse
+      const scaleNew = (rect.width / 512) * newZoom;
+      const newImgW = 512 * scaleNew;
+      const newImgH = 512 * scaleNew;
       
-      // Adjust pan to keep the point in place
-      state.panX += pointOffsetX * (newZoom / oldZoomFactor - 1);
-      state.panY += pointOffsetY * (newZoom / oldZoomFactor - 1);
-    }
-
-    // Update canvas size based on zoom
-    const container = document.getElementById('radar-canvas-container');
-    if (container) {
-      const rect = container.getBoundingClientRect();
-      canvasWidth = Math.min(rect.width, 512);
-      canvasHeight = canvasWidth;
-      canvas.width = canvasWidth;
-      canvas.height = canvasHeight;
+      // The top-left of the new image should be so that this point is under the mouse:
+      const newTopLeftX = mouseX - pointInImageX * scaleNew;
+      const newTopLeftY = mouseY - pointInImageY * scaleNew;
+      
+      // Convert to pan offset: pan = topLeft - (canvas.size - imgSize) / 2
+      state.panX = newTopLeftX - (rect.width - newImgW) / 2;
+      state.panY = newTopLeftY - (rect.height - newImgH) / 2;
     }
 
     // Update cursor
@@ -6632,8 +6644,8 @@ window.getRadarTimestampsForLayer = getRadarTimestampsForLayer;
       // Skip pins outside the viewport
       if (pinX < viewLeft || pinX > viewRight || pinY < viewTop || pinY > viewBottom) continue;
       
-      // Scale pin size for zoom level
-      const scaledPinSize = pinSize * scale / 512;
+      // Scale pin size for zoom level, but enforce a minimum size so pins don't disappear
+      const scaledPinSize = Math.max(MIN_PIN_SIZE, pinSize * scale / 512);
       const scaledFontSize = Math.max(8, Math.min(14, 10 * scale / 512));
       
       drawPin(ctx, pinX, pinY, scaledPinSize, pin.type, pin.label, zoom, scaledFontSize);
@@ -6692,44 +6704,44 @@ window.getRadarTimestampsForLayer = getRadarTimestampsForLayer;
     ctx.fillStyle = '#fff';
     ctx.fill();
     
-    // Draw label if zoom is sufficient
-    const showLabel = zoom >= PIN_LABEL_MIN_ZOOM && zoom <= PIN_LABEL_MAX_ZOOM;
-    if (showLabel && label) {
-      ctx.font = `bold ${fontSize}px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'top';
-      
-      // Measure text width for background
-      const textMetrics = ctx.measureText(label);
-      const padding = 3;
-      const bgW = textMetrics.width + padding * 2;
-      const bgH = fontSize + padding * 2;
-      const bgX = x - bgW / 2;
-      const bgY = y + r * 1.6;
-      
-      // Draw label background
-      ctx.fillStyle = 'rgba(13, 13, 26, 0.85)';
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
-      ctx.lineWidth = 1;
-      const cornerRadius = 4;
-      // Rounded rectangle background
-      ctx.beginPath();
-      ctx.moveTo(bgX + cornerRadius, bgY);
-      ctx.lineTo(bgX + bgW - cornerRadius, bgY);
-      ctx.quadraticCurveTo(bgX + bgW, bgY, bgX + bgW, bgY + cornerRadius);
-      ctx.lineTo(bgX + bgW, bgY + bgH - cornerRadius);
-      ctx.quadraticCurveTo(bgX + bgW, bgY + bgH, bgX + bgW - cornerRadius, bgY + bgH);
-      ctx.lineTo(bgX + cornerRadius, bgY + bgH);
-      ctx.quadraticCurveTo(bgX, bgY + bgH, bgX, bgY + bgH - cornerRadius);
-      ctx.lineTo(bgX, bgY + cornerRadius);
-      ctx.quadraticCurveTo(bgX, bgY, bgX + cornerRadius, bgY);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-      
-      // Draw label text
-      ctx.fillStyle = isUser ? '#4a9eff' : '#fff';
-      ctx.fillText(label, x, bgY + padding);
+      // Draw label if zoom is sufficient (show labels even at minimum size since pins are visible)
+      const showLabel = zoom >= PIN_LABEL_MIN_ZOOM && zoom <= PIN_LABEL_MAX_ZOOM;
+      if (showLabel && label) {
+        ctx.font = `bold ${fontSize}px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        
+        // Measure text width for background
+        const textMetrics = ctx.measureText(label);
+        const padding = 3;
+        const bgW = textMetrics.width + padding * 2;
+        const bgH = fontSize + padding * 2;
+        const bgX = x - bgW / 2;
+        const bgY = y + r * 1.6;
+        
+        // Draw label background
+        ctx.fillStyle = 'rgba(13, 13, 26, 0.85)';
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+        ctx.lineWidth = 1;
+        const cornerRadius = 4;
+        // Rounded rectangle background
+        ctx.beginPath();
+        ctx.moveTo(bgX + cornerRadius, bgY);
+        ctx.lineTo(bgX + bgW - cornerRadius, bgY);
+        ctx.quadraticCurveTo(bgX + bgW, bgY, bgX + bgW, bgY + cornerRadius);
+        ctx.lineTo(bgX + bgW, bgY + bgH - cornerRadius);
+        ctx.quadraticCurveTo(bgX + bgW, bgY + bgH, bgX + bgW - cornerRadius, bgY + bgH);
+        ctx.lineTo(bgX + cornerRadius, bgY + bgH);
+        ctx.quadraticCurveTo(bgX, bgY + bgH, bgX, bgY + bgH - cornerRadius);
+        ctx.lineTo(bgX, bgY + cornerRadius);
+        ctx.quadraticCurveTo(bgX, bgY, bgX + cornerRadius, bgY);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        
+        // Draw label text
+        ctx.fillStyle = isUser ? '#4a9eff' : '#fff';
+        ctx.fillText(label, x, bgY + padding);
     }
   }
 
