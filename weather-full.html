@@ -209,6 +209,129 @@ body {
   text-shadow: 0 0 10px rgba(255,255,255,0.5), 0 0 20px rgba(255,255,255,0.2);
 }/* ===== CARD-COMPONENTS - Card-related display components ===== */
 
+/* ===== LOCAL SENSOR BAR ===== */
+.sensor-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.5rem 1.5rem;
+  background: rgba(255,255,255,0.04);
+  backdrop-filter: blur(16px) saturate(188%);
+  border-top: 1px solid rgba(255,255,255,0.07);
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+}
+
+/* Info line (note + timestamp + source) - centered */
+.sensor-bar > :first-child {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  padding: 0 0.5rem;
+  width: 100%;
+}
+
+.sensor-info-note,
+.sensor-info-timestamp,
+.sensor-info-source {
+  justify-content: center;
+  align-items: center;
+  font-size: 0.6rem;
+  color: rgba(255,255,255,0.35);
+  white-space: nowrap;
+  display: flex;
+}
+
+.sensor-expiry-warning {
+  font-size: 0.75rem;
+  color: rgba(255,80,80,0.8);
+  text-align: center;
+  padding: 0.3rem 0;
+}
+
+/* Sensor items - centered flex row */
+.sensor-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.5rem;
+}
+
+/* Individual sensor item - compact size */
+.sensor-item {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: 6px;
+  background: rgba(0,0,0,0.18);
+  flex-shrink: 0;
+  transition: opacity 0.3s ease;
+}
+
+.sensor-item.hidden {
+  opacity: 0;
+  pointer-events: none;
+  height: 0;
+  padding: 0;
+  margin: 0;
+  overflow: hidden;
+}
+
+/* Location item - wider to accommodate combined coords */
+.sensor-location {
+  flex-basis: auto;
+}
+
+.sensor-icon {
+  font-size: 0.7rem;
+  line-height: 1;
+}
+
+.sensor-label {
+  font-size: 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(255,255,255,0.35);
+  white-space: nowrap;
+}
+
+.sensor-value {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: rgba(255,255,255,0.85);
+  white-space: nowrap;
+}
+
+.sensor-value.hot {
+  color: #ff8c42;
+}
+
+.sensor-value.cool {
+  color: #6cb4ee;
+}
+
+.sensor-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Sensor bar responsive */
+@media (max-width: 900px) {
+  .sensor-bar {
+    gap: 0.5rem;
+    padding: 0.4rem 1rem;
+  }
+}
+
+/* ===== CARD-COMPONENTS - Card-related display components ===== */
+
 /* ===== CITY CARD ===== */
 .city-card {
   position: relative;
@@ -848,8 +971,7 @@ body {
 /* Transition animation when OM data arrives - fade in weather content */
 .city-card.transitioning-to-full {
   transition: opacity 0.3s ease, background 1s ease;
-}
-/* ===== INTERACTIVE - Interactive elements and visual effects ===== */
+}/* ===== INTERACTIVE - Interactive elements and visual effects ===== */
 
 /* ===== SVG WEATHER ICONS - LOUD & ANIMATED ===== */
 .weather-svg {
@@ -2489,6 +2611,9 @@ body.donkey-fullscreen .donkey-panel.donkey-hidden {
   </div>
 </header>
 
+<!-- Local sensor bar (populated by js/local-sensor.js) -->
+<div id="local-sensor-bar" class="sensor-bar"></div>
+
 <main id="city-grid" class="city-grid">
   <!-- City cards injected here -->
 </main>
@@ -2496,6 +2621,120 @@ body.donkey-fullscreen .donkey-panel.donkey-hidden {
 <!-- Radar card container (outside city grid, centered) -->
 <div id="radar-card-container" class="radar-card-wrapper"></div>
 
+<script>
+// weather-local.js - Local sensor data override file
+// =========================================
+// Edit values below to inject local sensor readings into the weather display.
+// Set any value to null to hide that sensor from the UI.
+//
+// The sensor bar appears directly below the header row, styled like city cards.
+// Only sensors with non-null values are displayed.
+//
+// === CONFIGURATION ===
+
+// Refresh interval in seconds (0 = disabled, no auto-refresh)
+var LOCAL_CONFIG_REFRESH_INTERVAL_SECONDS = 30;
+
+// Data expiry - ISO 8601 timestamp. When the current time exceeds this value,
+// the entire sensor bar is hidden (stale data). Set to null to disable expiry.
+var LOCAL_SENSOR_TTL = null;
+
+// =========================================
+// === INFO / META ===
+
+// Displayed as a note across the top of the sensor bar
+var LOCAL_SENSOR_NOTE = 'Local weather station - Charlotte area';
+
+// Data source label (e.g., "Weather Station", "Arduino", "Raspberry Pi")
+var LOCAL_SENSOR_DATA_SOURCE = 'Davis Vantage Pro2';
+
+// Timestamp when the data was recorded (ISO 8601)
+var LOCAL_SENSOR_TIMESTAMP = '2026-06-14T09:30:00.000Z';
+
+// =========================================
+// === TEMPERATURE SENSOR ===
+
+// Current temperature - Fahrenheit takes precedence if both set
+var LOCAL_SENSOR_TEMPERATURE_FAHRENHEIT = 72.5;
+
+// Current temperature - Celsius (ignored if FAHRENHEIT is also set)
+var LOCAL_SENSOR_TEMPERATURE_CELSIUS = null;
+
+// "Feels like" temperature in Celsius
+var LOCAL_SENSOR_FEELSLIKE_CELSIUS = null;
+
+// "Feels like" temperature in Fahrenheit (overrides CELSIUS if both set)
+var LOCAL_SENSOR_FEELSLIKE_FAHRENHEIT = null;
+
+// Dew point in Celsius
+var LOCAL_SENSOR_DEWPOINT_CELSIUS = null;
+
+// =========================================
+// === WIND SENSORS ===
+
+// Wind speed in km/h - mph takes precedence if both set
+var LOCAL_SENSOR_WIND_SPEED_KMH = null;
+
+// Wind speed in mph
+var LOCAL_SENSOR_WIND_SPEED_MPH = 11.2;
+
+// Wind gust speed in mph (shown below wind reading when present)
+var LOCAL_SENSOR_WIND_GUST_MPH = 18.4;
+
+// Wind gust speed in km/h (shown below wind reading when present)
+var LOCAL_SENSOR_WIND_GUST_KMH = null;
+
+// Wind direction in degrees (0=N, 90=E, 180=S, 270=W)
+var LOCAL_SENSOR_WIND_DIRECTION_DEGREES = 245;
+
+// =========================================
+// === HUMIDITY SENSOR ===
+
+// Relative humidity as percentage (0-100)
+var LOCAL_SENSOR_HUMIDITY_PERCENT = 67;
+
+// =========================================
+// === PRESSURE SENSOR ===
+
+// Atmospheric pressure in hPa/mbar - INHG takes precedence if both set
+var LOCAL_SENSOR_PRESSURE_HPA = null;
+
+// Atmospheric pressure in inches of mercury
+var LOCAL_SENSOR_PRESSURE_INHG = 29.92;
+
+// =========================================
+// === GPS / LOCATION SENSORS ===
+
+// Current latitude (-90 to 90)
+var LOCAL_SENSOR_LATITUDE = 35.2271;
+
+// Current longitude (-180 to 180)
+var LOCAL_SENSOR_LONGITUDE = -80.8431;
+
+// =========================================
+// === ADDITIONAL SENSORS (optional) ===
+
+// UV Index (0+)
+var LOCAL_SENSOR_UV_INDEX = 4.2;
+
+// Visibility distance in km - MI takes precedence if both set
+var LOCAL_SENSOR_VISIBILITY_KM = null;
+
+// Visibility distance in miles
+var LOCAL_SENSOR_VISIBILITY_MI = 10.0;
+
+// Rainfall amount in mm - INCHES takes precedence if both set
+var LOCAL_SENSOR_RAINFALL_MM = null;
+
+// Rainfall amount in inches
+var LOCAL_SENSOR_RAINFALL_INCHES = 0.15;
+
+// Solar radiation in W/m² (useful for solar panel monitoring)
+var LOCAL_SENSOR_SOLARRADIATION = 420;
+
+// Soil moisture percentage (0-100, useful for garden/agriculture sensors)
+var LOCAL_SENSOR_SOIL_MOISTURE_PERCENT = 62;
+</script>
 <script>
 const EARTH_RADIUS_MI = 3958.8;
 const GEOLOCATION_TIMEOUT_MS = 8000;
@@ -2985,29 +3224,41 @@ let _bgRefreshTimer = null;
 // Get the shortest remaining TTL across all cities' weather + AQI caches
 function getCityShortestTTL(city) {
   let shortest = Infinity;
-  const weatherKey = weatherCacheKey(city.latitude, city.longitude);
-  const aqiKey = aqiCacheKey(city.latitude, city.longitude);
-  
-  // Check weather cache
+  const lat = city.latitude;
+  const lon = city.longitude;
+
+  // Check consolidated cache key (weatherAqi) first — this is the new format
+  const consolidatedKey = weatherAqiCacheKey(lat, lon);
+  const consolidatedEntry = localStorage.getItem(`hasw_cache_${consolidatedKey}`);
+  if (consolidatedEntry) {
+    const entry = JSON.parse(consolidatedEntry);
+    const ttl = DataCache.TTL[entry.type] || DataCache.TTL.weather;
+    const remaining = ttl - (Date.now() - entry.timestamp);
+    if (remaining < shortest) shortest = remaining;
+  }
+
+  // Check legacy weather cache key (backward compatibility)
+  const weatherKey = weatherCacheKey(lat, lon);
   const weatherEntry = localStorage.getItem(`hasw_cache_${weatherKey}`);
-  if (weatherEntry) {
+  if (weatherEntry && !consolidatedEntry) {
     const entry = JSON.parse(weatherEntry);
     const ttl = DataCache.TTL[entry.type] || DataCache.TTL.weather;
     const remaining = ttl - (Date.now() - entry.timestamp);
     if (remaining < shortest) shortest = remaining;
   }
-  
-  // Check AQI cache
+
+  // Check legacy AQI cache key (backward compatibility)
+  const aqiKey = aqiCacheKey(lat, lon);
   const airEntry = localStorage.getItem(`hasw_cache_${aqiKey}`);
-  if (airEntry) {
+  if (airEntry && !consolidatedEntry) {
     const entry = JSON.parse(airEntry);
     const ttl = DataCache.TTL[entry.type] || DataCache.TTL.airQuality;
     const remaining = ttl - (Date.now() - entry.timestamp);
     if (remaining < shortest) shortest = remaining;
   }
-  
+
   // Check NWS cache — only nwsPoint entries matter (they have the longest TTL among NWS types)
-  const nwsPointKey = nwsPointCacheKey(city.latitude, city.longitude);
+  const nwsPointKey = nwsPointCacheKey(lat, lon);
   const nwsEntry = localStorage.getItem(`hasw_cache_${nwsPointKey}`);
   if (nwsEntry) {
     const entry = JSON.parse(nwsEntry);
@@ -3015,7 +3266,7 @@ function getCityShortestTTL(city) {
     const remaining = ttl - (Date.now() - entry.timestamp);
     if (remaining < shortest) shortest = remaining;
   }
-  
+
   // Default to 15 minutes if no cache — NWS rate limits at 1 req/sec, so use a conservative default
   return shortest === Infinity ? 15 * 60 * 1000 : shortest;
 }
@@ -3045,6 +3296,9 @@ function startBackgroundRefresh() {
     
     // Invalidate OM caches for all cities (NWS is always fetched where available)
     for (const city of weatherData) {
+      const consolidatedKey = weatherAqiCacheKey(city.latitude, city.longitude);
+      DataCache.invalidate(consolidatedKey);
+      // Also invalidate legacy keys for backward compatibility
       const weatherCk = weatherCacheKey(city.latitude, city.longitude);
       const aqiCk = aqiCacheKey(city.latitude, city.longitude);
       DataCache.invalidate(weatherCk);
@@ -3065,6 +3319,8 @@ function toggleUnit() {
     const btn = document.getElementById('unit-toggle');
     if (btn) btn.textContent = `°${unit}`;
     renderAll();
+    // Notify other modules that the unit changed
+    window.dispatchEvent(new CustomEvent('unitChanged', { detail: { unit } }));
   }, TOGGLE_DEBOUNCE_MS);
 }
 
@@ -3392,38 +3648,78 @@ function loudWeatherIcon(type, size) {
 const WEATHER_API = 'https://api.open-meteo.com/v1/forecast';
 const AIR_QUALITY_API = 'https://air-quality-api.open-meteo.com/v1/air-quality';
 
+// ===== AIR QUALITY RATE LIMITER =====
+// The AQI API has strict rate limits (likely similar to NWS: 1 req/sec, burst of 3)
+const _aqiRateLimiter = {
+  lastRequestTime: 0,
+  burstCount: 0,
+  burstWindow: 0,
+  maxBurst: 3,
+  burstWindowMs: 1000,
+  minIntervalMs: 1000,
+
+  _checkBurst() {
+    const now = Date.now();
+    if (now - this.burstWindow > this.burstWindowMs) {
+      this.burstCount = 0;
+      this.burstWindow = now;
+    }
+    return this.burstCount < this.maxBurst;
+  },
+
+  _waitForBurst() {
+    return new Promise(resolve => {
+      const check = () => {
+        if (this._checkBurst()) resolve();
+        else setTimeout(check, 50);
+      };
+      check();
+    });
+  },
+
+  async waitForSlot() {
+    const now = Date.now();
+    const timeSinceLast = now - this.lastRequestTime;
+
+    // If we're within the burst window and at max burst, wait
+    if (timeSinceLast < this.burstWindowMs && !this._checkBurst()) {
+      await this._waitForBurst();
+    }
+
+    // Ensure minimum interval between requests
+    if (timeSinceLast < this.minIntervalMs) {
+      await new Promise(r => setTimeout(r, this.minIntervalMs - timeSinceLast));
+    }
+
+    this.burstCount++;
+    this.burstWindow = Date.now();
+    this.lastRequestTime = Date.now();
+  },
+};
+
 // ===== CROSS-SOURCE LOOKUP FUNCTIONS =====
-// These functions allow fetching data from alternate source caches when needed.
+// Simplified: only look up weather data from NWS when OM is missing.
+// AQI cross-source lookup removed — NWS doesn't provide AQI, and OM handles it.
 
 function crossSourceGetWeather(lat, lon) {
-  // Try OM weather key
-  const omWeather = DataCache.get(weatherCacheKey(lat, lon), 'weather');
-  if (omWeather) return { data: omWeather, source: 'open-meteo' };
+  // Try NWS point cache key (which contains full weather object)
+  const nwsPoint = DataCache.get(nwsPointCacheKey(lat, lon), 'nwsPoint');
+  if (nwsPoint && nwsPoint.weather) return { data: nwsPoint, source: 'nws' };
 
   // Try NWS city data key (which contains full weather object)
   const nwsCityData = DataCache.get(nwsCacheKey(lat, lon), 'nwsCityData');
   if (nwsCityData && nwsCityData.weather) return { data: nwsCityData, source: 'nws' };
 
-  // Try NWS point cache key (which contains full weather object)
-  const nwsPoint = DataCache.get(nwsPointCacheKey(lat, lon), 'nwsPoint');
-  if (nwsPoint && nwsPoint.weather) return { data: nwsPoint, source: 'nws' };
-
-  return null;
-}
-
-function crossSourceGetAQI(lat, lon) {
-  // Try OM AQI key
-  const omAqi = DataCache.get(aqiCacheKey(lat, lon), 'airQuality');
-  if (omAqi) return { data: omAqi, source: 'open-meteo' };
-
-  // Try NWS city data key (which may have AQI)
-  const nwsCityData = DataCache.get(nwsCacheKey(lat, lon), 'nwsCityData');
-  if (nwsCityData && nwsCityData.aqi) return { data: nwsCityData.aqi, source: 'nws' };
-
   return null;
 }
 
 // ===== CACHE KEY HELPERS =====
+// Consolidated cache key for weather + AQI (they share the same TTL and are always fetched together)
+function weatherAqiCacheKey(lat, lon) {
+  return `weatherAqi_${DataCache._roundCoord(lat)}_${DataCache._roundCoord(lon)}`;
+}
+
+// Legacy keys — kept for backward compatibility with existing cache entries
 function weatherCacheKey(lat, lon) {
   return `weather_${DataCache._roundCoord(lat)}_${DataCache._roundCoord(lon)}`;
 }
@@ -3433,12 +3729,20 @@ function aqiCacheKey(lat, lon) {
 }
 
 // ===== RETRY HELPER =====
-// Retry a fetch with exponential backoff
+// Retry a fetch with exponential backoff. Handles HTTP 429 (rate limit) specially.
 async function retryWithBackoff(fn, maxRetries = 3, baseDelay = 1000) {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       const result = await fn();
-      return result;
+      // If result is a Response with 429, retry
+      if (result && typeof result.status === 'number' && result.status === 429) {
+        if (attempt === maxRetries) throw new Error('Rate limited after retries');
+        const delay = baseDelay * Math.pow(2, attempt);
+        console.log(`[retry] Attempt ${attempt + 1}/${maxRetries + 1} failed with 429, retrying in ${delay}ms`);
+        await new Promise(r => setTimeout(r, delay));
+      } else {
+        return result;
+      }
     } catch (err) {
       if (attempt === maxRetries) throw err;
       const delay = baseDelay * Math.pow(2, attempt);
@@ -3523,27 +3827,47 @@ function deduplicateCities(cities) {
   return deduped;
 }
 
+// ===== REQUEST DEDUPLICATION =====
+// Prevent duplicate bulk fetches for the same city set
+const _pendingWeatherFetch = new Map(); // key (sorted lat,lon pairs) → Promise
+
+function getPendingWeatherFetch(cities) {
+  const key = cities.map(c => `${DataCache._roundCoord(c.latitude)},${DataCache._roundCoord(c.longitude)}`).sort().join('|');
+  if (_pendingWeatherFetch.has(key)) {
+    return _pendingWeatherFetch.get(key);
+  }
+  return null;
+}
+
+function setPendingWeatherFetch(key, promise) {
+  _pendingWeatherFetch.set(key, promise);
+}
+
+// Clean up pending fetch after completion
+function clearPendingWeatherFetch(key) {
+  _pendingWeatherFetch.delete(key);
+}
+
 // ===== PER-CITY WEATHER FETCH (for incremental updates) =====
 async function fetchWeatherForCity(city) {
-  // Check cache first for this single city
-  const weatherCk = weatherCacheKey(city.latitude, city.longitude);
-  const aqiCk = aqiCacheKey(city.latitude, city.longitude);
+  // Check consolidated cache first
+  const cacheKey = weatherAqiCacheKey(city.latitude, city.longitude);
   
-  const cachedWeather = DataCache.get(weatherCk, 'weather');
-  const cachedAqi = DataCache.get(aqiCk, 'airQuality');
+  const cached = DataCache.get(cacheKey, 'weatherAqi');
+  if (cached) {
+    return { ...city, source: 'open-meteo', weather: cached.weather, aqi: cached.aqi };
+  }
   
-  // Cross-source: also check NWS keys for OM lookup
+  // Check cross-source: NWS data can serve as OM weather data
   const crossSource = crossSourceGetWeather(city.latitude, city.longitude);
-  if (cachedWeather) {
-    return { ...city, source: 'open-meteo', weather: cachedWeather, aqi: cachedAqi || {} };
-  }
   if (crossSource && crossSource.data.weather) {
-    const crossAqi = crossSourceGetAQI(city.latitude, city.longitude);
-    return { ...city, source: crossSource.source, weather: crossSource.data.weather, aqi: crossAqi?.data || {} };
+    return { ...city, source: crossSource.source, weather: crossSource.data.weather, aqi: {} };
   }
   
-  // Fetch weather for single city
+  // Fetch weather for single city (with AQI rate limiting)
   try {
+    await _aqiRateLimiter.waitForSlot();
+    
     const weatherUrl = `${WEATHER_API}?latitude=${city.latitude}&longitude=${city.longitude}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m,surface_pressure,uv_index,visibility&hourly=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m&forecast_days=2&temperature_unit=celsius&wind_speed_unit=kmh&precipitation_unit=mm&timezone=auto`;
     
     const weatherRes = await retryWithBackoff(() => fetch(weatherUrl));
@@ -3559,7 +3883,8 @@ async function fetchWeatherForCity(city) {
       hourly: weatherAll.hourly || { time: [] },
     };
     
-    // Fetch AQI for single city
+    // Fetch AQI for single city (with rate limiting)
+    await _aqiRateLimiter.waitForSlot();
     const aqiUrl = `${AIR_QUALITY_API}?latitude=${city.latitude}&longitude=${city.longitude}&current=us_aqi,pm2_5,european_aqi&timezone=auto`;
     const aqiRes = await retryWithBackoff(() => fetch(aqiUrl));
     const aqiData = await aqiRes.json();
@@ -3571,9 +3896,8 @@ async function fetchWeatherForCity(city) {
       european_aqi: aqiData.current?.european_aqi ?? aqiData.european_aqi ?? null,
     };
     
-    // Cache results
-    DataCache.set(weatherCk, cityWeather, 'weather');
-    DataCache.set(aqiCk, cityAqi, 'airQuality');
+    // Store consolidated cache
+    DataCache.set(cacheKey, { weather: cityWeather, aqi: cityAqi }, 'weatherAqi');
     
     return { ...city, source: 'open-meteo', weather: cityWeather, aqi: cityAqi };
   } catch (err) {
@@ -3582,30 +3906,34 @@ async function fetchWeatherForCity(city) {
   }
 }
 
-// ===== FETCH WEATHER FOR CITIES =====
+// ===== FETCH WEATHER FOR CITIES (BATCH) =====
 async function fetchWeatherForCities(cities) {
+  // De-duplicate input cities by coordinate pair BEFORE any processing
+  const dedupedInput = deduplicateCities(cities);
+
   // Check cache for each city individually — use cross-source lookup
   const cachedResults = [];
   const uncachedCities = [];
   const cityCacheMap = []; // map city index to its position in uncachedCities
 
-  for (let i = 0; i < cities.length; i++) {
-    const weatherCk = weatherCacheKey(cities[i].latitude, cities[i].longitude);
-    const aqiCk = aqiCacheKey(cities[i].latitude, cities[i].longitude);
-    const cachedWeather = DataCache.get(weatherCk, 'weather');
-    const cachedAqi = DataCache.get(aqiCk, 'airQuality');
-    // Cross-source: also check NWS keys for OM lookup
-    const crossSource = crossSourceGetWeather(cities[i].latitude, cities[i].longitude);
-    if (cachedWeather) {
-      cachedResults.push({ ...cities[i], source: 'open-meteo', weather: cachedWeather, aqi: cachedAqi || {} });
-    } else if (crossSource && crossSource.data.weather) {
-      // NWS data can serve as OM weather data (it has the same structure)
-      const crossAqi = crossSourceGetAQI(cities[i].latitude, cities[i].longitude);
-      cachedResults.push({ ...cities[i], source: crossSource.source, weather: crossSource.data.weather, aqi: crossAqi?.data || {} });
-    } else {
-      cityCacheMap.push(i);
-      uncachedCities.push(cities[i]);
+  for (let i = 0; i < dedupedInput.length; i++) {
+    // Check consolidated cache first
+    const cacheKey = weatherAqiCacheKey(dedupedInput[i].latitude, dedupedInput[i].longitude);
+    const cached = DataCache.get(cacheKey, 'weatherAqi');
+    if (cached) {
+      cachedResults.push({ ...dedupedInput[i], source: 'open-meteo', weather: cached.weather, aqi: cached.aqi });
+      continue;
     }
+
+    // Cross-source: also check NWS keys for OM lookup
+    const crossSource = crossSourceGetWeather(dedupedInput[i].latitude, dedupedInput[i].longitude);
+    if (crossSource && crossSource.data.weather) {
+      cachedResults.push({ ...dedupedInput[i], source: crossSource.source, weather: crossSource.data.weather, aqi: {} });
+      continue;
+    }
+
+    cityCacheMap.push(i);
+    uncachedCities.push(dedupedInput[i]);
   }
 
   // If all cached, apply deduplication before returning
@@ -3613,7 +3941,14 @@ async function fetchWeatherForCities(cities) {
     return deduplicateResults(cachedResults);
   }
 
-  // ===== FIX #1: Deduplicate BEFORE caching =====
+  // Check for pending fetch (request deduplication)
+  const pendingKey = getPendingWeatherFetch(uncachedCities);
+  if (pendingKey) {
+    console.log('[fetchWeatherForCities] Pending fetch exists, waiting...');
+    return pendingKey;
+  }
+
+  // ===== Deduplicate BEFORE caching =====
   // Only unique coordinate pairs should be fetched from the API
   const dedupedUncached = deduplicateCities(uncachedCities);
 
@@ -3621,34 +3956,33 @@ async function fetchWeatherForCities(cities) {
   try {
     const weatherUrl = `${WEATHER_API}?latitude=${dedupedUncached.map(c => c.latitude).join(',')}&longitude=${dedupedUncached.map(c => c.longitude).join(',')}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m,surface_pressure,uv_index,visibility&hourly=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m&forecast_days=2&temperature_unit=celsius&wind_speed_unit=kmh&precipitation_unit=mm&timezone=auto`;
 
-    // ===== FIX #5: Retry logic for weather API =====
+    // Retry logic for weather API (handles 429)
     const weatherRes = await retryWithBackoff(() => fetch(weatherUrl));
 
     if (!weatherRes.ok) {
       // Fill uncached with null data
       for (const idx of cityCacheMap) {
-        cachedResults[idx] = { ...cities[idx], weather: null, aqi: {} };
+        cachedResults[idx] = { ...dedupedInput[idx], source: 'open-meteo', weather: null, aqi: {} };
       }
       return deduplicateResults(cachedResults);
     }
 
     const weatherAll = await weatherRes.json();
 
+    // Rate-limit the AQI request too
+    await _aqiRateLimiter.waitForSlot();
     const aqiUrl = `${AIR_QUALITY_API}?latitude=${dedupedUncached.map(c => c.latitude).join(',')}&longitude=${dedupedUncached.map(c => c.longitude).join(',')}&current=us_aqi,pm2_5,european_aqi&timezone=auto`;
-    // ===== FIX #5: Retry logic for AQI API =====
     const aqiRes = await retryWithBackoff(() => fetch(aqiUrl));
     const aqiData = await aqiRes.json();
 
-    const result = new Array(cities.length);
+    const result = new Array(dedupedInput.length);
 
     // First fill cached results (use get directly — it already handles expiration internally)
-    for (let i = 0; i < cities.length; i++) {
-      const weatherCk = weatherCacheKey(cities[i].latitude, cities[i].longitude);
-      const aqiCk = aqiCacheKey(cities[i].latitude, cities[i].longitude);
-      const entryWeather = DataCache.get(weatherCk, 'weather');
-      const entryAqi = DataCache.get(aqiCk, 'airQuality');
-      if (entryWeather) {
-        result[i] = { ...cities[i], source: 'open-meteo', weather: entryWeather, aqi: entryAqi || {} };
+    for (let i = 0; i < dedupedInput.length; i++) {
+      const cacheKey = weatherAqiCacheKey(dedupedInput[i].latitude, dedupedInput[i].longitude);
+      const cached = DataCache.get(cacheKey, 'weatherAqi');
+      if (cached) {
+        result[i] = { ...dedupedInput[i], source: 'open-meteo', weather: cached.weather, aqi: cached.aqi };
       }
     }
 
@@ -3660,17 +3994,16 @@ async function fetchWeatherForCities(cities) {
     const hasAqiResultsArray = aqiData && Array.isArray(aqiData.results);
 
     let wIdx = 0; // index into weatherAll.results / aqiData.results
-    for (let i = 0; i < cities.length; i++) {
+    for (let i = 0; i < dedupedInput.length; i++) {
       // Skip already-cached
       if (result[i]) continue;
 
-      const city = cities[i];
+      const city = dedupedInput[i];
       let cityWeather;
       let aqiResult;
 
       if (hasResultsArray) {
         const raw = weatherAll.results[wIdx] || {};
-        // ===== FIX #4: Clean up hourly variable extraction =====
         const rawHourlyKeys = extractHourlyKeys(raw);
         const mergedHourly = raw.hourly ? { ...raw.hourly } : { time: [] };
         rawHourlyKeys.forEach(k => {
@@ -3732,31 +4065,32 @@ async function fetchWeatherForCities(cities) {
         }
       }
 
-      // Use separate cache keys for weather and AQI
-      const weatherCk = weatherCacheKey(city.latitude, city.longitude);
-      const aqiCk = aqiCacheKey(city.latitude, city.longitude);
-      DataCache.set(weatherCk, cityWeather, 'weather');
-      DataCache.set(aqiCk, aqiResult, 'airQuality');
+      // Store consolidated cache (weather + AQI together)
+      const cacheKey = weatherAqiCacheKey(city.latitude, city.longitude);
+      DataCache.set(cacheKey, { weather: cityWeather, aqi: aqiResult }, 'weatherAqi');
 
       result[i] = { ...city, source: 'open-meteo', weather: cityWeather, aqi: aqiResult };
     }
 
     return deduplicateResults(result);
-  } catch {
+  } catch (err) {
+    console.error('[fetchWeatherForCities] Failed:', err);
     // Fill uncached with null data
-    const result = new Array(cities.length);
-    for (let i = 0; i < cities.length; i++) {
-      const weatherCk = weatherCacheKey(cities[i].latitude, cities[i].longitude);
-      const aqiCk = aqiCacheKey(cities[i].latitude, cities[i].longitude);
-      if (DataCache.has(weatherCk, 'weather')) {
-        const entryWeather = DataCache.get(weatherCk, 'weather');
-        const entryAqi = DataCache.get(aqiCk, 'airQuality');
-        result[i] = { ...cities[i], source: 'open-meteo', weather: entryWeather, aqi: entryAqi || {} };
+    const result = new Array(dedupedInput.length);
+    for (let i = 0; i < dedupedInput.length; i++) {
+      const cacheKey = weatherAqiCacheKey(dedupedInput[i].latitude, dedupedInput[i].longitude);
+      const cached = DataCache.get(cacheKey, 'weatherAqi');
+      if (cached) {
+        result[i] = { ...dedupedInput[i], source: 'open-meteo', weather: cached.weather, aqi: cached.aqi };
       } else {
-        result[i] = { ...cities[i], source: 'open-meteo', weather: null, aqi: {} };
+        result[i] = { ...dedupedInput[i], source: 'open-meteo', weather: null, aqi: {} };
       }
     }
     return result;
+  } finally {
+    // Clean up pending fetch regardless of success/failure
+    const key = getPendingWeatherFetch(uncachedCities);
+    if (key) clearPendingWeatherFetch(key);
   }
 }
 </script>
@@ -4684,7 +5018,9 @@ function nwsToAppData(city, nwsData) {
   };
 
   // Cross-source missing fields from OM cache (pressure, visibility, UV Index)
-  const omWeather = DataCache.get(weatherCacheKey(city.latitude, city.longitude), 'weather');
+  // Try consolidated cache key first, then fall back to legacy weather key
+  const omWeather = DataCache.get(weatherAqiCacheKey(city.latitude, city.longitude), 'weatherAqi')?.weather 
+    || DataCache.get(weatherCacheKey(city.latitude, city.longitude), 'weather');
   if (omWeather && omWeather.current) {
     // Merge missing pressure from OM
     if (!nwsHasPressure && omWeather.current.surface_pressure != null) {
@@ -10469,6 +10805,522 @@ document.addEventListener('DOMContentLoaded', () => {
 
 </script>
  <script>
+// ===== LOCAL SENSOR BAR =====
+// Reads sensor values from weather-local.js and displays them in a bar below the header.
+// Only sensors with non-null values are shown.
+// Respects the existing unit toggle (°F/°C) for temperature, speed, pressure, etc.
+
+(function () {
+  'use strict';
+
+  // === Sensor definitions: maps config keys to display metadata ===
+  const SENSOR_DEFS = [
+    { key: 'LOCAL_SENSOR_TEMPERATURE_FAHRENHEIT', label: 'Temp', unit: '\u00B0F', type: 'temp' },
+    { key: 'LOCAL_SENSOR_TEMPERATURE_CELSIUS',     label: 'Temp', unit: '\u00B0C', type: 'temp' },
+    { key: 'LOCAL_SENSOR_WIND_SPEED_MPH',          label: 'Wind', unit: 'mph', type: 'wind-speed' },
+    { key: 'LOCAL_SENSOR_WIND_SPEED_KMH',          label: 'Wind', unit: 'km/h', type: 'wind-speed' },
+    { key: 'LOCAL_SENSOR_WIND_GUST_MPH',           label: 'Gust', unit: 'mph', type: 'wind-gust' },
+    { key: 'LOCAL_SENSOR_WIND_GUST_KMH',           label: 'Gust', unit: 'km/h', type: 'wind-gust' },
+    { key: 'LOCAL_SENSOR_WIND_DIRECTION_DEGREES',  label: 'Wind Dir', unit: '\u00B0', type: 'wind-dir' },
+    { key: 'LOCAL_SENSOR_HUMIDITY_PERCENT',        label: 'Humidity', unit: '%', type: 'humidity' },
+    { key: 'LOCAL_SENSOR_PRESSURE_INHG',           label: 'Pressure', unit: 'inHg', type: 'pressure' },
+    { key: 'LOCAL_SENSOR_PRESSURE_HPA',            label: 'Pressure', unit: 'hPa', type: 'pressure' },
+    { key: 'LOCAL_SENSOR_LATITUDE',                label: 'Location', unit: '', type: 'location' },
+    { key: 'LOCAL_SENSOR_LONGITUDE',               label: 'Location', unit: '', type: 'location' },
+    { key: 'LOCAL_SENSOR_DEWPOINT_CELSIUS',        label: 'Dew Pt', unit: '\u00B0C', type: 'temp' },
+    { key: 'LOCAL_SENSOR_DEWPOINT_FAHRENHEIT',     label: 'Dew Pt', unit: '\u00B0F', type: 'temp' },
+    { key: 'LOCAL_SENSOR_UV_INDEX',                label: 'UV Index', unit: '', type: 'uv' },
+    { key: 'LOCAL_SENSOR_VISIBILITY_MI',           label: 'Vis', unit: 'mi', type: 'visibility' },
+    { key: 'LOCAL_SENSOR_VISIBILITY_KM',           label: 'Vis', unit: 'km', type: 'visibility' },
+    { key: 'LOCAL_SENSOR_RAINFALL_INCHES',         label: 'Rainfall', unit: 'in', type: 'rainfall' },
+    { key: 'LOCAL_SENSOR_RAINFALL_MM',             label: 'Rainfall', unit: 'mm', type: 'rainfall' },
+    { key: 'LOCAL_SENSOR_FEELSLIKE_FAHRENHEIT',    label: 'Feels Like', unit: '\u00B0F', type: 'temp' },
+    { key: 'LOCAL_SENSOR_FEELSLIKE_CELSIUS',       label: 'Feels Like', unit: '\u00B0C', type: 'temp' },
+    { key: 'LOCAL_SENSOR_SOLARRADIATION',          label: 'Solar', unit: 'W/m\u00B2', type: 'solar' },
+    { key: 'LOCAL_SENSOR_SOIL_MOISTURE_PERCENT',   label: 'Soil Moisture', unit: '%', type: 'soil-moisture' },
+  ];
+
+  // === Current sensor state (tracks which sensors are active) ===
+  let _activeSensors = [];
+  let _sensorValues = {};
+  let _refreshIntervalId = null;
+  let _ttlCheckTimer = null;
+
+  // === Unit conversion helpers ===
+  function toF(c) { return c * 9 / 5 + 32; }
+  function toC(f) { return (f - 32) * 5 / 9; }
+
+  function getUnit() {
+    if (typeof unit === 'string') return unit;
+    return 'F';
+  }
+
+  // Pressure: inHg <-> hPa (1 inHg = 33.8639 hPa)
+  function convertPressure(value, fromUnit) {
+    if (value == null || value !== value) return NaN;
+    if (fromUnit === 'inHg') {
+      return getUnit() === 'F' ? (value * 33.8639).toFixed(1) : (value * 33.8639).toFixed(0);
+    }
+    const inHg = value / 33.8639;
+    return getUnit() === 'F' ? inHg.toFixed(2) : Math.round(inHg * 33.8639).toString();
+  }
+
+  // Wind speed: mph <-> km/h (1 mph = 1.60934 km/h)
+  function convertWindSpeed(value, fromUnit) {
+    if (value == null || value !== value) return NaN;
+    if (fromUnit === 'mph') {
+      return getUnit() === 'F' ? (value * 1.60934).toFixed(1) : Math.round(value * 1.60934).toString();
+    }
+    const mph = value / 1.60934;
+    return getUnit() === 'F' ? mph.toFixed(1) : Math.round(mph * 1.60934).toString();
+  }
+
+  // Visibility: mi <-> km (1 mi = 1.60934 km)
+  function convertVisibility(value, fromUnit) {
+    if (value == null || value !== value) return NaN;
+    if (fromUnit === 'mi') {
+      return getUnit() === 'F' ? (value * 1.60934).toFixed(1) : Math.round(value * 1.60934).toString();
+    }
+    const mi = value / 1.60934;
+    return getUnit() === 'F' ? mi.toFixed(1) : Math.round(mi * 1.60934).toString();
+  }
+
+  // Rainfall: inches <-> mm (1 in = 25.4 mm)
+  function convertRainfall(value, fromUnit) {
+    if (value == null || value !== value) return NaN;
+    if (fromUnit === 'in') {
+      return getUnit() === 'F' ? (value * 25.4).toFixed(1) : Math.round(value * 25.4).toString();
+    }
+    const inVal = value / 25.4;
+    return getUnit() === 'F' ? inVal.toFixed(2) : Math.round(inVal * 25.4).toString();
+  }
+
+  // === Format a sensor value for display ===
+  function formatSensorValue(def, rawValue) {
+    if (rawValue == null || rawValue !== rawValue) return '\u2014';
+
+    let displayVal = rawValue;
+    let displayUnit = def.unit;
+
+    switch (def.type) {
+      case 'temp':
+        // Temperature unit depends on the config key suffix
+        if (def.key.includes('FAHRENHEIT')) {
+          displayUnit = getUnit() === 'F' ? '\u00B0F' : '\u00B0C';
+          if (getUnit() === 'F') {
+            displayVal = Number.isInteger(rawValue) ? rawValue : rawValue.toFixed(1);
+          } else {
+            displayVal = toC(rawValue).toFixed(1);
+          }
+        } else {
+          displayUnit = getUnit() === 'F' ? '\u00B0F' : '\u00B0C';
+          if (getUnit() === 'F') {
+            displayVal = toF(rawValue).toFixed(1);
+          } else {
+            displayVal = Number.isInteger(rawValue) ? rawValue : rawValue.toFixed(1);
+          }
+        }
+        break;
+
+      case 'wind-speed':
+        if (def.key.includes('MPH')) {
+          displayUnit = getUnit() === 'F' ? 'mph' : 'km/h';
+          if (getUnit() === 'F') {
+            displayVal = Number.isInteger(rawValue) ? rawValue : rawValue.toFixed(1);
+          } else {
+            displayVal = convertWindSpeed(rawValue, 'mph');
+          }
+        } else {
+          displayUnit = getUnit() === 'F' ? 'km/h' : 'mph';
+          if (getUnit() === 'F') {
+            displayVal = rawValue; // already in km/h
+          } else {
+            displayVal = convertWindSpeed(rawValue, 'km/h');
+          }
+        }
+        break;
+
+      case 'wind-gust':
+        if (def.key.includes('MPH')) {
+          displayUnit = getUnit() === 'F' ? 'mph' : 'km/h';
+          if (getUnit() === 'F') {
+            displayVal = Number.isInteger(rawValue) ? rawValue : rawValue.toFixed(1);
+          } else {
+            displayVal = convertWindSpeed(rawValue, 'mph');
+          }
+        } else {
+          displayUnit = getUnit() === 'F' ? 'km/h' : 'mph';
+          if (getUnit() === 'F') {
+            displayVal = rawValue; // already in km/h
+          } else {
+            displayVal = convertWindSpeed(rawValue, 'km/h');
+          }
+        }
+        break;
+
+      case 'pressure':
+        if (def.key.includes('INHG')) {
+          displayUnit = getUnit() === 'F' ? 'inHg' : 'hPa';
+          if (getUnit() === 'F') {
+            displayVal = rawValue.toFixed(2);
+          } else {
+            displayVal = (rawValue * 33.8639).toFixed(0);
+          }
+        } else {
+          displayUnit = getUnit() === 'F' ? 'hPa' : 'inHg';
+          if (getUnit() === 'F') {
+            displayVal = rawValue; // already in hPa
+          } else {
+            displayVal = (rawValue / 33.8639).toFixed(2);
+          }
+        }
+        break;
+
+      case 'visibility':
+        if (def.key.includes('MI')) {
+          displayUnit = getUnit() === 'F' ? 'mi' : 'km';
+          if (getUnit() === 'F') {
+            displayVal = Number.isInteger(rawValue) ? rawValue : rawValue.toFixed(1);
+          } else {
+            displayVal = convertVisibility(rawValue, 'mi');
+          }
+        } else {
+          displayUnit = getUnit() === 'F' ? 'km' : 'mi';
+          if (getUnit() === 'F') {
+            displayVal = rawValue; // already in km
+          } else {
+            displayVal = convertVisibility(rawValue, 'km');
+          }
+        }
+        break;
+
+      case 'rainfall':
+        if (def.key.includes('INCHES')) {
+          displayUnit = getUnit() === 'F' ? 'in' : 'mm';
+          if (getUnit() === 'F') {
+            displayVal = Number.isInteger(rawValue) ? rawValue : rawValue.toFixed(2);
+          } else {
+            displayVal = convertRainfall(rawValue, 'in');
+          }
+        } else {
+          displayUnit = getUnit() === 'F' ? 'mm' : 'in';
+          if (getUnit() === 'F') {
+            displayVal = rawValue; // already in mm
+          } else {
+            displayVal = convertRainfall(rawValue, 'mm');
+          }
+        }
+        break;
+
+      case 'wind-dir':
+        displayVal = Math.round(rawValue);
+        break;
+
+      default:
+        // No conversion needed for GPS, UV, solar, soil moisture
+        if (typeof rawValue === 'number') {
+          displayVal = Number.isInteger(rawValue) ? rawValue : rawValue.toFixed(1);
+        } else {
+          displayVal = String(rawValue);
+        }
+    }
+
+    return displayVal + (displayUnit !== '' ? ' ' + displayUnit : '');
+  }
+
+  // === Format a location value from lat/lng into a combined display ===
+  function formatLocation(lat, lon) {
+    if (lat == null || lon == null || lat !== lat || lon !== lon) return '\u2014';
+    const latDir = lat >= 0 ? '\u2191' : '\u2193';
+    const lonDir = lon >= 0 ? '\u2192' : '\u2190';
+    return latDir + ' ' + Math.abs(lat).toFixed(2) + '\u00B0' + latDir + ', ' + lonDir + ' ' + Math.abs(lon).toFixed(2) + '\u00B0' + lonDir;
+  }
+
+  // === Get a human-readable label for the sensor (picks the right one based on current unit) ===
+  function getSensorLabel(def) {
+    if (def.type === 'temp') {
+      if (getUnit() === 'F' && !def.key.includes('FAHRENHEIT')) return null;
+      if (getUnit() === 'C' && !def.key.includes('CELSIUS')) return null;
+      if (getUnit() === 'F') {
+        return def.label + ' (\u00B0F)';
+      } else {
+        return def.label + ' (\u00B0C)';
+      }
+    }
+
+    if (def.type === 'wind-speed') {
+      const speedUnit = getUnit() === 'F' ? 'mph' : 'km/h';
+      if (getUnit() === 'F' && !def.key.includes('MPH')) return null;
+      if (getUnit() === 'C' && !def.key.includes('KMH')) return null;
+      return def.label + ' (' + speedUnit + ')';
+    }
+
+    if (def.type === 'wind-gust') {
+      const gustUnit = getUnit() === 'F' ? 'mph' : 'km/h';
+      if (getUnit() === 'F' && !def.key.includes('MPH')) return null;
+      if (getUnit() === 'C' && !def.key.includes('KMH')) return null;
+      return def.label + ' (' + gustUnit + ')';
+    }
+
+    if (def.type === 'pressure') {
+      const pressureUnit = getUnit() === 'F' ? 'inHg' : 'hPa';
+      if (getUnit() === 'F' && !def.key.includes('INHG')) return null;
+      if (getUnit() === 'C' && !def.key.includes('HPA')) return null;
+      return def.label + ' (' + pressureUnit + ')';
+    }
+
+    if (def.type === 'visibility') {
+      const visUnit = getUnit() === 'F' ? 'mi' : 'km';
+      if (getUnit() === 'F' && !def.key.includes('MI')) return null;
+      if (getUnit() === 'C' && !def.key.includes('KM')) return null;
+      return def.label + ' (' + visUnit + ')';
+    }
+
+    if (def.type === 'rainfall') {
+      const rainUnit = getUnit() === 'F' ? 'in' : 'mm';
+      if (getUnit() === 'F' && !def.key.includes('INCHES')) return null;
+      if (getUnit() === 'C' && !def.key.includes('MM')) return null;
+      return def.label + ' (' + rainUnit + ')';
+    }
+
+    return def.label;
+  }
+
+  // === Determine which sensors are currently active (non-null value) ===
+  function getActiveSensors() {
+    const active = [];
+    for (const def of SENSOR_DEFS) {
+      const val = window[def.key];
+      if (val !== null && val !== undefined) {
+        // Check if the sensor's label is valid (unit preference match)
+        const label = getSensorLabel(def);
+        if (label) {
+          active.push({ def, value: val, label });
+        }
+      }
+    }
+    return active;
+  }
+
+  // === Get relative time string from ISO timestamp ===
+  function getRelativeTime(isoString) {
+    if (!isoString || typeof isoString !== 'string') return '';
+    const date = new Date(isoString);
+    if (isNaN(date.getTime())) return '';
+    const diffMs = Date.now() - date.getTime();
+    const absDiff = Math.abs(diffMs);
+    const seconds = Math.floor(absDiff / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+
+    if (seconds < 60) return seconds + 's ago';
+    if (minutes < 60) return minutes + 'm ago';
+    if (hours < 24) return hours + 'h ago';
+    return days + 'd ago';
+  }
+
+  // === Check TTL and return whether data is still valid ===
+  function checkTTL() {
+    var ttl = window.LOCAL_SENSOR_TTL;
+    if (!ttl || typeof ttl !== 'string') return true; // null or not set = no expiry
+    const date = new Date(ttl);
+    if (isNaN(date.getTime())) return true; // invalid timestamp = no expiry
+    return Date.now() < date.getTime();
+  }
+
+  // === Build HTML for a single sensor item ===
+  function renderSensorItem(item) {
+    var displayVal = formatSensorValue(item.def, item.value);
+    var icon = getSensorIcon(item.def.type);
+    var safeLabel = escapeHTML(item.label);
+    return '<div class="sensor-item"><span class="sensor-icon">' + icon + '</span><span class="sensor-label">' + safeLabel + '</span><span class="sensor-value">' + displayVal + '</span></div>';
+  }
+
+  // === Get an icon for the sensor type ===
+  function getSensorIcon(type) {
+    var icons = {
+      'temp': '\uD83C\uDF21',
+      'wind-speed': '\uD83D\uDCA8',
+      'wind-gust': '\uD83D\uDCA8',
+      'wind-dir': '\uD83E\uDDED',
+      'humidity': '\uD83D\uDCA7',
+      'pressure': '\u23F1',
+      'location': '\uD83D\uDCCD',
+      'uv': '\u2600',
+      'visibility': '\uD83D\uDC41',
+      'rainfall': '\uD83C\uDF27',
+      'solar': '\u2600\uFE0F',
+      'soil-moisture': '\uD83C\uDF31',
+    };
+    return icons[type] || '';
+  }
+
+  // === Build info line HTML (note + timestamp + source) ===
+  function buildInfoLine() {
+    var html = '';
+    var note = window.LOCAL_SENSOR_NOTE;
+    var source = window.LOCAL_SENSOR_DATA_SOURCE;
+    var timestamp = window.LOCAL_SENSOR_TIMESTAMP;
+
+    if (note) {
+      html += '<span class="sensor-info-note">\u{1F4DD} ' + escapeHTML(note) + '</span>';
+    }
+    if (timestamp) {
+      var relTime = getRelativeTime(timestamp);
+      if (relTime) {
+        html += '<span class="sensor-info-timestamp">\u23F1 Updated ' + relTime + '</span>';
+      }
+    }
+    if (source) {
+      html += '<span class="sensor-info-source">\u{1F50C} ' + escapeHTML(source) + '</span>';
+    }
+    return html;
+  }
+
+  // === Check TTL and build expiry warning ===
+  function buildExpiryWarning() {
+    if (checkTTL()) return '';
+    var ttl = window.LOCAL_SENSOR_TTL;
+    var msg = 'Data expired';
+    if (ttl) {
+      var date = new Date(ttl);
+      msg += ' (' + date.toLocaleString() + ')';
+    }
+    return '<span class="sensor-expiry-warning">\u26A0 ' + escapeHTML(msg) + '</span>';
+  }
+
+  // === Render the full sensor bar ===
+  function renderSensorBar() {
+    var bar = document.getElementById('local-sensor-bar');
+    if (!bar) return;
+
+    // Check TTL first - hide entire bar if expired
+    if (!checkTTL()) {
+      bar.innerHTML = buildExpiryWarning();
+      _activeSensors = [];
+      return;
+    }
+
+    var active = getActiveSensors();
+
+    // If no sensors are active, hide the bar
+    if (active.length === 0) {
+      bar.innerHTML = '';
+      _activeSensors = [];
+      return;
+    }
+
+    // Build HTML for info line + sensor items
+    var html = buildInfoLine();
+
+    // Group location sensors together
+    var hasLocation = false;
+    var latVal = null, lonVal = null;
+    for (var i = 0; i < active.length; i++) {
+      if (active[i].def.key === 'LOCAL_SENSOR_LATITUDE') {
+        hasLocation = true;
+        latVal = active[i].value;
+      } else if (active[i].def.key === 'LOCAL_SENSOR_LONGITUDE') {
+        hasLocation = true;
+        lonVal = active[i].value;
+      }
+    }
+
+    // Build sensor items HTML
+    var itemsHtml = '';
+    for (i = 0; i < active.length; i++) {
+      // Skip individual lat/lng if we have a combined location
+      if (active[i].def.key === 'LOCAL_SENSOR_LATITUDE' || active[i].def.key === 'LOCAL_SENSOR_LONGITUDE') {
+        continue;
+      }
+      itemsHtml += renderSensorItem(active[i]);
+    }
+
+    // Add combined location item if both lat and lon are present
+    if (hasLocation && latVal !== null && lonVal !== null) {
+      var locDisplay = formatLocation(latVal, lonVal);
+      itemsHtml += '<div class="sensor-item sensor-location"><span class="sensor-icon">\uD83D\uDCCD</span><span class="sensor-label">Location</span><span class="sensor-value">' + locDisplay + '</span></div>';
+    }
+
+    html += '<div class="sensor-items">' + itemsHtml + '</div>';
+    bar.innerHTML = html;
+    _activeSensors = active;
+  }
+
+  // === Re-insert weather-local.js with a cache-bust query param and re-render ===
+  function refreshConfig() {
+    var oldScript = document.querySelector('script[src="weather-local.js"]');
+    if (oldScript) {
+      oldScript.parentNode.removeChild(oldScript);
+    }
+
+    var newScript = document.createElement('script');
+    newScript.src = 'weather-local.js?t=' + Date.now();
+    newScript.onload = function () {
+      renderSensorBar();
+    };
+    newScript.onerror = function () {
+      console.error('[local-sensor] Failed to load weather-local.js');
+    };
+    document.head.appendChild(newScript);
+  }
+
+  // === Start the auto-refresh timer ===
+  function startAutoRefresh() {
+    var interval = 0;
+    if (typeof LOCAL_CONFIG_REFRESH_INTERVAL_SECONDS === 'number' && !isNaN(LOCAL_CONFIG_REFRESH_INTERVAL_SECONDS)) {
+      interval = LOCAL_CONFIG_REFRESH_INTERVAL_SECONDS;
+    }
+    if (interval > 0) {
+      _refreshIntervalId = setInterval(refreshConfig, interval * 1000);
+    }
+  }
+
+  // === Start the TTL check timer ===
+  function startTTLCheck() {
+    var ttl = window.LOCAL_SENSOR_TTL;
+    if (!ttl || typeof ttl !== 'string') return; // no TTL set = no need to check
+    var date = new Date(ttl);
+    if (isNaN(date.getTime())) return; // invalid timestamp
+
+    var timeUntilExpiry = date.getTime() - Date.now();
+    if (timeUntilExpiry <= 0) {
+      renderSensorBar(); // Already expired
+      return;
+    }
+
+    _ttlCheckTimer = setTimeout(function () {
+      renderSensorBar(); // TTL expired, hide bar
+    }, timeUntilExpiry);
+  }
+
+  // === Escape HTML for safe DOM insertion ===
+  function escapeHTML(str) {
+    if (typeof str !== 'string') return str;
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  // === Initialize immediately (local-sensor.js is loaded at end of body, so DOM is ready) ===
+  renderSensorBar();
+  startAutoRefresh();
+  startTTLCheck();
+
+  // === Re-render when unit toggle changes ===
+  if (typeof toggleUnit === 'function') {
+    window.addEventListener('unitChanged', function () {
+      renderSensorBar();
+    });
+  }
+
+})();
+</script>
+ <script>
 // ===== STATE =====
 let userLocation = null;
 let unit = 'F';
@@ -10561,25 +11413,23 @@ async function run() {
     loadRadarCard(userLocation.lat, userLocation.lon);
   }
 
-  // ===== PHASE 2: Fetch OM weather data for each city in parallel and update cards incrementally =====
-  const omResults = await Promise.allSettled(
-    allCities.map(city => fetchWeatherForCity(city).catch(() => null))
-  );
-  
-  weatherData = [];
-  for (let i = 0; i < allCities.length; i++) {
-    if (omResults[i].status === 'fulfilled' && omResults[i].value) {
-      weatherData.push(omResults[i].value);
-      
-      // Update this card immediately as OM data arrives (also draws charts)
-      updateCardsWithOMData([omResults[i].value]);
-    }
-  }
+   // ===== PHASE 2: Fetch OM weather data in BULK and update cards incrementally =====
+   // Use batched fetch instead of individual calls to avoid AQI API 429 errors
+   const omResults = await Promise.allSettled(
+     [fetchWeatherForCities(allCities).catch(() => null)]
+   );
+   
+   weatherData = [];
+   if (omResults[0].status === 'fulfilled' && omResults[0].value) {
+     // Update all cards at once since batch fetch returns all results together
+     updateCardsWithOMData(omResults[0].value);
+     weatherData = omResults[0].value;
+   }
 
-  // ===== PHASE 3: Check NWS bounds and fetch NWS data where available — in parallel =====
-  if (weatherData.length > 0) {
-    // Check all bounds in parallel (only for cities within US lat/lon range)
-    const boundsPromises = weatherData.map(async (city) => {
+   // ===== PHASE 3: Check NWS bounds and fetch NWS data where available — in parallel =====
+   if (weatherData.length > 0) {
+     // Check all bounds in parallel (only for cities within US lat/lon range)
+     const boundsPromises = weatherData.map(async (city) => {
       if (city.latitude != null && city.longitude != null &&
           city.latitude >= 17 && city.latitude <= 71 &&
           city.longitude >= -170 && city.longitude <= -65) {
@@ -10594,34 +11444,34 @@ async function run() {
       city.nwsBounds = nwsBounds;
     }
     
-    // Queue cities that have NWS bounds for data fetching
-    const nwsCities = weatherData.filter(c => c.nwsBounds);
+     // Queue cities that have NWS bounds for data fetching
+     const nwsCities = weatherData.filter(c => c.nwsBounds);
 
-    // Fetch NWS data for all queued cities in parallel
-    if (nwsCities.length > 0) {
-      const nwsResults = await Promise.allSettled(
-        nwsCities.map(city => fetchForCity(city.latitude, city.longitude).catch(() => null))
-      );
+     // Fetch NWS data for all queued cities in parallel (still per-city since NWS doesn't support batching)
+     if (nwsCities.length > 0) {
+       const nwsResults = await Promise.allSettled(
+         nwsCities.map(city => fetchForCity(city.latitude, city.longitude).catch(() => null))
+       );
 
-      // Store NWS data on each city object as separate from OM data, updating cards incrementally
-      for (let i = 0; i < nwsCities.length; i++) {
-        const city = nwsCities[i];
-        const result = nwsResults[i];
-        if (result.status === 'fulfilled' && result.value && result.value.current) {
-          // Convert NWS data to app format
-          const nwsAppData = nwsToAppData(city, result.value);
-          if (nwsAppData) {
-            city.nwsData = nwsAppData;
-            
-            // Update this card immediately as NWS data arrives (also draws charts)
-            updateCardsWithNWSData([city]);
-          }
-        }
-      }
-    }
+       // Store NWS data on each city object as separate from OM data, updating cards incrementally
+       for (let i = 0; i < nwsCities.length; i++) {
+         const city = nwsCities[i];
+         const result = nwsResults[i];
+         if (result.status === 'fulfilled' && result.value && result.value.current) {
+           // Convert NWS data to app format
+           const nwsAppData = nwsToAppData(city, result.value);
+           if (nwsAppData) {
+             city.nwsData = nwsAppData;
+             
+             // Update this card immediately as NWS data arrives (also draws charts)
+             updateCardsWithNWSData([city]);
+           }
+         }
+       }
+     }
+   }
+
   }
-
- }
 
 // ===== RADAR PLAYER =====
 async function loadRadarCard(lat, lon) {
