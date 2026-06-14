@@ -4,16 +4,16 @@ completely self-contained single file weather app, that uses public sources, wit
 
 ## Features
 
-- Multiple city monitoring in a responsive grid layout (configurable 0–20 cities)
+- Multiple city monitoring in a responsive grid layout (configurable up to 6 cities)
 - Dual data source architecture: Open-Meteo as base for all cities, NWS as supplemental where available (enhanced mode)
 - Weather data from Open-Meteo API (temperature, humidity, wind, precipitation, UV index, visibility, surface pressure, air quality, 24-hour hourly forecast) + NWS API (current conditions, hourly forecast, alerts)
-- Radar imagery from NOAA/NCEP GeoServer WMS — MRMS composite radar data (Base Reflectivity, Composite Reflectivity, Echo Tops, Precipitation Type) with Cache API storage, layer selector dropdown, request deduplication, and size-based cache eviction (~250MB limit)
+- Radar imagery from NOAA/NCEP GeoServer WMS — MRMS composite radar data with enhanced player (Base Reflectivity, Composite Reflectivity, Echo Tops, Precipitation Type) including timeline scrubbing, zoom-to-point, keyboard shortcuts, and Cache API storage
 - localStorage-based caching with configurable TTLs per data type (15 min for weather/AQI, 24h for geocoding/IP, 10 min for nearby cities) and LRU eviction (default: 500 entries per type)
 - Nearby city discovery via Nominatim with bearing-based diversity selection and automatic display of up to 6 nearest cities
 - °F/°C unit toggle with debouncing
 - Fullscreen toggle button (hidden by default, shown when supported)
 - Animated SVG weather icons (20+ weather types with glow, rotation, drift, shake, bob, and particle animations)
-- Canvas-based charts — merged chart (temperature area fill + precipitation bars + wind line) and combined chart (humidity fill + wind line + precipitation bars) with live min/max/avg stats
+- Canvas-based charts — merged chart (temperature area fill + precipitation bars + wind line), combined chart (humidity fill + wind line + precipitation bars) with live min/max/avg stats, and ghost NWS overlay charts
 - Automatic API retry with exponential backoff (3 retries, 1s/2s/4s) for network resilience
 - Automatic geolocation via browser Geolocation API, falling back to ipinfo.io IP-based lookup
 - Nearby city discovery via Nominatim with bearing-based diversity selection and Open-Meteo feature_code categorization (state capitals, regional capitals, nearest cities)
@@ -22,7 +22,11 @@ completely self-contained single file weather app, that uses public sources, wit
 - Debug quick-select buttons for common test locations
 - Particle canvas background animation
 - Network outage detection on initial load with comical animated error panel, progress bar, and auto-retry cycle
-- Donkey Runner minigame — a Chrome dinosaur-style endless runner with a hand-drawn donkey character, obstacles, scoring, near-miss detection, day/night cycle, particle effects, and procedural sound effects (auto-opens on network outage)
+- **Local Sensor Bar** — Real-time local weather station data display (temperature, feels-like, dewpoint, wind speed/gust/direction, humidity, pressure, GPS coordinates, UV index, visibility, rainfall, solar radiation, soil moisture) with auto-refresh and TTL expiry
+- **Enhanced Radar Player** — Timeline scrubbing (mouse/touch), zoom-to-point (scroll wheel), keyboard shortcuts (Space/play, +/-/zoom, 0/reset, arrows/frame), fullscreen mode, double-click reset, prefetch progress bar, "Load All Frames" button
+- **Ghost Chart Overlay** — When NWS data is available, parallel NWS data shown as blue-tinted ghost elements: ghost temperature, ghost weather icon, ghost details grid values, ghost hourly forecast, and ghost merged chart canvas
+- **Cross-source Data Model** — Three states: `open-meteo` (OM-only), `nws` (NWS-only), `enhanced` (OM base + NWS supplemental). Field-level merging where missing OM fields are filled from NWS cache and vice versa
+- **Donkey Runner Minigame** — Chrome dinosaur-style endless runner with extensive features: animated donkey character, backflip on rare jumps, double-jump with fart sound effect, stumble mechanic (donkey trips for 2 seconds), property damage bonus (+100 points when knocking obstacles while stumbling), near-miss detection (+50 points), snarky message system (50+ messages across 20 event types), procedural sound effects (jump, double-jump/fart, game over, milestone, near-miss, land, ceiling), day/night cycle, air-based obstacles (jet, falling rock, drone), obstacle count tracking on game over screen with SVG icons, post-game stats breakdown (run time, air time, jump stats), corner stat blocks, fullscreen mode, sound toggle with localStorage persistence
 - Zero external dependencies — pure vanilla HTML/CSS/JS
 
 ## Tech Stack
@@ -76,6 +80,8 @@ README.md                         — you are here
 weather-full.html       GENERATED — complete single-file build output with comments, including embedded favicon (318kb+)
 weather-prod.html       GENERATED — minimized/optimized production-ready single-file build output, without embedded favicon (179kb+)
 weather.html            GENERATED — complete single-file build output with comments, without embedded favicon (303kb+)
+weather-local.js        — local weather station data override file (see below)
+weather-local.js.example — example configuration for local sensor data
 css/
   base.css              18 lines — reset & base styles (body, particle-canvas)
   main.css               7 lines — entry point (imports all modular CSS)
@@ -83,23 +89,28 @@ css/
   card-components.css  436 lines — card display components (city card, hourly forecast, canvas charts)
    interactive.css      410 lines — interactive elements (SVG weather icons, network outage panel)
   donkey-runner.css    740 lines — minigame panel styling & animations
+  radar-player.css     350+ lines — radar player UI with zoom, pan, timeline, playback controls
 js/
   api-nws.js          1162 lines — NWS API client (gridpoint data, observation stations, alerts) with rate limiting and cross-source lookup
   api-openmeteo.js     314 lines — Open-Meteo weather/AQI API client with deduplication and retry logic
   api-openstreetmap.js 184 lines — Nominatim/OSM nearby city discovery
   api-radar.js         549 lines — NOAA/NCEP GeoServer WMS radar API client (MRMS composite imagery, Cache API storage, request deduplication)
   cache.js             189 lines — DataCache (localStorage caching with configurable TTLs and LRU eviction)
-  charts.js            302 lines — canvas chart rendering (merged chart, combined chart, particles)
+  charts.js            302 lines — canvas chart rendering (merged chart, combined chart, ghost NWS overlay charts, particles)
   constants.js          72 lines — shared constants (WMO codes & gradients)
-  donkey-runner.js    2581 lines — Donkey Runner minigame engine (canvas-based runner)
+  donkey-runner.js    2581 lines — Donkey Runner minigame engine (canvas-based runner with extensive features)
   icons.js             289 lines — animated SVG weather icons
-  main.js              252 lines — entry point (state + DOM init + event bindings + game toggle + run orchestration)
+  local-sensor.js      400+ lines — Local Sensor Bar for displaying local weather station data
+  main.js              252 lines — entry point (state + DOM init + event bindings + game toggle + radar player + run orchestration)
   network-monitor.js   331 lines — network outage detection, animated error panel, auto-retry
-  render.js            255 lines — DOM rendering (city cards, hourly forecast) with cross-source field mapping
-   utils.js             340 lines — utility functions (unit conversion, haversine, bearing, wind compass, day/night check, refresh, background refresh, IP-based location fallback (ipinfo.io))
+  radar-player.js      450+ lines — Radar Player engine (zoom, pan, timeline scrubbing, playback state management)
+  render.js            255 lines — DOM rendering (city cards, hourly forecast, ghost NWS overlay)
+  utils.js             340 lines — utility functions (unit conversion, haversine, bearing, wind compass, day/night check, refresh, background refresh, IP-based location fallback (ipinfo.io))
 rag-docs/
   air-quality-api.md      167 lines — documentation for the air-quality endpoint
+  alternate-weather-apis.md — list of alternative weather APIs
   geocoding-api.md        137 lines — documentation for the geocoding endpoint
+  MET_Norway-api.md       — documentation for the MET Norway API
   weather-forecast-api.md 204 lines — documentation for the weather forecast endpoint
   weather.gov-api.md     1200 lines — documentation for the NWS API endpoint
   WeatherGov-Radar-API.md 400+ lines — documentation for the Weather.gov radar endpoints (WMS, metadata)
@@ -154,16 +165,21 @@ Radar images use **Browser Cache API** (CacheStorage) instead of localStorage �
 - **Cache API key pattern:** `https://radar.hasweather.local/frame/{lat}/{lon}/{layer}/frame/{timestamp}`
 - **localStorage metadata:** `hasw_cache_radar_meta_{lat}_{lon}_{layer}` — `{ timestamps: [...], layer, lat, lon, lastUpdated }`
 - **Cache eviction:** ~250MB total limit — evicts oldest frames when exceeded
-- **Timestamp caching:** GetCapabilities response cached for 2 minutes to avoid repeated calls
 
-### Radar Card
+### Radar Player Features
 
-A standalone card displayed below the city grid, centered on the user's location. It displays live NEXRAD radar imagery from the NOAA/NCEP GeoServer WMS service (MRMS composite). Features include:
+The radar player provides an enhanced radar viewing experience with the following features:
 
-- **Layer Selector**: Dropdown to switch between Base Reflectivity, Composite Reflectivity, Echo Tops, and Precipitation Type layers
-- **Request Deduplication**: Prevents duplicate WMS fetches for the same location/layer/timestamp via Map-based pending fetch tracking
-- **Exponential Backoff Retry**: 3 retries with 1s/2s/4s delays for failed WMS requests
-- **Size-Based Cache Eviction**: ~250MB total limit — evicts oldest frames when limit is exceeded
+- **Timeline Scrubbing** — Click or drag on the progress bar to scrub through time. Touch support included for mobile devices.
+- **Zoom-to-Point** — Scroll wheel zooms toward cursor position for precise location focus. Double-click resets the view.
+- **Keyboard Shortcuts** — Space (play/pause), +/- (zoom in/out), 0 (reset view), arrow keys (pan to adjacent frame).
+- **Fullscreen Mode** — Toggle fullscreen view for immersive radar viewing.
+- **Layer Selector** — Dropdown to switch between Base Reflectivity, Composite Reflectivity, Echo Tops, and Precipitation Type layers.
+- **Request Deduplication** — Prevents duplicate WMS fetches for the same location/layer/timestamp via Map-based pending fetch tracking.
+- **Exponential Backoff Retry** — 3 retries with 1s/2s/4s delays for failed WMS requests.
+- **Size-Based Cache Eviction** — ~250MB total limit — evicts oldest frames when limit is exceeded.
+- **Prefetch Progress Bar** — Shows progress of frame pre-fetching on load.
+- **Load All Frames Button** — Manually load all remaining uncached frames.
 
 Additional `localStorage` keys used by the app:
 
@@ -174,6 +190,59 @@ Additional `localStorage` keys used by the app:
 | `hasw_cache_radar_meta_*` | Radar frame timestamps per location/layer |
 
 Clear all cached data via browser dev tools → Application → Local Storage → remove keys starting with `hasw_cache_`, `hasw_lru_`, or `hasW_`. For radar cache, also clear Cache Storage entries in the `hasw-radar-v1` cache.
+
+## Local Sensor Bar
+
+The Local Sensor Bar displays real-time data from a local weather station. To configure it:
+
+1. Copy `weather-local.js.example` to `weather-local.js`
+2. Edit the values in `weather-local.js` to match your station's readings
+3. Set `LOCAL_CONFIG_REFRESH_INTERVAL_SECONDS` to your desired auto-refresh interval (0 = disabled)
+4. Optionally set `LOCAL_SENSOR_TTL` to an ISO 8601 timestamp — the bar hides when data expires
+
+### Supported Sensors
+
+| Variable | Description | Default Unit |
+|----------|-------------|--------------|
+| `LOCAL_SENSOR_TEMPERATURE` | Current temperature | °F (or "22.5C" for Celsius) |
+| `LOCAL_SENSOR_FEELSLIKE` | Feels-like temperature | °F |
+| `LOCAL_SENSOR_DEWPOINT` | Dew point temperature | °F |
+| `LOCAL_SENSOR_WIND_SPEED` | Wind speed | mph (or "19km/h") |
+| `LOCAL_SENSOR_WIND_GUST` | Wind gust | mph |
+| `LOCAL_SENSOR_WIND_DIRECTION_DEGREES` | Wind direction (0=N, 90=E, etc.) | degrees |
+| `LOCAL_SENSOR_HUMIDITY_PERCENT` | Relative humidity | % |
+| `LOCAL_SENSOR_PRESSURE` | Atmospheric pressure | inHg (or "1017hPa") |
+| `LOCAL_SENSOR_LATITUDE` | GPS latitude | degrees |
+| `LOCAL_SENSOR_LONGITUDE` | GPS longitude | degrees |
+| `LOCAL_SENSOR_UV_INDEX` | UV Index | index |
+| `LOCAL_SENSOR_VISIBILITY` | Visibility distance | mi (or "16km") |
+| `LOCAL_SENSOR_RAINFALL` | Rainfall amount | in (or "4mm") |
+| `LOCAL_SENSOR_SOLARRADIATION` | Solar radiation | W/m² |
+| `LOCAL_SENSOR_SOIL_MOISTURE_PERCENT` | Soil moisture | % |
+
+Set any value to `null` to hide that sensor from the UI. The bar auto-converts units based on your current °F/°C setting.
+
+## Donkey Runner Minigame
+
+A Chrome dinosaur-style endless runner triggered by network outage or the 🫏 button in the header. Features include:
+
+- **Animated donkey character** — Procedurally drawn with walking animation, backflip on rare jumps, and stumble wobble
+- **Double-jump** — Jump again mid-air for a second jump (with fart sound effect)
+- **Stumble mechanic** — Donkey trips every 30-60 seconds, can't jump during stumble but can knock obstacles aside
+- **Property damage bonus** — +100 points when knocking obstacles while stumbling
+- **Near-miss detection** — +50 points for narrowly dodging tall obstacles
+- **Snarky message system** — 50+ messages across 20 event types (start, jump, double-jump, land, near-miss, property damage, game over, high score, etc.)
+- **Procedural sound effects** — Jump, double-jump/fart, game over, milestone, near-miss, land, ceiling impact sounds
+- **Score milestones** — Flash animation at 1000-point intervals
+- **Day/night cycle** — 60-second cycle affecting background colors and star visibility
+- **Air-based obstacles** — Flying jets (mid-air height), falling rocks (with warning), hovering drones (wave pattern)
+- **Obstacle count tracking** — Game over screen shows counts for each obstacle type with SVG icons
+- **Post-game stats breakdown** — Run time, air time, air percentage, total jumps, double jumps, ignored jumps, max speed, distance, near misses, property damage count
+- **Corner stat blocks** — Compact stat displays positioned at card corners during game over
+- **Fullscreen mode** — Toggle fullscreen view for immersive gameplay
+- **Sound toggle** — Enable/disable sound effects (persisted in localStorage)
+- **Speed lines** — Visual speed indicator at high speeds
+- **Particle effects** — Jump, landing, knock, ceiling impact, and double-jump particles
 
 ## License
 
