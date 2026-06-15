@@ -973,7 +973,23 @@ body {
 /* Transition animation when OM data arrives - fade in weather content */
 .city-card.transitioning-to-full {
   transition: opacity 0.3s ease, background 1s ease;
-}/* ===== INTERACTIVE - Interactive elements and visual effects ===== */
+}
+
+/* Error boundary for failed card rendering — prevents silent failures from breaking the entire grid */
+.city-card-error {
+  padding: 1.5rem;
+  text-align: center;
+  background: rgba(255, 0, 0, 0.1);
+  border: 1px solid rgba(255, 0, 0, 0.3);
+  border-radius: 8px;
+}
+
+.error-message {
+  color: #ff6b6b;
+  font-size: 0.9rem;
+  font-weight: bold;
+}
+/* ===== INTERACTIVE - Interactive elements and visual effects ===== */
 
 /* ===== SVG WEATHER ICONS - LOUD & ANIMATED ===== */
 .weather-svg {
@@ -2908,7 +2924,7 @@ const _nwsRateLimiter = {
     return new Promise(resolve => {
       const check = () => {
         if (this._checkBurst()) resolve();
-        else setTimeout(check, RATE_LIMITER_POLL_INTERVAL_MS);
+        else setTimeout(check, 50); // 50ms poll interval for burst window checking
       };
       check();
     });
@@ -3124,7 +3140,7 @@ const DataCache = {
         localStorage.removeItem(`hasw_cache_${key}`);
         return null;
       }
-      console.log(`[DataCache] HIT: ${key} (type: ${type}, age: ${Math.round((Date.now() - entry.timestamp) / 1000)}s)`);
+      // console.log(`[DataCache] HIT: ${key} (type: ${type}, age: ${Math.round((Date.now() - entry.timestamp) / 1000)}s)`);
       this._touchLru(type, key);
       return entry.data;
     } catch (e) {
@@ -3137,7 +3153,7 @@ const DataCache = {
   set(key, data, type) {
     try {
       const size = new Blob([JSON.stringify({ timestamp: Date.now(), type: type, data: data })]).size;
-      console.log(`[DataCache] SET: ${key} (type: ${type}, size: ${Math.round(size / 100)} / 100B)`);
+      // console.log(`[DataCache] SET: ${key} (type: ${type}, size: ${Math.round(size / 100)} / 100B)`);
       localStorage.setItem(`hasw_cache_${key}`, JSON.stringify({
         timestamp: Date.now(),
         type: type,
@@ -3154,6 +3170,23 @@ const DataCache = {
   invalidate(key) {
     console.log(`[DataCache] INVALIDATE: ${key}`);
     localStorage.removeItem(`hasw_cache_${key}`);
+  },
+
+  // Get remaining TTL in milliseconds for a cache entry (0 if expired/missing)
+  getRemainingTTL(key, type) {
+    try {
+      const raw = localStorage.getItem(`hasw_cache_${key}`);
+      if (!raw) return 0;
+      const entry = JSON.parse(raw);
+      if (type != null && entry.type !== type) return 0;
+      const ttlKey = type ?? entry.type;
+      const ttl = this.TTL[ttlKey];
+      if (ttl == null) return 0;
+      const remaining = ttl - (Date.now() - entry.timestamp);
+      return remaining > 0 ? remaining : 0;
+    } catch {
+      return 0;
+    }
   },
 
 };
@@ -3263,6 +3296,24 @@ async function getLocation() {
 // — NWS Bounds Check —
 const _nwsBoundsCache = {};
 const NWS_BOUNDS_CACHE_TTL_MS = 60 * 60 * 1000;
+let _nwsBoundsCacheCleanupTimer = null;
+
+// Periodically clean up expired entries from _nwsBoundsCache to prevent unbounded memory growth
+function scheduleNwsBoundsCacheCleanup() {
+  if (_nwsBoundsCacheCleanupTimer) return; // Already scheduled
+  _nwsBoundsCacheCleanupTimer = setTimeout(() => {
+    const now = Date.now();
+    const expiredKeys = Object.keys(_nwsBoundsCache).filter(key => {
+      const entry = _nwsBoundsCache[key];
+      if (typeof entry !== 'object' || !('expiresAt' in entry)) return false;
+      return now >= entry.expiresAt;
+    });
+    for (const key of expiredKeys) delete _nwsBoundsCache[key];
+    _nwsBoundsCacheCleanupTimer = null;
+    // Schedule next cleanup in 5 minutes
+    scheduleNwsBoundsCacheCleanup();
+  }, 5 * 60 * 1000);
+}
 
 async function isNwsBoundsAvailable(lat, lon) {
   const key = `${DataCache._roundCoord(lat)},${DataCache._roundCoord(lon)}`;
@@ -3290,51 +3341,86 @@ async function isNwsBoundsAvailable(lat, lon) {
   return result;
 }
 
+// — Per-City Incremental Fetch (for background refresh) —
+// Fetches weather + AQI data for a single city using the full pipeline (NWS first if available, then OM).
+// Uses the same fetch logic as the main run() but scoped to one city.
+async function fetchCityData(lat, lon) {
+  // Determine if NWS is available and active for this location
+  const nwsActive = await isNwsBoundsAvailable(lat, lon);
+
+  if (nwsActive && unit === 'F') {
+    // Try NWS first
+    const nwsData = await fetchForCity(lat, lon);
+    if (nwsData) {
+      const city = { latitude: lat, longitude: lon };
+      const appData = nwsToAppData(city, nwsData);
+      if (appData) {
+        // Store in consolidated cache key
+        DataCache.set(weatherAqiCacheKey(lat, lon), { weather: appData }, 'weatherAqi');
+        // Also store in legacy weather key for backward compat
+        DataCache.set(weatherCacheKey(lat, lon), appData, 'weather');
+        // Still fetch AQI
+        const aqi = await fetchAirQuality(lat, lon);
+        if (aqi) {
+          DataCache.set(aqiCacheKey(lat, lon), { aqi: aqi }, 'airQuality');
+        }
+        return;
+      }
+    }
+  }
+
+  // Fallback to Open-Meteo
+  const omWeather = await fetchOmWeather(lat, lon);
+  if (omWeather) {
+    DataCache.set(weatherAqiCacheKey(lat,lon), { weather: omWeather }, 'weatherAqi');
+    DataCache.set(weatherCacheKey(lat, lon), omWeather, 'weather');
+  }
+
+  // Fetch AQI separately
+  const aqi = await fetchAirQuality(lat, lon);
+  if (aqi) {
+    DataCache.set(aqiCacheKey(lat, lon), { aqi: aqi }, 'airQuality');
+  }
+}
+
 // — Background Refresh —
 let _bgRefreshTimer = null;
 
+// Cache for getCityShortestTTL results — avoids re-parsing localStorage on every background refresh
+let _shortestTTLCache = null;
+const SHORTEST_TTL_CACHE_KEY = 'hasw_shortest_ttl_cache';
+const SHORTEST_TTL_CACHE_TTL_MS = 5 * 60 * 1000; // 5 min cache
+
 function getCityShortestTTL(city) {
-  let shortest = Infinity;
   const lat = city.latitude;
   const lon = city.longitude;
+  const cacheKey = `${lat}_${lon}`;
 
-  const consolidatedKey = weatherAqiCacheKey(lat, lon);
-  const consolidatedEntry = localStorage.getItem(`hasw_cache_${consolidatedKey}`);
-  if (consolidatedEntry) {
-    const entry = JSON.parse(consolidatedEntry);
-    const ttl = DataCache.TTL[entry.type] || DataCache.TTL.weather;
-    const remaining = ttl - (Date.now() - entry.timestamp);
-    if (remaining < shortest) shortest = remaining;
+  // Return cached result if valid
+  if (_shortestTTLCache && _shortestTTLCache.key === cacheKey && Date.now() < _shortestTTLCache.expiresAt) {
+    return _shortestTTLCache.ttl;
   }
 
-  const weatherKey = weatherCacheKey(lat, lon);
-  const weatherEntry = localStorage.getItem(`hasw_cache_${weatherKey}`);
-  if (weatherEntry && !consolidatedEntry) {
-    const entry = JSON.parse(weatherEntry);
-    const ttl = DataCache.TTL[entry.type] || DataCache.TTL.weather;
-    const remaining = ttl - (Date.now() - entry.timestamp);
-    if (remaining < shortest) shortest = remaining;
-  }
+  let shortest = Infinity;
 
-  const aqiKey = aqiCacheKey(lat, lon);
-  const airEntry = localStorage.getItem(`hasw_cache_${aqiKey}`);
-  if (airEntry && !consolidatedEntry) {
-    const entry = JSON.parse(airEntry);
-    const ttl = DataCache.TTL[entry.type] || DataCache.TTL.airQuality;
-    const remaining = ttl - (Date.now() - entry.timestamp);
-    if (remaining < shortest) shortest = remaining;
-  }
+  // Use DataCache.getRemainingTTL which returns remaining TTL in ms (or 0 if expired/missing)
+  const consolidatedTTL = DataCache.getRemainingTTL(weatherAqiCacheKey(lat, lon), 'weatherAqi');
+  if (consolidatedTTL > 0 && consolidatedTTL < shortest) shortest = consolidatedTTL;
 
-  const nwsPointKey = nwsPointCacheKey(lat, lon);
-  const nwsEntry = localStorage.getItem(`hasw_cache_${nwsPointKey}`);
-  if (nwsEntry) {
-    const entry = JSON.parse(nwsEntry);
-    const ttl = DataCache.TTL[entry.type] || DataCache.TTL.nwsPoint;
-    const remaining = ttl - (Date.now() - entry.timestamp);
-    if (remaining < shortest) shortest = remaining;
-  }
+  const weatherTTL = DataCache.getRemainingTTL(weatherCacheKey(lat, lon), 'weather');
+  if (weatherTTL > 0 && !consolidatedTTL && weatherTTL < shortest) shortest = weatherTTL;
 
-  return shortest === Infinity ? MIN_BACKGROUND_REFRESH_MS : shortest;
+  const aqiTTL = DataCache.getRemainingTTL(aqiCacheKey(lat, lon), 'airQuality');
+  if (aqiTTL > 0 && !consolidatedTTL && aqiTTL < shortest) shortest = aqiTTL;
+
+  const nwsPointTTL = DataCache.getRemainingTTL(nwsPointCacheKey(lat, lon), 'nwsPoint');
+  if (nwsPointTTL > 0 && nwsPointTTL < shortest) shortest = nwsPointTTL;
+
+  // Cache result for 5 minutes to avoid repeated localStorage reads
+  const result = shortest === Infinity ? MIN_BACKGROUND_REFRESH_MS : shortest;
+  _shortestTTLCache = { key: cacheKey, ttl: result, expiresAt: Date.now() + SHORTEST_TTL_CACHE_TTL_MS };
+
+  return result;
 }
 
 function startBackgroundRefresh() {
@@ -3353,13 +3439,51 @@ function startBackgroundRefresh() {
   _bgRefreshTimer = setInterval(() => {
     if (isLoading || !userLocation || weatherData.length === 0) return;
 
+    // Per-city incremental fetch: only re-fetch data for cities whose TTL has expired
+    const citiesToFetch = [];
     for (const city of weatherData) {
-      DataCache.invalidate(weatherAqiCacheKey(city.latitude, city.longitude));
-      DataCache.invalidate(weatherCacheKey(city.latitude, city.longitude));
-      DataCache.invalidate(aqiCacheKey(city.latitude, city.longitude));
+      const lat = city.latitude;
+      const lon = city.longitude;
+      const consolidatedTTL = DataCache.getRemainingTTL(weatherAqiCacheKey(lat, lon), 'weatherAqi');
+      const weatherTTL = DataCache.getRemainingTTL(weatherCacheKey(lat, lon), 'weather');
+      const aqiTTL = DataCache.getRemainingTTL(aqiCacheKey(lat, lon), 'airQuality');
+
+      // Fetch if any cache type is expired or missing
+      if (consolidatedTTL <= 0 && weatherTTL <= 0) {
+        citiesToFetch.push({ city, source: 'weatherAqi' });
+      } else if (consolidatedTTL > 0 && weatherTTL <= 0) {
+        // Weather cache expired but consolidated is still valid — no fetch needed
+        continue;
+      } else if (weatherTTL > 0 && aqiTTL <= 0) {
+        citiesToFetch.push({ city, source: 'airQuality' });
+      } else if (weatherTTL > 0 && consolidatedTTL > 0) {
+        // Both still valid — no fetch needed
+        continue;
+      } else {
+        // Weather cache expired but consolidated is also expired — fetch weatherAqi
+        citiesToFetch.push({ city, source: 'weatherAqi' });
+      }
     }
 
-    run();
+    if (citiesToFetch.length > 0) {
+      isLoading = true;
+      Promise.allSettled(citiesToFetch.map(({ city, source }) => {
+        return fetchCityData(city.latitude, city.longitude).then(() => {
+          // Update the weatherData entry with new data
+          const idx = weatherData.findIndex(c => c.place_id === city.place_id);
+          if (idx !== -1) {
+            const newWeather = DataCache.get(weatherAqiCacheKey(city.latitude, city.longitude), 'weatherAqi')
+              || DataCache.get(weatherCacheKey(city.latitude, city.longitude), 'weather');
+            if (newWeather && newWeather.weather) {
+              weatherData[idx].weather = newWeather.weather;
+              renderCityCard(weatherData[idx]);
+            }
+          }
+        }).catch(() => {}); // Ignore errors for individual cities — don't block others
+      })).finally(() => {
+        isLoading = false;
+      });
+    }
   }, interval);
 }
 
@@ -4127,6 +4251,25 @@ async function fetchWeatherForCities(cities) {
 // ===== ENDPOINT =====
 const NOMINATIM = 'https://nominatim.openstreetmap.org/search';
 
+// ===== NEARBY CACHES (module-scoped to avoid global namespace pollution) =====
+let _nearbyCache = null;
+let _nearbyCacheTime = 0;
+
+// ===== NOMINATIM RATE LIMITER =====
+const _nominatimRateLimiter = {
+  lastRequestTime: 0,
+  minIntervalMs: 1000, // Nominatim requires minimum 1 second between requests
+
+  async waitForSlot() {
+    const now = Date.now();
+    const timeSinceLast = now - this.lastRequestTime;
+    if (timeSinceLast < this.minIntervalMs) {
+      await new Promise(r => setTimeout(r, this.minIntervalMs - timeSinceLast));
+    }
+    this.lastRequestTime = Date.now();
+  },
+};
+
 // ===== NOMINATIM CONSTANTS =====
 const NOMINATIM_CLOSE_RADIUS = 0.45;
 const NOMINATIM_WIDE_RADIUS = 1.0;
@@ -4141,6 +4284,9 @@ const BEARING_WRAP_AROUND = 180;
 // ===== DEDUPLICATION =====
 const DEDUP_COORD_TOLERANCE = 0.01;
 const BOUNDARY_RANK_THRESHOLD = 4;
+
+// ===== NOMINATIM USER AGENT (required by ToS) =====
+const NOMINATIM_USER_AGENT = 'hasWeather/1.0 (https://github.com/Yonneh0/hasWeather)';
 
 function scaleViewbox(lat, lon, radiusDeg) {
   const south = (lat - radiusDeg).toFixed(4);
@@ -4172,7 +4318,9 @@ async function findNearbyCities(lat, lon) {
 
   let results;
   try {
-    const resp = await fetch(url);
+    // Respect Nominatim rate limit (1 req/sec) and required User-Agent header
+    await _nominatimRateLimiter.waitForSlot();
+    const resp = await fetch(url, { headers: { 'User-Agent': NOMINATIM_USER_AGENT } });
     if (!resp.ok) throw new Error(`Nominatim ${resp.status}`);
     results = await resp.json();
   } catch {
@@ -4196,10 +4344,12 @@ async function findNearbyCities(lat, lon) {
   if (results.length < _maxCities) {
     viewbox = scaleViewbox(lat, lon, NOMINATIM_WIDE_RADIUS);
     url = `${NOMINATIM}?q=city&format=jsonv2&viewbox=${viewbox}&bounded=1&limit=${NOMINATIM_WIDE_LIMIT}&addressdetails=1`;
-    try {
-      const resp = await fetch(url);
-      if (resp.ok) {
-        const extra = await resp.json();
+      try {
+        // Respect Nominatim rate limit before second query
+        await _nominatimRateLimiter.waitForSlot();
+        const resp = await fetch(url, { headers: { 'User-Agent': NOMINATIM_USER_AGENT } });
+        if (resp.ok) {
+          const extra = await resp.json();
         const existingIds = new Set(results.map(r => r.place_id));
         const existingNames = new Set(results.map(r => (r.name || '').toLowerCase().trim()));
         extra.forEach(r => {
@@ -4373,12 +4523,7 @@ function nwsForecastToWmo(shortForecast) {
   // Snow grains
   if (/snow grains|snow pellets/.test(text)) return 77;
 
-  // Showers
-  if (/shower/.test(text)) {
-    if (/heavy|violent|intense/.test(text)) return 82;
-    if (/moderate/.test(text)) return 81;
-    return 80;
-  }
+  // Showers (handled in weather array below)
 
   // Thunderstorm
   if (/thunderstorm|thunder/.test(text)) return 95;
@@ -4391,23 +4536,32 @@ function nwsForecastToWmo(shortForecast) {
 function nwsWeatherToWmo(weatherArray) {
   if (!weatherArray || !Array.isArray(weatherArray) || weatherArray.length === 0) return 0;
 
-  // Find the most severe weather event
+  // Find the most severe weather event — NWS icon URLs use underscores (e.g., heavy_rain, not heavy rain)
   const priority = [
     'tornado', 'severe thunderstorm', 'severe thunderstorms', 'tstm',
     'thunderstorm', 'thunder', 'hail',
-    'heavy rain', 'rain', 'heavy showers', 'showers',
+    'heavy rain', 'rain', 'shower-rain', 'shower',
     'freezing rain', 'freezing drizzle',
-    'snow', 'heavy snow', 'snow showers',
+    'snow', 'heavy snow', 'snow showers', 'snow-showers',
     'drizzle',
     'fog', 'mist', 'haze',
   ];
 
   for (const condition of priority) {
     if (condition.includes(' ')) {
-      // Multi-word condition
+      // Multi-word condition — check with underscores and spaces
+      const underscoreCond = condition.replace(/ /g, '_');
       for (const item of weatherArray) {
         const icon = (item.icon || '').toLowerCase();
-        if (icon.includes(condition.toLowerCase())) {
+        if (icon.includes(condition.toLowerCase()) || icon.includes(underscoreCond)) {
+          return nwsForecastToWmo(condition);
+        }
+      }
+    } else {
+      // Single-word condition — check for exact word match in icon URL
+      for (const item of weatherArray) {
+        const icon = (item.icon || '').toLowerCase();
+        if (icon.includes(condition)) {
           return nwsForecastToWmo(condition);
         }
       }
@@ -4605,50 +4759,50 @@ async function fetchCurrentConditions(wfo, x, y) {
   const hazardsValues = props.hazards?.values;
   const hazards = hazardsValues && hazardsValues.length > 0 ? findCurrentNwsValue(hazardsValues, now)?.value ?? [] : [];
 
-  // PoP has a different structure - find the closest value
+  // PoP/QPE/ice/snow have different structure - allow stale fallback for these non-critical fields
   const popValues = props.probabilityOfPrecipitation?.values;
   let pop = null;
   if (popValues && popValues.length > 0) {
-    const foundPop = findCurrentNwsValue(popValues, now);
+    const foundPop = findCurrentNwsValue(popValues, now, true); // allow stale fallback
     pop = foundPop?.value ?? null;
   }
 
-  // QPE has a different structure - find the closest value
+  // QPE - allow stale fallback
   const qpeValues = props.quantitativePrecipitation?.values;
   let qpe = null;
   let qpeUnit = null;
   if (qpeValues && qpeValues.length > 0) {
-    const foundQpe = findCurrentNwsValue(qpeValues, now);
+    const foundQpe = findCurrentNwsValue(qpeValues, now, true); // allow stale fallback
     qpe = foundQpe?.value ?? null;
     qpeUnit = props.quantitativePrecipitation?.uom ?? 'wmoUnit:mm';
   }
 
-  // Ice accumulation - find the closest value
+  // Ice accumulation - allow stale fallback
   const iceValues = props.iceAccumulation?.values;
   let ice = null;
   let iceUnit = null;
   if (iceValues && iceValues.length > 0) {
-    const foundIce = findCurrentNwsValue(iceValues, now);
+    const foundIce = findCurrentNwsValue(iceValues, now, true); // allow stale fallback
     ice = foundIce?.value ?? null;
     iceUnit = props.iceAccumulation?.uom ?? 'wmoUnit:mm';
   }
 
-  // Snowfall - find the closest value
+  // Snowfall - allow stale fallback
   const snowValues = props.snowfallAmount?.values;
   let snow = null;
   let snowUnit = null;
   if (snowValues && snowValues.length > 0) {
-    const foundSnow = findCurrentNwsValue(snowValues, now);
+    const foundSnow = findCurrentNwsValue(snowValues, now, true); // allow stale fallback
     snow = foundSnow?.value ?? null;
     snowUnit = props.snowfallAmount?.uom ?? 'wmoUnit:mm';
   }
 
-  // Sky cover - find the closest value
+  // Sky cover - allow stale fallback
   const skyCoverValues = props.skyCover?.values;
   let skyCover = null;
   let skyCoverUnit = null;
   if (skyCoverValues && skyCoverValues.length > 0) {
-    const foundSky = findCurrentNwsValue(skyCoverValues, now);
+    const foundSky = findCurrentNwsValue(skyCoverValues, now, true); // allow stale fallback
     skyCover = foundSky?.value ?? null;
     skyCoverUnit = props.skyCover?.uom ?? 'wmoUnit:percent';
   }
@@ -4927,19 +5081,23 @@ function parseNwsValidTime(vt) {
   const durationStr = vt.substring(slashIdx + 1);
   const start = new Date(startStr).getTime();
 
-  // Parse duration like PT2H, PT1H, P1DT6H etc.
+  // Parse duration like PT2H, PT1H, P1DT6H etc. (also supports seconds)
   let durationMs = 0;
-  const dMatch = durationStr.match(/P(?:(\d+)D)?(?:(\d+)H)?(?:(\d+)M)?/);
+  const dMatch = durationStr.match(/P(?:(\d+)D)?(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
   if (dMatch) {
     if (dMatch[1]) durationMs += parseInt(dMatch[1]) * MS_PER_DAY;
     if (dMatch[2]) durationMs += parseInt(dMatch[2]) * MS_PER_HOUR;
     if (dMatch[3]) durationMs += parseInt(dMatch[3]) * MS_PER_MINUTE;
+    if (dMatch[4]) durationMs += parseInt(dMatch[4]) * 1000; // seconds
   }
   return { start, end: start + durationMs };
 }
 
-// Find the value whose validTime covers the current time
-function findCurrentNwsValue(values, now) {
+// Find the value whose validTime covers the current time.
+// If `allowFallback` is true, stale data (closest non-overlapping range) is returned as fallback.
+// If false, returns null when no range contains the current time — critical fields like temperature
+// should use this to avoid displaying stale data.
+function findCurrentNwsValue(values, now, allowFallback = false) {
   if (!values || !Array.isArray(values) || values.length === 0) return null;
   const nowMs = now.getTime();
   let best = null;
@@ -4951,14 +5109,20 @@ function findCurrentNwsValue(values, now) {
     if (nowMs >= range.start && nowMs < range.end) {
       return v;
     }
-    // If not within range, find the closest one
+    // If not within range, find the closest one — but only use it as fallback
+    // for non-critical fields (PoP, precipitation). For critical fields like temperature,
+    // prefer null over stale data.
     const diff = Math.min(Math.abs(nowMs - range.start), Math.abs(nowMs - range.end));
     if (diff < bestDiff) {
       bestDiff = diff;
       best = v;
     }
   }
-  return best;
+  // Only return stale fallback for non-critical fields
+  if (allowFallback) {
+    return best;
+  }
+  return null;
 }
 
 // Convert Celsius to Fahrenheit for observation station data
@@ -5083,9 +5247,10 @@ function nwsToAppData(city, nwsData) {
   // Build hourly forecast array (NWS hourly is already sorted)
   const hourlyTimes = hourly.map(p => p.startTime);
   // NWS hourly with units=us returns Fahrenheit — convert to Celsius for storage
+  // Formula: °C = (°F - 32) × 5/9 (use the inverse of CELSIUS_TO_FAHRENHEIT_FACTOR)
   const hourlyTemps = hourly.map(p => {
     const f = p.temperature;
-    return f != null ? (f - CELSIUS_TO_FAHRENHEIT_OFFSET) * CELSIUS_TO_FAHRENHEIT_FACTOR : null;
+    return f != null ? (f - CELSIUS_TO_FAHRENHEIT_OFFSET) * (CELSIUS_TO_FAHRENHEIT_FACTOR ** -1) : null;
   });
   const hourlyHumidity = hourly.map(p => p.relativeHumidity);
   // Parse windSpeed strings ("2 mph", "10 mph") and convert mph → km/h
@@ -5160,6 +5325,352 @@ const RADAR_FAKE_BASE = 'https://radar.hasweather.local/';
 const RADAR_FRAME_PREFIX = `${RADAR_FAKE_BASE}frame/`;
 const RADAR_FRAMES_KEY = 'frames';
 const RADAR_MAX_CACHE_BYTES = 250 * 1024 * 1024;
+
+// ===== TILE CONSTANTS =====
+const RADAR_TILE_SIZE = 512; // Same as WMS tile size in pixels
+const RADAR_TILE_PREFIX = `${RADAR_FAKE_BASE}tile/`;
+const RADAR_MAX_TILES_PER_VIEW = 25; // Max tiles to render at once (5x5 grid)
+const RADAR_TILE_CACHE_BYTES = 200 * 1024 * 1024; // 200MB max tile cache
+
+// ===== TILE GRID CALCULATION =====
+// Calculate the tile center from its grid position (Web Mercator projection)
+function tileToLonX(tileX, zoom) {
+  const n = Math.pow(2, zoom);
+  return (tileX / n) * 360 - 180;
+}
+
+function tileToLatY(tileY, zoom) {
+  const n = Math.pow(2, zoom);
+  const y = 1 - (tileY + 0.5) / n;
+  const latRad = Math.atan(Math.sinh(Math.PI * y));
+  return (latRad * 180) / Math.PI;
+}
+
+// Calculate tile grid position from lat/lon at a given zoom level
+function lonLatToTileX(lat, lon, zoom) {
+  const n = Math.pow(2, zoom);
+  const x = (lon + 180) / 360;
+  return Math.floor(x * n);
+}
+
+function lonLatToTileY(lat, lon, zoom) {
+  const n = Math.pow(2, zoom);
+  const latRad = (lat * Math.PI) / 180;
+  const y = (1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2;
+  return Math.floor(y * n);
+}
+
+// Get the tile grid position that contains the given lat/lon center point at a given zoom level
+function getTileGridPosition(lat, lon, zoom) {
+  return { x: lonLatToTileX(lat, lon, zoom), y: lonLatToTileY(lat, lon, zoom) };
+}
+
+// ===== TILE CACHE KEY GENERATION =====
+function radarTileCacheKey(lat, lon, zoomLevel, layer, timestamp) {
+  const tile = getTileGridPosition(lat, lon, zoomLevel);
+  // Include zoom level directly in the key for easy cache eviction: /tile/{zoom}/{x}/{y}/{layer}/tile/{timestamp}
+  return `${RADAR_TILE_PREFIX}${zoomLevel}/${tile.x}/${tile.y}/${layer}/tile/${timestamp}`;
+}
+
+function radarTilesCacheKey(lat, lon, zoomLevel, layer) {
+  const tile = getTileGridPosition(lat, lon, zoomLevel);
+  // Include zoom level directly in the key for easy cache eviction: /tile/{zoom}/{x}/{y}/{layer}/frames
+  return `${RADAR_FAKE_BASE}${zoomLevel}/${tile.x}/${tile.y}/${layer}/${RADAR_FRAMES_KEY}`;
+}
+
+// ===== TILE WMS URL BUILDER =====
+// Accepts pyramidLevel directly for consistency with tile cache keys.
+// pyramidLevel = zoomLevel + 1 in the display system (zoom 0 -> level 1).
+function buildRadarTileUrl(lat, lon, pyramidLevel, layer, timestamp) {
+  const n = Math.pow(2, pyramidLevel);
+  
+  // Use the standard lonLatToTile* functions for consistency with all other tile grid operations
+  const tileX = lonLatToTileX(lat, lon, pyramidLevel);
+  const tileY = lonLatToTileY(lat, lon, pyramidLevel);
+  
+  // Convert tile corners to lon/lat at this pyramid level
+  const lonLeft = (tileX / n) * 360 - 180;
+  const lonRight = ((tileX + 1) / n) * 360 - 180;
+  const latTop = tileToLatY(tileY, pyramidLevel);
+  const latBottom = tileToLatY(tileY + 1, pyramidLevel);
+  
+  // Convert lon/lat to Mercator X/Y
+  const minX = lonToX(lonLeft);
+  const maxX = lonToX(lonRight);
+  const minY = latToY(latBottom); // Y increases downward in tile coordinates (top to bottom)
+  const maxY = latToY(latTop);
+  
+  const bbox = [minX, minY, maxX, maxY];
+  const timeStr = timestamp ? new Date(timestamp).toISOString().replace(/\.\d+Z$/, 'Z') : '';
+
+  return `${RADAR_WMS_BASE}${layer}/wms?` +
+    `SERVICE=WMS&REQUEST=GetMap&VERSION=1.1.1&FORMAT=image/png` +
+    `&LAYERS=${encodeURIComponent(layer)}` +
+    `&TIME=${encodeURIComponent(timeStr)}` +
+    `&WIDTH=${RADAR_TILE_SIZE}&HEIGHT=${RADAR_TILE_SIZE}` +
+    `&SRS=EPSG:3857&BBOX=${bbox.join(',')}`;
+}
+
+// ===== TILE CACHE FUNCTIONS =====
+// Cache a tile as base64 data URL
+async function cacheRadarTile(lat, lon, zoomLevel, layer, timestamp, arrayBuffer) {
+  try {
+    const cache = await getCache();
+    const key = radarTileCacheKey(lat, lon, zoomLevel, layer, timestamp);
+    const response = new Response(new Blob([arrayBuffer], { type: 'image/png' }));
+    await cache.put(key, response);
+  } catch (e) {
+    console.warn('[Radar] Failed to cache tile:', e);
+  }
+}
+
+// Get cached radar tile as ArrayBuffer (returns null if not found)
+async function getCachedRadarTile(lat, lon, zoomLevel, layer, timestamp) {
+  try {
+    const cache = await getCache();
+    const key = radarTileCacheKey(lat, lon, zoomLevel, layer, timestamp);
+    const response = await cache.match(key);
+    if (!response) return null;
+    return new Uint8Array(await response.arrayBuffer());
+  } catch {
+    return null;
+  }
+}
+
+// Get cached radar tile as base64 data URL (returns null if not found)
+async function getCachedRadarTileAsDataURL(lat, lon, zoomLevel, layer, timestamp) {
+  const arrayBuffer = await getCachedRadarTile(lat, lon, zoomLevel, layer, timestamp);
+  return arrayBuffer ? arrayBufferToBase64DataURL(arrayBuffer) : null;
+}
+
+// Fetch a single tile (returns data URL or null on error)
+async function fetchRadarTileForPosition(lat, lon, zoomLevel, layer, timestamp) {
+  // Check cache first
+  const cachedDataURL = await getCachedRadarTileAsDataURL(lat, lon, zoomLevel, layer, timestamp);
+  if (cachedDataURL) {
+    return { imageUrl: cachedDataURL, timestamp, cached: true };
+  }
+
+  // Check for pending fetch (request deduplication)
+  const cacheKey = radarTileCacheKey(lat, lon, zoomLevel, layer, timestamp);
+  const pending = getPendingRadarFetch(cacheKey);
+  if (pending) {
+    return pending;
+  }
+
+  const tileUrl = buildRadarTileUrl(lat, lon, zoomLevel, layer, timestamp);
+  
+  const fetchPromise = (async () => {
+    try {
+      const arrayBuffer = await fetchRadarImageFromWMS(tileUrl);
+      const dataURL = arrayBufferToBase64DataURL(arrayBuffer);
+      
+      // Cache the result
+      await cacheRadarTile(lat, lon, zoomLevel, layer, timestamp, arrayBuffer);
+      
+      return { imageUrl: dataURL, timestamp, cached: false };
+    } catch (e) {
+      console.error('[Radar] Failed to fetch radar tile:', e);
+      return { error: `Failed to load radar tile: ${e.message}` };
+    } finally {
+      clearPendingRadarFetch(cacheKey);
+    }
+  })();
+
+  setPendingRadarFetch(cacheKey, fetchPromise);
+  return fetchPromise;
+}
+
+// ===== TILE CANVAS POSITION CALCULATION =====
+// Calculate the canvas pixel position for a given tile at a specific zoom level
+// Returns {x, y} in canvas coordinates where the tile should be drawn
+// viewportLon/viewportLat are required — the center of the current viewport
+function getTileCanvasPosition(tileX, tileY, zoomLevel, canvasSize, viewportLon, viewportLat) {
+  const pyramidLevel = zoomLevel + 1; // Map zoom level to tile pyramid level (0 -> 1, 1 -> 2, etc.)
+  const n = Math.pow(2, pyramidLevel);
+  
+  // Calculate the center of this tile in Web Mercator X/Y coordinates
+  const tileCenterLon = ((tileX + 0.5) / n) * 360 - 180;
+  const tileCenterLat = tileToLatY(tileY, pyramidLevel);
+  const tileCenterMercX = lonToX(tileCenterLon);
+  const tileCenterMercY = latToY(tileCenterLat);
+  
+  // Calculate offset from viewport center in Mercator coordinates
+  const viewCenterMercX = lonToX(viewportLon);
+  const viewCenterMercY = latToY(viewportLat);
+  
+  const dx = tileCenterMercX - viewCenterMercX;
+  const dy = -(tileCenterMercY - viewCenterMercY); // Invert Y because canvas Y goes down
+  
+  // Convert Mercator distance to canvas pixel offset
+  const worldWidth = lonToX(180) - lonToX(-180);
+  const worldHeight = latToY(85) - latToY(-85);
+  const offsetX = (dx / worldWidth) * canvasSize;
+  const offsetY = (dy / worldHeight) * canvasSize;
+  
+  return { x: offsetX, y: offsetY };
+}
+
+// Calculate the canvas pixel position for a lat/lon coordinate in multi-tile mode
+// viewportLon/viewportLat are required — the center of the current viewport
+function latLonToCanvasPosition(lat, lon, zoomLevel, canvasSize, panX, panY, viewportLon, viewportLat) {
+  const pyramidLevel = zoomLevel + 1;
+  const n = Math.pow(2, pyramidLevel);
+  
+  // Convert lat/lon to Mercator X/Y
+  const mercX = lonToX(lon);
+  const mercY = latToY(lat);
+  
+  // Calculate offset from viewport center in Mercator coordinates
+  const viewCenterMercX = lonToX(viewportLon);
+  const viewCenterMercY = latToY(viewportLat);
+  
+  const dx = mercX - viewCenterMercX;
+  const dy = -(mercY - viewCenterMercY); // Invert Y because canvas Y goes down
+  
+  // Convert Mercator distance to canvas pixel offset
+  const worldWidth = lonToX(180) - lonToX(-180);
+  const worldHeight = latToY(85) - latToY(-85);
+  const offsetX = (dx / worldWidth) * canvasSize;
+  const offsetY = (dy / worldHeight) * canvasSize;
+  
+  return { x: offsetX + panX, y: offsetY + panY };
+}
+
+// ===== TILE CACHE SIZE TRACKING =====
+let _tileCacheTotalBytes = 0;
+
+// Track tile cache size by measuring all tile entries in the Cache API
+async function getTileCacheTotalSize() {
+  try {
+    const cache = await getCache();
+    const prefix = `${RADAR_TILE_PREFIX}`;
+    let totalSize = 0;
+    const entries = await cache.keys();
+    for (const key of entries) {
+      if (key.url.startsWith(prefix)) {
+        const response = await cache.match(key);
+        if (response) {
+          const arrayBuffer = await response.arrayBuffer();
+          totalSize += arrayBuffer.byteLength;
+        }
+      }
+    }
+    _tileCacheTotalBytes = totalSize;
+    return totalSize;
+  } catch {
+    return 0;
+  }
+}
+
+// Evict oldest tile entries when tile cache exceeds limit
+async function evictTileCacheIfNecessary() {
+  try {
+    const cache = await getCache();
+    const prefix = `${RADAR_TILE_PREFIX}`;
+    let totalSize = 0;
+    
+    // Calculate total size of all tiles in cache
+    const entries = await cache.keys();
+    const tileEntries = [];
+    for (const key of entries) {
+      if (key.url.startsWith(prefix)) {
+        const response = await cache.match(key);
+        if (response) {
+          const arrayBuffer = await response.arrayBuffer();
+          totalSize += arrayBuffer.byteLength;
+          // Extract timestamp from URL path: /tile/{zoom}/{x}/{y}/{layer}/tile/{timestamp}
+          // The path format is: https://radar.hasweather.local/tile/{zoom}/{x}/{y}/{layer}/tile/{timestamp}
+          const parts = key.url.split('/');
+          // Find the LAST "tile" segment (the one before the timestamp)
+          let tsIdx = -1;
+          for (let i = parts.length - 1; i >= 0; i--) {
+            if (parts[i] === 'tile') {
+              tsIdx = i;
+              break;
+            }
+          }
+          // Extract timestamp from URL path; use epoch 0 (oldest) if parse fails so broken entries are evicted first
+          const timestamp = tsIdx !== -1 && tsIdx + 1 < parts.length ? parseInt(parts[tsIdx + 1]) : 0;
+          tileEntries.push({ key: key.url, size: arrayBuffer.byteLength, timestamp });
+        }
+      }
+    }
+    
+    // Evict oldest tiles if over limit
+    if (totalSize > RADAR_TILE_CACHE_BYTES) {
+      tileEntries.sort((a, b) => a.timestamp - b.timestamp); // Oldest first
+      
+      for (const entry of tileEntries) {
+        if (totalSize <= RADAR_TILE_CACHE_BYTES) break;
+        await cache.delete(entry.key);
+        totalSize -= entry.size;
+      }
+      
+      _tileCacheTotalBytes = totalSize;
+    }
+  } catch { /* ignore */ }
+}
+
+// Clear all radar tiles at a specific zoom level (across all positions/layers)
+async function clearRadarCacheForTilesAtZoom(lat, lon, zoomLevel) {
+  try {
+    const cache = await getCache();
+    const prefix = `${RADAR_TILE_PREFIX}`;
+    const entries = await cache.keys();
+    for (const key of entries) {
+      if (key.url.startsWith(prefix)) {
+        // Extract zoom level from cache key URL path: /tile/{zoom}/{x}/{y}/{layer}/tile/{timestamp}
+        // The path format is: https://radar.hasweather.local/tile/{zoom}/{x}/{y}/{layer}/tile/{timestamp}
+        const parts = key.url.split('/');
+        // Find the first "tile" segment (after the protocol and hostname)
+        let zoomIdx = -1;
+        for (let i = 0; i < parts.length; i++) {
+          if (parts[i] === 'tile') {
+            zoomIdx = i;
+            break;
+          }
+        }
+        // Extract the zoom level from the first tile segment: /tile/{zoom}/{x}/...
+        // The zoom is stored directly in the key — no need to subtract 1
+        if (zoomIdx !== -1 && zoomIdx + 1 < parts.length) {
+          const keyZoom = parseInt(parts[zoomIdx + 1]);
+          if (keyZoom === zoomLevel) {
+            await cache.delete(key);
+          }
+        }
+      }
+    }
+  } catch { /* ignore */ }
+}
+
+// ===== GLOBAL TILE EXPORTS =====
+// Make tile functions available globally for non-module scripts
+window.RADAR_TILE_SIZE = RADAR_TILE_SIZE;
+window.RADAR_TILE_PREFIX = RADAR_TILE_PREFIX;
+window.RADAR_MAX_TILES_PER_VIEW = RADAR_MAX_TILES_PER_VIEW;
+window.tileToLonX = tileToLonX;
+window.tileToLatY = tileToLatY;
+window.lonLatToTileX = lonLatToTileX;
+window.lonLatToTileY = lonLatToTileY;
+window.getTileGridPosition = getTileGridPosition;
+window.radarTileCacheKey = radarTileCacheKey;
+window.radarTilesCacheKey = radarTilesCacheKey;
+window.buildRadarTileUrl = buildRadarTileUrl;
+window.cacheRadarTile = cacheRadarTile;
+window.getCachedRadarTile = getCachedRadarTile;
+window.getCachedRadarTileAsDataURL = getCachedRadarTileAsDataURL;
+window.fetchRadarTileForPosition = fetchRadarTileForPosition;
+window.clearRadarCacheForTilesAtZoom = clearRadarCacheForTilesAtZoom;
+window.getTileCanvasPosition = getTileCanvasPosition;
+window.latLonToCanvasPosition = latLonToCanvasPosition;
+
+// Create HASW_RADAR namespace placeholder before main object is created
+if (!window.HASW_RADAR) {
+  window.HASW_RADAR = {};
+}
+
+// Tile function exports to HASW_RADARD namespace will be added after main HASW_RADARD object is created
 
 // EPSG:3857 / Web Mercator constants
 const WEB_MERCATOR_SEMI_MAJOR_AXIS = 20037508.34;
@@ -5550,6 +6061,32 @@ function setPendingRadarFetch(cacheKey, promise) {
 // Clean up pending fetch after completion
 function clearPendingRadarFetch(cacheKey) {
   _pendingRadarFetches.delete(cacheKey);
+}
+
+// ===== CONCURRENT REQUEST LIMITER =====
+// Limits concurrent radar WMS fetches to prevent overwhelming the server during timeline scrubbing
+const MAX_CONCURRENT_RADAR_FETCHES = 4;
+let _concurrentRadarFetchCount = 0;
+const _radarFetchQueue = [];
+
+function acquireRadarFetchSlot() {
+  return new Promise((resolve) => {
+    if (_concurrentRadarFetchCount < MAX_CONCURRENT_RADAR_FETCHES) {
+      _concurrentRadarFetchCount++;
+      resolve();
+    } else {
+      _radarFetchQueue.push(resolve);
+    }
+  });
+}
+
+function releaseRadarFetchSlot() {
+  _concurrentRadarFetchCount--;
+  if (_radarFetchQueue.length > 0) {
+    const next = _radarFetchQueue.shift();
+    _concurrentRadarFetchCount++;
+    next();
+  }
 }
 
 // ===== RADAR IMAGE FETCH =====
@@ -5945,6 +6482,50 @@ function latLngToGeohash(lat, lon, precision = 6) {
 
 // ===== GLOBAL EXPORTS =====
 // Make all radar functions and constants available globally for non-module scripts
+window.HASW_RADAR = {
+  RADAR_DEFAULT_LAYER,
+  RADAR_LAYERS,
+  RADAR_BBOX_RADIUS_KM,
+  latLonToPixel,
+  latLonInBounds,
+  fetchRadarImageForLocation,
+  fetchRadarImageForTimestamp,
+  getCachedRadarFrameAsDataURL,
+  getRadarFramesForClip,
+  prefetchFramesInRange,
+  getFramesInRange,
+  areFramesCachedInRange,
+  clearRadarCacheForLocation,
+  clearRadarCacheForLayer,
+  clearRadarCache,
+  invalidateRadarCache,
+  getRadarMeta,
+  getRadarCacheSize,
+  getRadarTimestampsForLayer,
+  // Coordinate conversions
+  COORD_FORMATS: COORD_FORMATS,
+  latLonToMGRS: latLonToMGRS,
+  latLonToUTMLatLon: latLonToUTMLatLon,
+  latLngToDMS: latLngToDMS,
+  latLngToGeohash: latLngToGeohash,
+};
+
+// Add tile function exports to HASW_RADARD namespace (after main object is created)
+window.HASW_RADAR.tileToLonX = tileToLonX;
+window.HASW_RADAR.tileToLatY = tileToLatY;
+window.HASW_RADAR.lonLatToTileX = lonLatToTileX;
+window.HASW_RADAR.lonLatToTileY = lonLatToTileY;
+window.HASW_RADAR.getTileGridPosition = getTileGridPosition;
+window.HASW_RADAR.radarTileCacheKey = radarTileCacheKey;
+window.HASW_RADAR.buildRadarTileUrl = buildRadarTileUrl;
+window.HASW_RADAR.getCachedRadarTileAsDataURL = getCachedRadarTileAsDataURL;
+window.HASW_RADAR.fetchRadarTileForPosition = fetchRadarTileForPosition;
+// Note: getTileCanvasPosition and latLonToCanvasPosition are radar-player.js functions, not exported here
+
+// Tile cache tracking exports
+window.HASW_RADAR.getTileCacheTotalSize = getTileCacheTotalSize;
+window.HASW_RADAR.evictTileCacheIfNecessary = evictTileCacheIfNecessary;
+// Legacy flat globals for backward compatibility
 window.RADAR_DEFAULT_LAYER = RADAR_DEFAULT_LAYER;
 window.RADAR_LAYERS = RADAR_LAYERS;
 window.RADAR_BBOX_RADIUS_KM = RADAR_BBOX_RADIUS_KM;
@@ -6005,8 +6586,22 @@ function formatCoordinate(lat, lon, format) {
   const CANVAS_BASE_SIZE = 512;
   const VIEWPORT_PADDING = 200;
   
+  // Tile rendering constants
+  const TILE_PADDING = 1.5;
+  
+  // ===== TILE LOADING STATE =====
+  let currentTileLoadState = {
+    isLoading: false,
+    loadedCount: 0,
+    totalCount: 0,
+    timestamp: null,
+    pyramidLevel: -1, // Tile pyramid level (zoomLevel + 1)
+    tileDataUrls: new Map(), // Cache of tile data URLs by position key for fast rendering
+  };
+  
   // Pre-fetch constants
   const PRE_FETCH_COUNT = 50;
+  const PRE_FETCH_DELAY_MS = 500;
   
   // Pin rendering constants
   const PIN_SIZE_BASE = 16;
@@ -6060,8 +6655,11 @@ function formatCoordinate(lat, lon, format) {
   const EMPTY_TIMESTAMP_DISPLAY = '--:--';
   const ERROR_TEXT_COLOR = '#ff4444';
 
-  // Expose speed options globally
-  window.SPEED_OPTIONS = [0.5, 1, 2, 4, 8];
+  // Expose speed options under HASW_RADAR namespace only
+  const SPEED_OPTIONS = [0.5, 1, 2, 4, 8];
+  
+  // Legacy global export for backward compatibility (main.js references this)
+  window.SPEED_OPTIONS = SPEED_OPTIONS;
 
   // ===== STATE =====
   let state = {
@@ -6107,6 +6705,9 @@ function formatCoordinate(lat, lon, format) {
 
   // ===== INITIALIZATION =====
   function initRadarPlayer(lat, lon) {
+    // Clean up any previous instance before re-initializing
+    cleanupRadarPlayer();
+
     state.lat = lat;
     state.lon = lon;
     state.layer = RADAR_DEFAULT_LAYER;
@@ -6220,6 +6821,14 @@ function formatCoordinate(lat, lon, format) {
       state.panY = state.panStartPanY + dy;
       renderCanvas();
       updateCenterCoordReadout();
+      
+      // Debounced tile reload for multi-tile mode during panning
+      if (isMultiTileMode() && !currentTileLoadState.isLoading) {
+        if (_panDebounceTimerRef) clearTimeout(_panDebounceTimerRef);
+        _panDebounceTimerRef = setTimeout(() => {
+          loadTilesForCurrentView();
+        }, 100);
+      }
     });
 
     // Pan end
@@ -6227,6 +6836,11 @@ function formatCoordinate(lat, lon, format) {
       if (state.isPanning) {
         state.isPanning = false;
         canvas.style.cursor = isImageLoaded() ? 'grab' : 'default';
+      }
+      // Clear debounce timer on pan end
+      if (_panDebounceTimerRef) {
+        clearTimeout(_panDebounceTimerRef);
+        _panDebounceTimerRef = null;
       }
     });
 
@@ -6362,12 +6976,18 @@ function formatCoordinate(lat, lon, format) {
     let dataUrl = await getCachedRadarFrameAsDataURL(lat, lon, layer, timestamp);
 
     if (!dataUrl) {
-      const result = await fetchRadarImageForTimestamp(lat, lon, layer, timestamp);
-      if (result.error) {
-        console.warn('[Radar Player] Failed to load frame:', result.error);
-        return null;
+      // Use concurrent request limiter to prevent overwhelming the WMS server during timeline scrubbing
+      await acquireRadarFetchSlot();
+      try {
+        const result = await fetchRadarImageForTimestamp(lat, lon, layer, timestamp);
+        if (result.error) {
+          console.warn('[Radar Player] Failed to load frame:', result.error);
+          return null;
+        }
+        dataUrl = result.imageUrl;
+      } finally {
+        releaseRadarFetchSlot();
       }
-      dataUrl = result.imageUrl;
     }
 
     const currentImg = new Image();
@@ -6404,9 +7024,15 @@ function formatCoordinate(lat, lon, format) {
     let dataUrl = await getCachedRadarFrameAsDataURL(state.lat, state.lon, state.layer, timestamp);
 
     if (!dataUrl) {
-      const result = await fetchRadarImageForTimestamp(state.lat, state.lon, state.layer, timestamp);
-      if (result.error) return null;
-      dataUrl = result.imageUrl;
+      // Use concurrent request limiter to prevent overwhelming the WMS server during timeline scrubbing
+      await acquireRadarFetchSlot();
+      try {
+        const result = await fetchRadarImageForTimestamp(state.lat, state.lon, state.layer, timestamp);
+        if (result.error) return null;
+        dataUrl = result.imageUrl;
+      } finally {
+        releaseRadarFetchSlot();
+      }
     }
 
     const currentImg = new Image();
@@ -6443,12 +7069,18 @@ function formatCoordinate(lat, lon, format) {
       const timestamp = state.allTimestamps[i];
       const cached = await getCachedRadarFrameAsDataURL(state.lat, state.lon, state.layer, timestamp);
       if (!cached) {
-        await fetchRadarImageForTimestamp(state.lat, state.lon, state.layer, timestamp);
+        // Use concurrent request limiter to prevent overwhelming the WMS server during timeline scrubbing
+        await acquireRadarFetchSlot();
+        try {
+          await fetchRadarImageForTimestamp(state.lat, state.lon, state.layer, timestamp);
+        } finally {
+          releaseRadarFetchSlot();
+        }
       }
       state.preFetchProgress++;
       updatePrefetchUI();
 
-      await new Promise(r => setTimeout(r, 10));
+      await new Promise(r => setTimeout(r, PRE_FETCH_DELAY_MS));
     }
 
     state.isPreFetching = false;
@@ -6547,6 +7179,25 @@ function formatCoordinate(lat, lon, format) {
 
     updateZoomUI();
     renderCanvas();
+    
+    // Handle tile mode changes
+    if (isMultiTileMode()) {
+      // Clear tile image cache when zooming in to prevent stale references
+      if (oldZoom < state.zoomLevel) {
+        tileImageCache.clear();
+      }
+      // Evict tiles from old zoom level when zooming out
+      if (oldZoom > state.zoomLevel) {
+        clearRadarCacheForTilesAtZoom(state.lat, state.lon, oldZoom);
+      }
+      loadTilesForCurrentView();
+    } else if (isImageLoaded()) {
+      // Reset tile loading state when switching back to single-tile mode
+      currentTileLoadState.isLoading = false;
+      currentTileLoadState.loadedCount = 0;
+      currentTileLoadState.totalCount = 0;
+      currentTileLoadState.pyramidLevel = -1;
+    }
   }
 
   function zoomIn() {
@@ -6563,8 +7214,36 @@ function formatCoordinate(lat, lon, format) {
     state.zoomLevel = 0;
     state.panX = 0;
     state.panY = 0;
+    // Reset tile loading state when returning to single-tile mode
+    currentTileLoadState.isLoading = false;
+    currentTileLoadState.loadedCount = 0;
+    currentTileLoadState.totalCount = 0;
+    currentTileLoadState.pyramidLevel = -1;
+    // Clear tile image cache on reset
+    tileImageCache.clear();
     updateZoomUI();
     renderCanvas();
+  }
+
+  // Clean up all timers and resources when destroying the radar player
+  let _panDebounceTimerRef = null; // Module-scoped reference for cleanup (synced with setupCanvasEvents)
+  function cleanupRadarPlayer() {
+    // Clear pan debounce timer to prevent memory leak
+    if (_panDebounceTimerRef) {
+      clearTimeout(_panDebounceTimerRef);
+      _panDebounceTimerRef = null;
+    }
+    // Stop pin animation loop
+    if (state.pinAnimFrameId) {
+      cancelAnimationFrame(state.pinAnimFrameId);
+      state.pinAnimFrameId = null;
+    }
+    // Clear tile image cache to free memory
+    tileImageCache.clear();
+    // Clear tile data URLs map to free memory
+    if (currentTileLoadState.tileDataUrls) {
+      currentTileLoadState.tileDataUrls.clear();
+    }
   }
 
   function updateZoomUI() {
@@ -6821,6 +7500,216 @@ function formatCoordinate(lat, lon, format) {
     return isCurrentImageLoaded;
   }
 
+  // Check if we should use multi-tile mode (zoomed in beyond single tile)
+  function isMultiTileMode() {
+    return state.zoomLevel > 0;
+  }
+
+  // Get the current timestamp for tile loading
+  function getCurrentTimestamp() {
+    if (!state.allTimestamps.length) return null;
+    if (state.currentFrameIndex >= 0 && state.currentFrameIndex < state.allTimestamps.length) {
+      return state.allTimestamps[state.currentFrameIndex];
+    }
+    // No frame loaded yet — use the latest timestamp
+    return state.allTimestamps[state.allTimestamps.length - 1];
+  }
+
+  // Load tiles for the current viewport
+  async function loadTilesForCurrentView() {
+    const timestamp = getCurrentTimestamp();
+    if (!timestamp) return;
+
+    // If pyramid level hasn't changed and we already have all tiles loaded, skip
+    const currentPyramidLevel = state.zoomLevel + 1;
+    if (currentTileLoadState.pyramidLevel === currentPyramidLevel && currentTileLoadState.loadedCount >= currentTileLoadState.totalCount && !currentTileLoadState.isLoading) {
+      return;
+    }
+
+    // Evict tiles from old zoom level when changing zoom
+    if (currentTileLoadState.pyramidLevel !== -1 && currentTileLoadState.pyramidLevel !== currentPyramidLevel) {
+      clearRadarCacheForTilesAtZoom(state.lat, state.lon, currentTileLoadState.pyramidLevel - 1);
+      tileImageCache.clear(); // Also clear image cache for old zoom level
+    }
+
+    currentTileLoadState.isLoading = true;
+    currentTileLoadState.loadedCount = 0;
+    currentTileLoadState.totalCount = 0;
+    currentTileLoadState.timestamp = timestamp;
+    currentTileLoadState.pyramidLevel = currentPyramidLevel; // Map display zoom level to tile pyramid level
+
+    const pyramidLevel = currentTileLoadState.pyramidLevel;
+    const n = Math.pow(2, pyramidLevel);
+    
+    // Calculate which tiles are visible based on the current view center and pan
+    const centerMercX = lonToX(state.lon) + (state.panX / (canvasWidth / CANVAS_BASE_SIZE));
+    const centerMercY = latToY(state.lat) - (state.panY / (canvasHeight / CANVAS_BASE_SIZE));
+    
+    // Calculate tile grid position of the viewport center at this zoom level
+    const centerTileX = Math.floor((centerMercX - lonToX(-180)) / (lonToX(180) - lonToX(-180)) * n);
+    const centerTileY = Math.floor((latToY(85) - centerMercY) / (latToY(85) - latToY(-85)) * n);
+    
+    // Calculate how many tiles are needed to cover the viewport
+    // At zoom level 0, one tile covers the full viewport
+    // At zoom level N, the world is 2^N tiles wide, so each tile is smaller
+    // TILE_PADDING is a ratio (1.5 = 1.5 extra tiles per side) that scales with viewport size
+    const viewportWidthInTiles = canvasWidth / CANVAS_BASE_SIZE + TILE_PADDING;
+    
+    const halfGrid = Math.ceil(viewportWidthInTiles / 2);
+    
+    // Calculate tile bounds with padding
+    const minTileX = Math.max(0, centerTileX - halfGrid);
+    const maxTileX = Math.min(n - 1, centerTileX + halfGrid);
+    const minTileY = Math.max(0, centerTileY - halfGrid);
+    const maxTileY = Math.min(n - 1, centerTileY + halfGrid);
+    
+    // Count total tiles to load
+    currentTileLoadState.totalCount = (maxTileX - minTileX + 1) * (maxTileY - minTileY + 1);
+    
+    // Fetch all visible tiles in parallel with Promise.all
+    const tilePromises = [];
+    for (let y = minTileY; y <= maxTileY; y++) {
+      for (let x = minTileX; x <= maxTileX; x++) {
+        tilePromises.push(loadSingleTile(x, y, pyramidLevel, timestamp));
+      }
+    }
+    
+    const results = await Promise.all(tilePromises);
+    
+    // Count loaded tiles from results
+    currentTileLoadState.loadedCount = results.filter(r => r !== null).length;
+
+    currentTileLoadState.isLoading = false;
+    
+    // Evict tile cache if over limit
+    evictTileCacheIfNecessary();
+    
+    renderCanvas();
+  }
+
+  // Load a single tile with retry logic
+  async function loadSingleTile(tileX, tileY, pyramidLevel, timestamp) {
+    // Convert tile grid position to lat/lon center of the tile
+    const tileCenterLon = ((tileX + 0.5) / Math.pow(2, pyramidLevel)) * 360 - 180;
+    const n = Math.pow(2, pyramidLevel);
+    const y = 1 - (tileY + 0.5) / n;
+    const latRad = Math.atan(Math.sinh(Math.PI * y));
+    const tileCenterLat = (latRad * 180) / Math.PI;
+    
+    // Check cache first — use pyramid-level zoom for cache key consistency
+    const cachedDataURL = await getCachedRadarTileAsDataURL(tileCenterLat, tileCenterLon, pyramidLevel, state.layer, timestamp);
+    if (cachedDataURL) {
+      currentTileLoadState.loadedCount++;
+      return { x: tileX, y: tileY, dataUrl: cachedDataURL };
+    }
+
+    // Use concurrent request limiter to prevent overwhelming the WMS server
+    await acquireRadarFetchSlot();
+    try {
+      // Fetch from WMS with retry — use pyramid-level zoom for URL generation consistency
+      const maxRetries = 3;
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        // Check if timestamp changed during retry (timestamp sync)
+        const currentTimestamp = getCurrentTimestamp();
+        if (currentTimestamp !== timestamp) {
+          console.log('[Radar Player] Timestamp changed, abandoning tile load:', tileX, tileY);
+          return null;
+        }
+        
+        const result = await fetchRadarTileForPosition(tileCenterLat, tileCenterLon, pyramidLevel, state.layer, timestamp);
+        if (result.error) {
+          if (attempt < maxRetries) {
+            // Exponential backoff: 1s, 2s, 4s
+            const delay = Math.pow(2, attempt) * 1000;
+            console.log(`[Radar Player] Failed to load tile (attempt ${attempt + 1}/${maxRetries + 1}), retrying in ${delay}ms`, tileX, tileY);
+            await new Promise(r => setTimeout(r, delay));
+            continue;
+          }
+          console.warn('[Radar Player] Failed to load tile after all retries:', tileX, tileY, result.error);
+          return null;
+        }
+        
+        // Success — update progress and store in currentTileLoadState.tileDataUrls for fast rendering
+        currentTileLoadState.loadedCount++;
+        currentTileLoadState.tileDataUrls.set(`${tileX},${tileY}`, result.imageUrl);
+        return { x: tileX, y: tileY, dataUrl: result.imageUrl };
+      }
+      
+      return null;
+    } finally {
+      releaseRadarFetchSlot();
+    }
+  }
+
+  // Calculate canvas position for a tile at a given zoom level (pyramid level)
+  function getTileCanvasPosition(tileX, tileY, pyramidLevel) {
+    const n = Math.pow(2, pyramidLevel);
+    
+    // Calculate the center of this tile in Web Mercator X/Y coordinates
+    const tileCenterLon = ((tileX + 0.5) / n) * 360 - 180;
+    const y = 1 - (tileY + 0.5) / n;
+    const latRad = Math.atan(Math.sinh(Math.PI * y));
+    const tileCenterLat = (latRad * 180) / Math.PI;
+    
+    const tileCenterMercX = lonToX(tileCenterLon);
+    const tileCenterMercY = latToY(tileCenterLat);
+    
+    // Calculate the center of the viewport in Web Mercator X/Y coordinates
+    const viewCenterMercX = lonToX(state.lon);
+    const viewCenterMercY = latToY(state.lat);
+    
+    // Calculate offset: difference in Mercator coordinates converted to canvas pixels
+    const dx = tileCenterMercX - viewCenterMercX;
+    const dy = -(tileCenterMercY - viewCenterMercY); // Invert Y because canvas Y goes down
+    
+    // Convert to canvas pixel offset (scaled by zoom level)
+    const scale = ZOOM_LEVELS[state.zoomLevel] || 1;
+    const offsetX = (dx / (lonToX(180) - lonToX(-180))) * CANVAS_BASE_SIZE * scale;
+    const offsetY = (dy / (latToY(85) - latToY(-85))) * CANVAS_BASE_SIZE * scale;
+    
+    return { x: offsetX, y: offsetY };
+  }
+
+  // Cache for tile images to avoid recreating Image objects on every render
+  let tileImageCache = new Map();
+
+  function getTileImage(dataUrl) {
+    if (tileImageCache.has(dataUrl)) {
+      return tileImageCache.get(dataUrl);
+    }
+    const img = new Image();
+    img.src = dataUrl;
+    // Handle image load errors — remove broken images from cache so they can be retried
+    img.onerror = () => {
+      console.warn('[Radar Player] Tile image failed to load:', dataUrl.substring(0, 60) + '...');
+      tileImageCache.delete(dataUrl);
+    };
+    tileImageCache.set(dataUrl, img);
+    return img;
+  }
+
+  // Calculate canvas pixel position for a lat/lon coordinate in multi-tile mode
+  function latLonToCanvasPosition(lat, lon) {
+    // Convert lat/lon to Mercator X/Y
+    const mercX = lonToX(lon);
+    const mercY = latToY(lat);
+    
+    // Calculate the center of the viewport in Web Mercator X/Y coordinates
+    const viewCenterMercX = lonToX(state.lon);
+    const viewCenterMercY = latToY(state.lat);
+    
+    // Calculate offset: difference in Mercator coordinates converted to canvas pixels
+    const dx = mercX - viewCenterMercX;
+    const dy = -(mercY - viewCenterMercY); // Invert Y because canvas Y goes down
+    
+    // Convert to canvas pixel offset (scaled by zoom level)
+    const scale = ZOOM_LEVELS[state.zoomLevel] || 1;
+    const offsetX = (dx / (lonToX(180) - lonToX(-180))) * CANVAS_BASE_SIZE * scale;
+    const offsetY = (dy / (latToY(85) - latToY(-85))) * CANVAS_BASE_SIZE * scale;
+    
+    return { x: offsetX, y: offsetY };
+  }
+
   function renderCanvas() {
     if (!ctx || !canvas) return;
 
@@ -6829,11 +7718,24 @@ function formatCoordinate(lat, lon, format) {
     ctx.fillStyle = '#0d0d1a';
     ctx.fillRect(0, 0, canvas.width, canvasHeight);
 
-    if (!isImageLoaded()) {
+    // Check if we should use multi-tile mode (zoomed in beyond single tile)
+    if (isMultiTileMode()) {
+      // Show loading progress during tile load
+      if (currentTileLoadState.isLoading && currentTileLoadState.totalCount > 0) {
+        const pct = Math.round((currentTileLoadState.loadedCount / currentTileLoadState.totalCount) * 100);
+        showLoadingOverlay(`Loading tiles... ${pct}%`);
+      } else if (!isImageLoaded()) {
+        drawLoadingSpinner(ctx, canvas.width / 2, canvas.height / 2);
+      }
+      renderMultiTileCanvas();
+    } else if (!isImageLoaded()) {
       drawLoadingSpinner(ctx, canvas.width / 2, canvas.height / 2);
-      return;
+    } else {
+      renderSingleTileCanvas();
     }
+  }
 
+  function renderSingleTileCanvas() {
     const zoom = ZOOM_LEVELS[state.zoomLevel] || 1;
     const scale = (canvasWidth / CANVAS_BASE_SIZE) * zoom;
     const imgW = CANVAS_BASE_SIZE * scale;
@@ -6851,6 +7753,88 @@ function formatCoordinate(lat, lon, format) {
     }
 
     ctx.restore();
+  }
+
+  function renderMultiTileCanvas() {
+    const pyramidLevel = state.zoomLevel + 1; // Map display zoom level to tile pyramid level
+    const n = Math.pow(2, pyramidLevel);
+    
+    // Calculate which tiles are visible based on the current view center and pan
+    const centerMercX = lonToX(state.lon) + (state.panX / (canvasWidth / CANVAS_BASE_SIZE));
+    const centerMercY = latToY(state.lat) - (state.panY / (canvasHeight / CANVAS_BASE_SIZE));
+    
+    const centerTileX = Math.floor((centerMercX - lonToX(-180)) / (lonToX(180) - lonToX(-180)) * n);
+    const centerTileY = Math.floor((latToY(85) - centerMercY) / (latToY(85) - latToY(-85)) * n);
+    
+    // TILE_PADDING is a ratio (1.5 = 1.5 extra tiles per side) that scales with viewport size
+    const viewportWidthInTiles = canvasWidth / CANVAS_BASE_SIZE + TILE_PADDING;
+    const halfGrid = Math.ceil(viewportWidthInTiles / 2);
+    
+    const minTileX = Math.max(0, centerTileX - halfGrid);
+    const maxTileX = Math.min(n - 1, centerTileX + halfGrid);
+    const minTileY = Math.max(0, centerTileY - halfGrid);
+    const maxTileY = Math.min(n - 1, centerTileY + halfGrid);
+    
+    // Scale factor for tile rendering at this zoom level
+    const scale = ZOOM_LEVELS[state.zoomLevel] || 1;
+    const scaledTileSize = CANVAS_BASE_SIZE * scale;
+    
+    // Draw each tile at its calculated position using currentTileLoadState.tileDataUrls for fast rendering
+    ctx.save();
+    for (let y = minTileY; y <= maxTileY; y++) {
+      for (let x = minTileX; x <= maxTileX; x++) {
+        const pos = getTileCanvasPosition(x, y, pyramidLevel);
+        
+        // Add pan offset to the tile position
+        const finalX = pos.x + state.panX;
+        const finalY = pos.y + state.panY;
+        
+        // Use cached tile data URL from currentTileLoadState.tileDataUrls for fast rendering
+        const cachedDataURL = currentTileLoadState.tileDataUrls.get(`${x},${y}`);
+        if (cachedDataURL) {
+          const img = getTileImage(cachedDataURL);
+          // Draw the tile image at its calculated position, scaled by zoom level
+          ctx.drawImage(img, finalX, finalY, scaledTileSize, scaledTileSize);
+        } else {
+          // Draw a placeholder for uncached tiles (shows as dark rectangle)
+          ctx.fillStyle = '#1a1a2e';
+          ctx.fillRect(finalX, finalY, scaledTileSize, scaledTileSize);
+        }
+      }
+    }
+    ctx.restore();
+    
+    // Draw pins on top of tiles using the latLonToCanvasPosition function
+    if (state.showPins && state.pins.length > 0) {
+      drawPinsMultiTile(ctx);
+    }
+  }
+
+  // ===== MULTI-TILE PIN RENDERING =====
+  function drawPinsMultiTile(ctx) {
+    const zoom = ZOOM_LEVELS[state.zoomLevel] || 1;
+    const pinSize = PIN_SIZE_BASE + (zoom - 1) * PIN_SIZE_SCALE;
+    
+    const viewLeft = -VIEWPORT_PADDING;
+    const viewRight = canvas.width + VIEWPORT_PADDING;
+    const viewTop = -VIEWPORT_PADDING;
+    const viewBottom = canvas.height + VIEWPORT_PADDING;
+
+    for (const pin of state.pins) {
+      // Calculate pin position in canvas coordinates using multi-tile mode
+      const pos = latLonToCanvasPosition(pin.lat, pin.lon);
+      
+      // Add pan offset to the pin position
+      const finalX = pos.x + state.panX;
+      const finalY = pos.y + state.panY;
+      
+      if (finalX < viewLeft || finalX > viewRight || finalY < viewTop || finalY > viewBottom) continue;
+      
+      const scaledPinSize = Math.max(MIN_PIN_SIZE, pinSize * zoom / CANVAS_BASE_SIZE);
+      const scaledFontSize = Math.max(BASE_FONT_SIZE - 2, Math.min(MAX_FONT_SIZE, BASE_FONT_SIZE * zoom / CANVAS_BASE_SIZE));
+      
+      drawPin(ctx, finalX, finalY, scaledPinSize, pin.type, pin.label, zoom, scaledFontSize);
+    }
   }
 
   // ===== PIN RENDERING =====
@@ -7065,6 +8049,12 @@ function formatCoordinate(lat, lon, format) {
     state.currentFrameIndex = -1;
     state.frames = null;
     loadedImage = null;
+    
+    // Reset tile loading state when switching layers
+    currentTileLoadState.isLoading = false;
+    currentTileLoadState.loadedCount = 0;
+    currentTileLoadState.totalCount = 0;
+    currentTileLoadState.pyramidLevel = -1;
 
     // Get timestamps for new layer from WMS (not just metadata) — use all timestamps, not just latest
     const allTimestamps = await getRadarTimestampsForLayer(layer);
@@ -7095,10 +8085,17 @@ function formatCoordinate(lat, lon, format) {
     state.isLoading = true;
     showLoadingOverlay('Switching layer...');
     
+    // Check if we have timestamps before attempting to load
+    if (!state.allTimestamps || state.allTimestamps.length === 0) {
+      showErrorOverlay('No radar data available for this layer');
+      state.isLoading = false;
+      return;
+    }
+    
     const loadResult = await loadCurrentFrame();
     if (!loadResult && state.allTimestamps.length > 0) {
       showErrorOverlay('Failed to load radar image');
-      hideErrorOverlay();
+      state.isLoading = false; // Allow UI to recover after error — user can retry
       return;
     }
     
@@ -7334,7 +8331,7 @@ function formatCoordinate(lat, lon, format) {
   }
 
   // ===== PUBLIC API =====
-  const RadarPlayer = {
+  const HASW_RadarPlayer = {
     init: initRadarPlayer,
     togglePlayback,
     stopPlayback,
@@ -7348,9 +8345,12 @@ function formatCoordinate(lat, lon, format) {
     updatePins,
     getZoomPercent,
     getState: () => ({ ...state }),
+    cleanup: cleanupRadarPlayer,
   };
 
-  window.RADAR_PLAYER = RadarPlayer;
+  // Namespace RADAR_PLAYER under HASW_RADAR and keep flat global for backward compat
+  window.HASW_RADAR.RadarPlayer = HASW_RadarPlayer;
+  window.RADAR_PLAYER = HASW_RadarPlayer;
 
 })();
 
@@ -7422,7 +8422,15 @@ function updateCardsWithOMData(omWeatherData) {
     card.classList.add('loading-om');
 
     const suffix = cityData.place_id || `${cityData.latitude || 0}_${cityData.longitude || 0}`;
-    const html = renderCityCard(cityData, suffix);
+    let html;
+    try {
+      html = renderCityCard(cityData, suffix);
+    } catch (err) {
+      console.error(`[RenderError] Failed to render OM card for city: ${cityData.name}`, err);
+      card.innerHTML = `<div class="city-card-error"><span class="error-message">Failed to load weather data</span></div>`;
+      card.classList.remove('loading-om');
+      continue;
+    }
 
     card.style.opacity = '0';
     setTimeout(() => {
@@ -7455,7 +8463,15 @@ function updateCardsWithNWSData(nwsCityData) {
     card.classList.add('loading-nws');
 
     const suffix = cityData.place_id || `${cityData.latitude || 0}_${cityData.longitude || 0}`;
-    const html = renderCityCard(cityData, suffix);
+    let html;
+    try {
+      html = renderCityCard(cityData, suffix);
+    } catch (err) {
+      console.error(`[RenderError] Failed to render NWS card for city: ${cityData.name}`, err);
+      card.innerHTML = `<div class="city-card-error"><span class="error-message">Failed to load weather data</span></div>`;
+      card.classList.remove('loading-nws');
+      continue;
+    }
 
     card.style.opacity = '0';
     setTimeout(() => {
@@ -7543,7 +8559,12 @@ function renderAll() {
     card.style.animationFillMode = 'forwards';
     card.style.overflow = 'visible';
     const suffix = data.latitude != null && data.longitude != null ? `${data.latitude}_${data.longitude}` : undefined;
-    card.innerHTML = renderCityCard(data, suffix);
+    try {
+      card.innerHTML = renderCityCard(data, suffix);
+    } catch (err) {
+      console.error(`[RenderError] Failed to render card for city: ${data.name}`, err);
+      card.innerHTML = `<div class="city-card-error"><span class="error-message">Failed to load weather data</span></div>`;
+    }
     grid.appendChild(card);
   });
 
@@ -8067,8 +9088,10 @@ function drawMergedChart(canvasId, cityData, dayHigh, dayLow) {
 
 }
 
-// ===== GHOST MERGED CHART (NWS overlay under OM) =====
+// ===== GHOST MERGED CHART (NWS overlay under OM) — skip when hidden =====
 function drawGhostMergedChart(canvasId, cityData, dayHigh, dayLow, currentIdx = 0) {
+  // Skip chart drawing when page is hidden to avoid unnecessary GPU/compositing work
+  if (document.hidden) return;
   const canvas = document.getElementById(canvasId);
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
@@ -8186,8 +9209,10 @@ function drawGhostMergedChart(canvasId, cityData, dayHigh, dayLow, currentIdx = 
 
 }
 
-// ===== COMBINED CHART =====
+// ===== COMBINED CHART — skip when hidden =====
 function drawCombinedChart(canvasId, cityData) {
+  // Skip chart drawing when page is hidden to avoid unnecessary GPU/compositing work
+  if (document.hidden) return;
   const canvas = document.getElementById(canvasId);
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
@@ -8289,6 +9314,9 @@ function drawCombinedChart(canvasId, cityData) {
 
 // ===== CANVAS CHARTS =====
 function drawAllCharts() {
+  // Skip chart drawing when page is hidden to avoid unnecessary GPU/compositing work
+  if (document.hidden) return;
+
   weatherData.forEach((data) => {
     if (!data.weather) return;
     const hourly = data.weather.hourly || {};
@@ -8324,7 +9352,7 @@ function initParticles() {
     });
   }
 
-  // Pause particles when the donkey runner game is active (reduces GPU compositing load)
+  // Pause particles when the donkey runner game is active or page is hidden (reduces GPU compositing load)
   let animId = null;
 
   function animate() {
@@ -8334,9 +9362,13 @@ function initParticles() {
     function step() {
       animId = requestAnimationFrame(step);
 
-      // Check if game is active — pause particles when game is running
+      // Check if game is active or page is hidden — pause particles in either case
       const isGameActive = typeof DONKEY_RUNNER !== 'undefined' && DONKEY_RUNNER && DONKEY_RUNNER.gameRunning;
-      if (!isGameActive) {
+      const isPageHidden = document.hidden;
+      if (isGameActive || isPageHidden) {
+        // Clear canvas when paused to keep it clean (no particles drawn)
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      } else {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         particles.forEach(p => {
           p.y -= p.speed;
@@ -8346,9 +9378,6 @@ function initParticles() {
           ctx.fillStyle = `rgba(255,255,255,${p.opacity})`;
           ctx.fill();
         });
-      } else {
-        // Clear canvas when paused to keep it clean (no particles drawn)
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
       }
     }
     step();
@@ -12179,17 +13208,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }, SENSOR_HEALTH_CHECK_MS);
   }
 
-  // === Escape HTML for safe DOM insertion ===
-  function escapeHTML(str) {
-    if (typeof str !== 'string') return str;
-    return str
-      .replace(/\u0026/g, '\u0026amp\u003B')
-      .replace(/\u003c/g, '\u0026lt\u003B')
-      .replace(/\u003e/g, '\u0026gt\u003B')
-      .replace(/\u0022/g, '\u0026quot\u003B')
-      .replace(/\u0027/g, '\u0026#039');
-  }
-
   // === Initialize immediately (local-sensor.js is loaded at end of body, so DOM is ready) ===
   renderSensorBar();
   startAutoRefresh();
@@ -12212,8 +13230,6 @@ let userLocation = null;
 let unit = 'F';
 let weatherData = [];
 let isLoading = false;
-let _nearbyCache = null;
-let _nearbyCacheTime = 0;
 let _toggleDebounceTimer = null;
 let _chartResizeTimer = null;
 let _maxCities = MAX_CITIES; // Default: show nearest 6 cities
@@ -12221,6 +13237,8 @@ let _maxCities = MAX_CITIES; // Default: show nearest 6 cities
 // ===== INIT =====
 document.addEventListener('DOMContentLoaded', () => {
   initParticles();
+  // Start periodic cleanup of NWS bounds cache to prevent unbounded memory growth
+  scheduleNwsBoundsCacheCleanup();
 
   const unitBtn = document.getElementById('unit-toggle');
   const refreshBtn = document.getElementById('refresh-btn');
@@ -12239,25 +13257,24 @@ document.addEventListener('DOMContentLoaded', () => {
     }, CHART_RESIZE_DEBOUNCE_MS);
   });
 
-   // Debug location preset buttons
-   document.querySelectorAll('.debug-loc-btn').forEach(btn => {
-     btn.addEventListener('click', async () => {
-       const lat = parseFloat(btn.dataset.lat);
-       const lon = parseFloat(btn.dataset.lon);
-       const name = btn.dataset.name;
-       userLocation = { lat, lon };
-       const locEl = document.getElementById('user-location');
-       if (locEl) {
-         const latDir = lat >= 0 ? 'N' : 'S';
-         const lonDir = lon >= 0 ? 'E' : 'W';
-         locEl.textContent = `\u{1F4CD} ${Math.abs(lat).toFixed(2)}\u00B0${latDir}, ${Math.abs(lon).toFixed(2)}\u00B0${lonDir} (${name})`;
-       }
-       // Clear nearby cache so fresh results are fetched for new location
-       _nearbyCache = null;
-       _nearbyCacheTime = 0;
-       await run();
-     });
-   });
+    // Debug location preset buttons
+    document.querySelectorAll('.debug-loc-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const lat = parseFloat(btn.dataset.lat);
+        const lon = parseFloat(btn.dataset.lon);
+        const name = btn.dataset.name;
+        userLocation = { lat, lon };
+        const locEl = document.getElementById('user-location');
+        if (locEl) {
+          const latDir = lat >= 0 ? 'N' : 'S';
+          const lonDir = lon >= 0 ? 'E' : 'W';
+          locEl.textContent = `\u{1F4CD} ${Math.abs(lat).toFixed(2)}\u00B0${latDir}, ${Math.abs(lon).toFixed(2)}\u00B0${lonDir} (${name})`;
+        }
+        // Clear nearby cache so fresh results are fetched for new location
+        DataCache.invalidate(`nearby_${DataCache._roundCoord(lat)}_${DataCache._roundCoord(lon)}`);
+        await run();
+      });
+    });
 
    // Toggle network outage retry when pressing the refresh button while offline
    // (already handled above in checkNetwork)
@@ -12275,10 +13292,12 @@ async function run() {
   const locEl = document.getElementById('user-location');
   if (locEl) locEl.textContent = `\u{1F4CD} ${userLocation.lat.toFixed(2)}\u00B0N, ${Math.abs(userLocation.lon).toFixed(2)}\u00B0W`;
 
-  _nearbyCache = null;
-  _nearbyCacheTime = 0;
+    // Clear nearby cache so fresh results are fetched on each run
+    // (the actual cache variables live in api-openstreetmap.js, not here)
+    const nearbyKey = userLocation ? `nearby_${DataCache._roundCoord(userLocation.lat)}_${DataCache._roundCoord(userLocation.lon)}` : null;
+    if (nearbyKey) DataCache.invalidate(nearbyKey);
 
-  // Load nearby cities and display the nearest _maxCities
+    // Load nearby cities and display the nearest _maxCities
   const nearby = await findNearbyCities(userLocation.lat, userLocation.lon);
   
   // Sort by distance from user (closest first)
@@ -12369,9 +13388,9 @@ async function loadRadarCard(lat, lon) {
     `<option value="${value}" ${value === RADAR_DEFAULT_LAYER ? 'selected' : ''}>${key.replace('_', ' ')}</option>`
   ).join('');
 
-  const speedOptions = (window.SPEED_OPTIONS || [0.5, 1, 2, 4, 8]).map((speed, idx) => 
-    `<option value="${speed}" ${idx === 1 ? 'selected' : ''}>${speed}x</option>`
-  ).join('');
+   const speedOptions = (HASW_RADAR.SPEED_OPTIONS || [0.5, 1, 2, 4, 8]).map((speed, idx) => 
+     `<option value="${speed}" ${idx === 1 ? 'selected' : ''}>${speed}x</option>`
+   ).join('');
 
   container.innerHTML = `
     <div id="radar-player-card" class="radar-fade-in">
@@ -12445,10 +13464,10 @@ async function loadRadarCard(lat, lon) {
   // Bind events
   bindRadarPlayerEvents();
 
-  // Initialize radar player engine
-  if (window.RADAR_PLAYER) {
-    window.RADAR_PLAYER.init(lat, lon);
-  }
+   // Initialize radar player engine
+   if (HASW_RADAR.RadarPlayer) {
+     HASW_RADAR.RadarPlayer.init(lat, lon);
+   }
 }
 
 function bindRadarPlayerEvents() {
@@ -12456,69 +13475,69 @@ function bindRadarPlayerEvents() {
   if (!container) return;
 
   // Play/Pause button
-  const playBtn = document.getElementById('radar-play-btn');
-  if (playBtn) {
-    playBtn.addEventListener('click', () => {
-      if (window.RADAR_PLAYER) window.RADAR_PLAYER.togglePlayback();
-    });
-  }
+   const playBtn = document.getElementById('radar-play-btn');
+   if (playBtn) {
+     playBtn.addEventListener('click', () => {
+       if (HASW_RADAR.RadarPlayer) HASW_RADAR.RadarPlayer.togglePlayback();
+     });
+   }
 
   // Speed selector
-  const speedSelect = document.getElementById('radar-speed-select');
-  if (speedSelect) {
-    speedSelect.addEventListener('change', (e) => {
-      e.stopPropagation();
-      if (!window.RADAR_PLAYER) return;
-      const state = window.RADAR_PLAYER.getState();
+   const speedSelect = document.getElementById('radar-speed-select');
+   if (speedSelect) {
+     speedSelect.addEventListener('change', (e) => {
+       e.stopPropagation();
+       if (!HASW_RADAR.RadarPlayer) return;
+       const state = HASW_RADAR.RadarPlayer.getState();
       state.speed = parseFloat(e.target.value);
       // If playing, restart the playback loop with new speed
       if (state.isPlaying) {
-        window.RADAR_PLAYER.stopPlayback();
-        window.RADAR_PLAYER.togglePlayback();
+        HASW_RADAR.RadarPlayer.stopPlayback();
+        HASW_RADAR.RadarPlayer.togglePlayback();
       }
     });
   }
 
-  // Zoom in button
-  const zoomInBtn = document.getElementById('radar-zoom-in-btn');
-  if (zoomInBtn) {
-    zoomInBtn.addEventListener('click', () => {
-      if (window.RADAR_PLAYER) window.RADAR_PLAYER.zoomIn();
-    });
-  }
+   // Zoom in button
+   const zoomInBtn = document.getElementById('radar-zoom-in-btn');
+   if (zoomInBtn) {
+     zoomInBtn.addEventListener('click', () => {
+       if (HASW_RADAR.RadarPlayer) HASW_RADAR.RadarPlayer.zoomIn();
+     });
+   }
 
-  // Zoom out button
-  const zoomOutBtn = document.getElementById('radar-zoom-out-btn');
-  if (zoomOutBtn) {
-    zoomOutBtn.addEventListener('click', () => {
-      if (window.RADAR_PLAYER) window.RADAR_PLAYER.zoomOut();
-    });
-  }
+   // Zoom out button
+   const zoomOutBtn = document.getElementById('radar-zoom-out-btn');
+   if (zoomOutBtn) {
+     zoomOutBtn.addEventListener('click', () => {
+       if (HASW_RADAR.RadarPlayer) HASW_RADAR.RadarPlayer.zoomOut();
+     });
+   }
 
-  // Reset view button
-  const resetBtn = document.getElementById('radar-reset-btn');
-  if (resetBtn) {
-    resetBtn.addEventListener('click', () => {
-      if (window.RADAR_PLAYER) window.RADAR_PLAYER.resetView();
-    });
-  }
+   // Reset view button
+   const resetBtn = document.getElementById('radar-reset-btn');
+   if (resetBtn) {
+     resetBtn.addEventListener('click', () => {
+       if (HASW_RADAR.RadarPlayer) HASW_RADAR.RadarPlayer.resetView();
+     });
+   }
 
-  // Layer selector
-  const layerSelect = document.getElementById('radar-layer-select');
-  if (layerSelect) {
-    layerSelect.addEventListener('change', async (e) => {
-      e.stopPropagation();
-      if (!window.RADAR_PLAYER) return;
-      await window.RADAR_PLAYER.switchLayer(e.target.value);
-    });
-  }
+   // Layer selector
+   const layerSelect = document.getElementById('radar-layer-select');
+   if (layerSelect) {
+     layerSelect.addEventListener('change', async (e) => {
+       e.stopPropagation();
+       if (!HASW_RADAR.RadarPlayer) return;
+       await HASW_RADAR.RadarPlayer.switchLayer(e.target.value);
+     });
+   }
 
-  // Load all frames button
-  const loadAllBtn = document.getElementById('radar-load-all-btn');
-  if (loadAllBtn) {
-    loadAllBtn.addEventListener('click', async () => {
-      if (!window.RADAR_PLAYER) return;
-      const state = window.RADAR_PLAYER.getState();
+   // Load all frames button
+   const loadAllBtn = document.getElementById('radar-load-all-btn');
+   if (loadAllBtn) {
+     loadAllBtn.addEventListener('click', async () => {
+       if (!HASW_RADAR.RadarPlayer) return;
+       const state = HASW_RADAR.RadarPlayer.getState();
       // Pre-fetch all remaining frames
       for (let i = 0; i < state.allTimestamps.length; i++) {
         const timestamp = state.allTimestamps[i];
@@ -12530,28 +13549,33 @@ function bindRadarPlayerEvents() {
     });
   }
 
-  // Fullscreen button
-  const fullscreenBtn = document.getElementById('radar-fullscreen-btn');
-  if (fullscreenBtn) {
-    fullscreenBtn.addEventListener('click', () => {
-      if (window.RADAR_PLAYER) window.RADAR_PLAYER.toggleFullscreen();
-    });
-  }
+   // Fullscreen button
+   const fullscreenBtn = document.getElementById('radar-fullscreen-btn');
+   if (fullscreenBtn) {
+     fullscreenBtn.addEventListener('click', () => {
+       if (HASW_RADAR.RadarPlayer) HASW_RADAR.RadarPlayer.toggleFullscreen();
+     });
+   }
 
-  // Pin toggle button
-  const pinsBtn = document.getElementById('radar-pins-btn');
-  if (pinsBtn) {
-    pinsBtn.addEventListener('click', () => {
-      if (window.RADAR_PLAYER) window.RADAR_PLAYER.togglePins();
-    });
-  }
+   // Pin toggle button
+   const pinsBtn = document.getElementById('radar-pins-btn');
+   if (pinsBtn) {
+     pinsBtn.addEventListener('click', () => {
+       if (HASW_RADAR.RadarPlayer) HASW_RADAR.RadarPlayer.togglePins();
+     });
+   }
 
-  // Update pins when weather data changes
-  const updatePinsObserver = new MutationObserver(() => {
-    if (weatherData.length > 0 && userLocation && window.RADAR_PLAYER) {
-      window.RADAR_PLAYER.updatePins(weatherData, userLocation);
-    }
-  });
+   // Update pins when weather data changes — disconnect previous observer first to prevent stacking
+   const prevObserver = window._radarPinsMutationObserver;
+   if (prevObserver) {
+     prevObserver.disconnect();
+   }
+   const updatePinsObserver = new MutationObserver(() => {
+     if (weatherData.length > 0 && userLocation && HASW_RADAR.RadarPlayer) {
+       HASW_RADAR.RadarPlayer.updatePins(weatherData, userLocation);
+     }
+   });
+   window._radarPinsMutationObserver = updatePinsObserver;
   
   // Observe city-grid for changes to trigger pin updates
   const cityGrid = document.getElementById('city-grid');
@@ -12559,12 +13583,12 @@ function bindRadarPlayerEvents() {
     updatePinsObserver.observe(cityGrid, { childList: true, subtree: true });
   }
   
-  // Also update pins after weather data loads
-  if (weatherData.length > 0 && userLocation && window.RADAR_PLAYER) {
-    setTimeout(() => {
-      window.RADAR_PLAYER.updatePins(weatherData, userLocation);
-    }, 500);
-  }
+   // Also update pins after weather data loads
+   if (weatherData.length > 0 && userLocation && HASW_RADAR.RadarPlayer) {
+     setTimeout(() => {
+       HASW_RADAR.RadarPlayer.updatePins(weatherData, userLocation);
+     }, 500);
+   }
 }
 
 // ===== GAME TOGGLE =====
