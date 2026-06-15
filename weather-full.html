@@ -1789,6 +1789,36 @@ body {
   animation: milestoneFlash 0.3s ease-out;
 }
 
+/* Dumb Luck flash text overlay */
+.donkey-dumb-luck {
+  position: absolute;
+  top: 35%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 1.2rem;
+  font-weight: 900;
+  font-family: 'Courier New', monospace;
+  letter-spacing: 0.2em;
+  color: #FFD700;
+  text-shadow: 0 0 15px rgba(255, 215, 0, 0.8), 0 0 30px rgba(255, 215, 0, 0.5), 0 0 45px rgba(255, 215, 0, 0.3);
+  z-index: 8;
+  pointer-events: none;
+  opacity: 0;
+  transition: none;
+}
+
+.donkey-dumb-luck.flash {
+  animation: dumbLuckFlash 0.8s ease-out forwards;
+}
+
+@keyframes dumbLuckFlash {
+  0% { opacity: 1; transform: translate(-50%, -50%) scale(0.5); }
+  15% { opacity: 1; transform: translate(-50%, -50%) scale(1.4); }
+  30% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  60% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -70%) scale(0.8); }
+}
+
 /* Near-miss flash text overlay */
 .donkey-near-miss {
   position: absolute;
@@ -2033,6 +2063,11 @@ body {
 .donkey-snarky-message.snarky-orange {
   color: #fb923c;
   text-shadow: 0 0 12px rgba(251, 146, 60, 0.6), 0 0 24px rgba(251, 146, 60, 0.3);
+}
+
+.donkey-snarky-message.snarky-gold {
+  color: #FFD700;
+  text-shadow: 0 0 12px rgba(255, 215, 0, 0.6), 0 0 24px rgba(255, 215, 0, 0.3);
 }
 
 /* ===== FULLSCREEN MODE ===== */
@@ -2747,13 +2782,13 @@ body.donkey-fullscreen .donkey-panel.donkey-hidden {
 <div id="radar-card-container" class="radar-card-wrapper"></div>
 
 <script>
-var LOCAL_CONFIG_REFRESH_INTERVAL_SECONDS = 1;
+var LOCAL_CONFIG_REFRESH_INTERVAL_SECONDS = 0;
 
-var LOCAL_SENSOR_TIMESTAMP = '1942-06-14T09:30:00.000Z';
-var LOCAL_SENSOR_TEMPERATURE = "-48c";
-var LOCAL_SENSOR_WIND_SPEED = "42kph";
-var LOCAL_SENSOR_WIND_GUST = "111k";
-var LOCAL_SENSOR_WIND_DIRECTION_DEGREES = 245;
+//var LOCAL_SENSOR_TIMESTAMP = '1942-06-14T09:30:00.000Z';
+//var LOCAL_SENSOR_TEMPERATURE = "-48c";
+//var LOCAL_SENSOR_WIND_SPEED = "42kph";
+//var LOCAL_SENSOR_WIND_GUST = "111k";
+//var LOCAL_SENSOR_WIND_DIRECTION_DEGREES = 245;
 
 </script>
 <script>
@@ -2860,7 +2895,7 @@ const _nwsRateLimiter = {
     return new Promise(resolve => {
       const check = () => {
         if (this._checkBurst()) resolve();
-        else setTimeout(check, 50);
+        else setTimeout(check, RATE_LIMITER_POLL_INTERVAL_MS);
       };
       check();
     });
@@ -2886,16 +2921,14 @@ const _nwsRateLimiter = {
   },
 };
 
+// ===== COORDINATE PRECISION =====
+// Rounding factor for cache key generation (~1km accuracy)
+const COORD_ROUND_PRECISION = 100;
+
 // ===== NWS TOGGLE STATE =====
 // Track which cities have NWS data actively displayed (per-city toggle).
-// The per-city toggle allows users to switch individual city cards from Open-Meteo (OM) base data
-// to NWS-enhanced data. The toggle state is persisted to localStorage for cross-session
-// persistence, so user preferences are remembered across app reloads.
-//
-// Note: _nwsActive entries are intentionally NOT cleaned up when cities are removed.
-// This preserves the user's preference when a city is removed and later re-added.
-// Over time this may result in stale entries, but the localStorage size impact is negligible
-// (a single entry is ~30 bytes; even 1000 cities would be < 32KB).
+// Entries are intentionally NOT cleaned up when cities are removed — preserves user preference
+// across removal/re-addition. Negligible storage impact (~30 bytes per entry).
 const NWS_ACTIVE_STORAGE_KEY = 'hasW_nwsActive';
 let _nwsActive = {}; // { place_id: boolean }
 
@@ -2912,47 +2945,60 @@ function saveNwsActiveState() {
 }
 
 const DataCache = {
-  // Default: max number of cache entries per type before LRU eviction kicks in
+  // Max cache entries per type before LRU eviction
   MAX_ENTRIES_PER_TYPE: 500,
 
-  // TTLs in milliseconds
+  // TTLs in milliseconds — grouped by category
   TTL: {
-    weather: 15 * 60 * 1000,      // 15 minutes
-    airQuality: 15 * 60 * 1000,   // 15 minutes
-    geocode: 24 * 60 * 60 * 1000, // 24 hours
-    nearby: 15 * 60 * 1000,       // 15 minutes (aligned with weather TTL)
-    ipLocation: 24 * 60 * 60 * 1000, // 24 hours
-    nwsPoint: 15 * 60 * 1000,     // 15 minutes
-    nwsForecast: 10 * 60 * 1000,  // 10 minutes
-    nwsHourly: 5 * 60 * 1000,     // 5 minutes
-    nwsCurrent: 10 * 60 * 1000,   // 10 minutes
-    nwsObservation: 5 * 60 * 1000, // 5 minutes
-    nwsAlerts: 2 * 60 * 1000,     // 2 minutes
-    nwsZoneForecast: 10 * 60 * 1000, // 10 minutes
-    nwsCityData: 10 * 60 * 1000,   // 10 minutes (NWS city data)
-    nwsStations: 30 * 60 * 1000,   // 30 minutes (observation stations)
-    nwsObsLatest: 5 * 60 * 1000,   // 5 minutes (latest observation from station)
-    nwsObsHistorical: 5 * 60 * 1000, // 5 minutes (historical observation)
-    nwsProducts: 10 * 60 * 1000,   // 10 minutes (text products)
-    nwsAviation: 10 * 60 * 1000,   // 10 minutes (aviation data)
-    nwsRadar: 5 * 60 * 1000,       // 5 minutes (radar data)
-    nwsGrid: 10 * 60 * 1000,       // 10 minutes (raw gridpoint data)
-    nwsZone: 15 * 60 * 1000,       // 15 minutes (zone metadata)
-    nwsCounty: 15 * 60 * 1000,     // 15 minutes (county metadata)
-    nwsOffice: 15 * 60 * 1000,     // 15 minutes (office metadata)
-    nwsActiveAlerts: 2 * 60 * 1000, // 2 minutes (active alerts)
-    nwsAlertTypes: 60 * 60 * 1000,  // 60 minutes (alert type list)
-    nwsProductTypes: 60 * 60 * 1000, // 60 minutes (product type list)
-    nwsProductLocations: 60 * 60 * 1000, // 60 minutes (product location list)
-    nwsRadarServers: 60 * 60 * 1000, // 60 minutes (radar server list)
-    nwsRadarStations: 60 * 60 * 1000, // 60 minutes (radar station list)
-    nwsGlossary: 24 * 60 * 60 * 1000, // 24 hours (glossary)
-    nwsOffices: 15 * 60 * 1000,    // 15 minutes (office list)
+    // Non-NWS sources
+    weather:     15 * 60 * 1000,   // 15 min
+    airQuality:  15 * 60 * 1000,   // 15 min
+    geocode:    24 * 60 * 60 * 1000, // 24 hr
+    nearby:     15 * 60 * 1000,   // 15 min (aligned with weather)
+    ipLocation: 24 * 60 * 60 * 1000, // 24 hr
+
+    // NWS general data
+    nwsPoint:      15 * 60 * 1000,   // 15 min
+    nwsForecast:   10 * 60 * 1000,   // 10 min
+    nwsHourly:      5 * 60 * 1000,   // 5 min
+    nwsCurrent:    10 * 60 * 1000,   // 10 min
+    nwsObservation: 5 * 60 * 1000,   // 5 min
+
+    // NWS alerts & products
+    nwsAlerts:          2 * 60 * 1000,   // 2 min
+    nwsActiveAlerts:    2 * 60 * 1000,   // 2 min
+    nwsZoneForecast:   10 * 60 * 1000,   // 10 min
+    nwsCityData:       10 * 60 * 1000,   // 10 min
+    nwsProducts:       10 * 60 * 1000,   // 10 min
+    nwsAviation:       10 * 60 * 1000,   // 10 min
+    nwsObsLatest:       5 * 60 * 1000,   // 5 min
+    nwsObsHistorical:   5 * 60 * 1000,   // 5 min
+
+    // NWS radar data
+    nwsRadar:         5 * 60 * 1000,   // 5 min
+    nwsGrid:          10 * 60 * 1000,   // 10 min
+    nwsStations:     30 * 60 * 1000,   // 30 min
+
+    // NWS metadata (lists)
+    nwsAlertTypes:        60 * 60 * 1000,  // 60 min
+    nwsProductTypes:      60 * 60 * 1000,  // 60 min
+    nwsProductLocations:  60 * 60 * 1000,  // 60 min
+    nwsRadarServers:      60 * 60 * 1000,  // 60 min
+    nwsRadarStations:     60 * 60 * 1000,  // 60 min
+
+    // NWS metadata (entities)
+    nwsZone:    15 * 60 * 1000,   // 15 min
+    nwsCounty:  15 * 60 * 1000,   // 15 min
+    nwsOffice:  15 * 60 * 1000,   // 15 min
+    nwsOffices: 15 * 60 * 1000,   // 15 min
+
+    // NWS static reference
+    nwsGlossary: 24 * 60 * 60 * 1000, // 24 hr
   },
 
   // Round coordinates to 2 decimal places (~1km accuracy) for cache key grouping
   _roundCoord(coord) {
-    return Math.round(coord * 100) / 100;
+    return Math.round(coord * COORD_ROUND_PRECISION) / COORD_ROUND_PRECISION;
   },
 
   // Get the LRU list key for a cache type
@@ -3024,13 +3070,13 @@ const DataCache = {
         return false;
       }
       const entry = JSON.parse(raw);
-      // Validate type matches (always check, even when type is falsy — skip only for backward compat)
+      // Validate type matches (skip only for backward compat)
       if (type != null && entry.type !== type) {
         console.log(`[DataCache] MISS (type mismatch): ${key} (expected: ${type}, got: ${entry.type})`);
         return false;
       }
       // Use entry.type for TTL lookup when type is null, to avoid undefined TTL
-      const ttlKey = type != null ? type : entry.type;
+      const ttlKey = type ?? entry.type;
       const expired = !entry || (Date.now() - entry.timestamp > this.TTL[ttlKey]);
       if (expired) {
         console.log(`[DataCache] MISS (expired): ${key} (type: ${ttlKey})`);
@@ -3053,13 +3099,13 @@ const DataCache = {
         return null;
       }
       const entry = JSON.parse(raw);
-      // Validate type matches (always check, even when type is falsy — skip only for backward compat)
+      // Validate type matches (skip only for backward compat)
       if (type != null && entry.type !== type) {
         console.log(`[DataCache] MISS (type mismatch): ${key} (expected: ${type}, got: ${entry.type})`);
         return null;
       }
       // Use entry.type for TTL lookup when type is null, to avoid undefined TTL
-      const ttlKey = type != null ? type : entry.type;
+      const ttlKey = type ?? entry.type;
       if (Date.now() - entry.timestamp > this.TTL[ttlKey]) {
         console.log(`[DataCache] MISS (expired): ${key} (type: ${ttlKey}, age: ${Math.round((Date.now() - entry.timestamp) / 1000)}s, ttl: ${this.TTL[ttlKey] / 1000}s)`);
         localStorage.removeItem(`hasw_cache_${key}`);
@@ -3091,7 +3137,7 @@ const DataCache = {
     }
   },
 
-  // Invalidate a specific cache key
+  // Invalidate a specific cache key by type
   invalidate(key) {
     console.log(`[DataCache] INVALIDATE: ${key}`);
     localStorage.removeItem(`hasw_cache_${key}`);
@@ -3101,7 +3147,7 @@ const DataCache = {
 
 </script>
 <script>
-// ===== UTILITY FUNCTIONS =====
+// — Utility Functions —
 function toF(c) { return c * 9 / 5 + 32; }
 function toC(f) { return (f - 32) * 5 / 9; }
 function convertTemp(celsius) {
@@ -3120,135 +3166,125 @@ function escapeHTML(str) {
     .replace(/'/g, '&#039;');
 }
 
+const DEG_TO_RAD = Math.PI / 180;
+
 function haversine(lat1, lon1, lat2, lon2) {
   const R = EARTH_RADIUS_MI;
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+  const dLat = (lat2 - lat1) * DEG_TO_RAD;
+  const dLon = (lon2 - lon1) * DEG_TO_RAD;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * DEG_TO_RAD) * Math.cos(lat2 * DEG_TO_RAD) * Math.sin(dLon / 2) ** 2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 function bearing(lat1, lon1, lat2, lon2) {
-  const dLon = (lon2 - lon1) * Math.PI / 180;
-  const y = Math.sin(dLon) * Math.cos(lat2 * Math.PI / 180);
-  const x = Math.cos(lat1 * Math.PI / 180) * Math.sin(lat2 * Math.PI / 180) -
-            Math.sin(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.cos(dLon);
-  let b = Math.atan2(y, x) * 180 / Math.PI;
+  const dLon = (lon2 - lon1) * DEG_TO_RAD;
+  const y = Math.sin(dLon) * Math.cos(lat2 * DEG_TO_RAD);
+  const x = Math.cos(lat1 * DEG_TO_RAD) * Math.sin(lat2 * DEG_TO_RAD) -
+            Math.sin(lat1 * DEG_TO_RAD) * Math.cos(lat2 * DEG_TO_RAD) * Math.cos(dLon);
+  let b = Math.atan2(y, x) / DEG_TO_RAD;
   return (b + 360) % 360;
 }
 
+// — Constants —
+const AQI_GOOD_THRESHOLD = 50;
+const AQI_MODERATE_THRESHOLD = 100;
+const COMPASS_SECTORS = 16;
+const COMPASS_SECTOR_SIZE = 22.5;
+const WIND_DIRECTIONS_COUNT = 8;
+const WIND_DIRECTION_STEP = 45;
+const DEFAULT_LAT = 43.41947;
+const DEFAULT_LON = -83.95081;
+const IP_API_URL = 'https://ipinfo.io/json';
+const MIN_BACKGROUND_REFRESH_MS = 60 * 1000;
+const BACKGROUND_REFRESH_FRACTION = 0.8;
+
 function bearingToCompass(deg) {
   const dirs = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
-  return dirs[Math.round(deg / 22.5) % 16];
+  return dirs[Math.round(deg / COMPASS_SECTOR_SIZE) % COMPASS_SECTORS];
 }
 
 function aqiLabel(aqi) {
-  if (aqi === null || aqi === undefined || aqi === false || aqi !== aqi) return { label: '—', cls: '' };
-  if (aqi <= 50) return { label: 'Good', cls: 'aqi-good' };
-  if (aqi <= 100) return { label: 'Moderate', cls: 'aqi-moderate' };
+  if (aqi == null || aqi === false || aqi !== aqi) return { label: '—', cls: '' };
+  if (aqi <= AQI_GOOD_THRESHOLD) return { label: 'Good', cls: 'aqi-good' };
+  if (aqi <= AQI_MODERATE_THRESHOLD) return { label: 'Moderate', cls: 'aqi-moderate' };
   return { label: 'Unhealthy', cls: 'aqi-unhealthy' };
 }
 
-// ===== WIND COMPASS =====
 function getWindCompass(deg) {
-  const arrow = ['⬆', '↗', '➡', '↘', '⬇', '↙', '⬅', '↖'][Math.round(deg / 45) % 8];
+  const arrow = ['⬆', '↗', '➡', '↘', '⬇', '↙', '⬅', '↖'][Math.round(deg / WIND_DIRECTION_STEP) % WIND_DIRECTIONS_COUNT];
   return `<span class="wind-compass"><span class="compass-dial">${arrow}</span> ${bearingToCompass(deg)} ${deg}°</span>`;
 }
 
-// ===== DAY/NIGHT CHECK =====
 function isDaytime(hour, sunrise, sunset) {
   return hour >= sunrise && hour < sunset;
 }
 
-// ===== IP-BASED LOCATION API CLIENT =====
-// Provides fallback geolocation via ipinfo.io.
-
-// ===== ENDPOINT =====
-const IP_API = 'https://ipinfo.io/json';
-
-// ===== GET LOCATION (Browser Geolocation + IP Fallback) =====
+// — Location —
 async function getLocation() {
-  // Check in-memory cache
   if (userLocation) return userLocation;
 
-  // Check localStorage cache for IP geolocation
   const cachedIP = DataCache.get('ip_location', 'ipLocation');
-  if (cachedIP) {
-    return cachedIP;
-  }
+  if (cachedIP) return cachedIP;
 
   try {
     const pos = await new Promise((resolve, reject) => {
       navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: GEOLOCATION_TIMEOUT_MS });
     });
     const { latitude, longitude } = pos.coords;
-    const loc = { lat: latitude, lon: longitude };
-    // Cache browser geolocation briefly (it's not reliable to cache long-term)
-    return loc;
+    return { lat: latitude, lon: longitude };
   } catch {
     try {
-      const res = await fetch(IP_API);
+      const res = await fetch(IP_API_URL);
       const data = await res.json();
       const lat = parseFloat(data.loc?.split(',')[0] ?? data.lat);
       const lon = parseFloat(data.loc?.split(',')[1] ?? data.lon);
       const loc = { lat, lon };
-      // Cache IP location for 24 hours
       DataCache.set('ip_location', loc, 'ipLocation');
       return loc;
     } catch {
-      return { lat: 43.41947, lon: -83.95081 };
+      return { lat: DEFAULT_LAT, lon: DEFAULT_LON };
     }
   }
 }
 
-// ===== NWS BOUNDS CHECK =====
-// Track NWS bounds availability per city (checked during initial fetch)
-const _nwsBoundsCache = {}; // { lat,lon: Promise<boolean> | { value: boolean, expiresAt: number } }
-const NWS_BOUNDS_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour TTL
+// — NWS Bounds Check —
+const _nwsBoundsCache = {};
+const NWS_BOUNDS_CACHE_TTL_MS = 60 * 60 * 1000;
 
 async function isNwsBoundsAvailable(lat, lon) {
   const key = `${DataCache._roundCoord(lat)},${DataCache._roundCoord(lon)}`;
   if (key in _nwsBoundsCache) {
     const entry = _nwsBoundsCache[key];
-    // If it's a TTL entry, check expiration
     if (typeof entry === 'object' && !entry.then && 'value' in entry) {
       if (Date.now() < entry.expiresAt) return entry.value;
-      delete _nwsBoundsCache[key]; // Expired — fall through to re-check
+      delete _nwsBoundsCache[key];
     } else {
-      // It's a pending Promise — return it (concurrent request dedup)
       return entry;
     }
   }
   const promise = (async () => {
     try {
-      const url = `${NWS_API}/points/${lat},${lon}`;
-      // Use rate-limited NWS fetch to avoid 429s during bulk checks
-      await _nwsRateLimiter.waitForSlot();
-      const data = await (await fetch(url)).json();
+      const data = await (await fetch(`${NWS_API}/points/${lat},${lon}`)).json();
       const props = data?.properties || {};
       return !!(props.gridId || props.cwa) && !!props.gridX && !!props.gridY;
     } catch {
       return false;
     }
   })();
-  // Cache as Promise while pending
   _nwsBoundsCache[key] = promise;
   const result = await promise;
-  // Replace with TTL entry after resolution
   _nwsBoundsCache[key] = { value: result, expiresAt: Date.now() + NWS_BOUNDS_CACHE_TTL_MS };
   return result;
 }
 
-// ===== BACKGROUND REFRESH =====
+// — Background Refresh —
 let _bgRefreshTimer = null;
 
-// Get the shortest remaining TTL across all cities' weather + AQI caches
 function getCityShortestTTL(city) {
   let shortest = Infinity;
   const lat = city.latitude;
   const lon = city.longitude;
 
-  // Check consolidated cache key (weatherAqi) first — this is the new format
   const consolidatedKey = weatherAqiCacheKey(lat, lon);
   const consolidatedEntry = localStorage.getItem(`hasw_cache_${consolidatedKey}`);
   if (consolidatedEntry) {
@@ -3258,7 +3294,6 @@ function getCityShortestTTL(city) {
     if (remaining < shortest) shortest = remaining;
   }
 
-  // Check legacy weather cache key (backward compatibility)
   const weatherKey = weatherCacheKey(lat, lon);
   const weatherEntry = localStorage.getItem(`hasw_cache_${weatherKey}`);
   if (weatherEntry && !consolidatedEntry) {
@@ -3268,7 +3303,6 @@ function getCityShortestTTL(city) {
     if (remaining < shortest) shortest = remaining;
   }
 
-  // Check legacy AQI cache key (backward compatibility)
   const aqiKey = aqiCacheKey(lat, lon);
   const airEntry = localStorage.getItem(`hasw_cache_${aqiKey}`);
   if (airEntry && !consolidatedEntry) {
@@ -3278,7 +3312,6 @@ function getCityShortestTTL(city) {
     if (remaining < shortest) shortest = remaining;
   }
 
-  // Check NWS cache — only nwsPoint entries matter (they have the longest TTL among NWS types)
   const nwsPointKey = nwsPointCacheKey(lat, lon);
   const nwsEntry = localStorage.getItem(`hasw_cache_${nwsPointKey}`);
   if (nwsEntry) {
@@ -3288,15 +3321,12 @@ function getCityShortestTTL(city) {
     if (remaining < shortest) shortest = remaining;
   }
 
-  // Default to 15 minutes if no cache — NWS rate limits at 1 req/sec, so use a conservative default
-  return shortest === Infinity ? 15 * 60 * 1000 : shortest;
+  return shortest === Infinity ? MIN_BACKGROUND_REFRESH_MS : shortest;
 }
 
 function startBackgroundRefresh() {
-  // Clear existing timer
   if (_bgRefreshTimer) clearInterval(_bgRefreshTimer);
-  
-  // Calculate the shortest remaining TTL across all cities and use 80% of it as the refresh interval (with a minimum of 1 minute)
+
   let shortestTTL = Infinity;
   if (weatherData.length > 0) {
     for (const city of weatherData) {
@@ -3304,34 +3334,23 @@ function startBackgroundRefresh() {
       if (ttl < shortestTTL) shortestTTL = ttl;
     }
   }
-  
-  // Use 80% of the shortest TTL as the refresh interval, with a minimum of 1 minute
-  const interval = Math.max(60 * 1000, shortestTTL * 0.8);
-  
+
+  const interval = Math.max(MIN_BACKGROUND_REFRESH_MS, shortestTTL * BACKGROUND_REFRESH_FRACTION);
+
   _bgRefreshTimer = setInterval(() => {
-    if (isLoading) return;
-    if (!userLocation) return;
-    
-    // Only refresh if we have weather data
-    if (weatherData.length === 0) return;
-    
-    // Invalidate OM caches for all cities (NWS is always fetched where available)
+    if (isLoading || !userLocation || weatherData.length === 0) return;
+
     for (const city of weatherData) {
-      const consolidatedKey = weatherAqiCacheKey(city.latitude, city.longitude);
-      DataCache.invalidate(consolidatedKey);
-      // Also invalidate legacy keys for backward compatibility
-      const weatherCk = weatherCacheKey(city.latitude, city.longitude);
-      const aqiCk = aqiCacheKey(city.latitude, city.longitude);
-      DataCache.invalidate(weatherCk);
-      DataCache.invalidate(aqiCk);
+      DataCache.invalidate(weatherAqiCacheKey(city.latitude, city.longitude));
+      DataCache.invalidate(weatherCacheKey(city.latitude, city.longitude));
+      DataCache.invalidate(aqiCacheKey(city.latitude, city.longitude));
     }
-    
-    // Re-fetch data silently
+
     run();
   }, interval);
 }
 
-// ===== REFRESH & UNIT TOGGLE =====
+// — Refresh & Unit Toggle —
 function toggleUnit() {
   if (_toggleDebounceTimer) return;
   _toggleDebounceTimer = setTimeout(() => {
@@ -3340,7 +3359,6 @@ function toggleUnit() {
     const btn = document.getElementById('unit-toggle');
     if (btn) btn.textContent = `°${unit}`;
     renderAll();
-    // Notify other modules that the unit changed
     window.dispatchEvent(new CustomEvent('unitChanged', { detail: { unit } }));
   }, TOGGLE_DEBOUNCE_MS);
 }
@@ -3352,11 +3370,9 @@ async function refresh() {
   btn.classList.add('spinning');
   btn.disabled = true;
 
-  // Clear weather, nearby, and ip caches on refresh
   DataCache.invalidate('ip_location');
   _nearbyCache = null;
   _nearbyCacheTime = 0;
-  // Also invalidate nearby DataCache entry
   if (userLocation) {
     const nearbyKey = `nearby_${DataCache._roundCoord(userLocation.lat)}_${DataCache._roundCoord(userLocation.lon)}`;
     DataCache.invalidate(nearbyKey);
@@ -3368,6 +3384,7 @@ async function refresh() {
   btn.disabled = false;
   isLoading = false;
 }
+
 </script>
 <script>
 // ===== SVG WEATHER ICONS - LOUD & ANIMATED =====
@@ -3665,12 +3682,23 @@ function loudWeatherIcon(type, size) {
 // ===== OPEN-METEO API CLIENT =====
 // Fetches weather data and air quality from Open-Meteo APIs.
 
+// ===== CONSTANTS =====
+const MAX_RETRIES = 3;
+const BASE_RETRY_DELAY_MS = 1000;
+const BURST_POLL_INTERVAL_MS = 50;
+const DEFAULT_FORECAST_DAYS = 2;
+
 // ===== ENDPOINTS =====
 const WEATHER_API = 'https://api.open-meteo.com/v1/forecast';
 const AIR_QUALITY_API = 'https://air-quality-api.open-meteo.com/v1/air-quality';
 
+// ===== URL QUERY PARAMETERS =====
+const WEATHER_CURRENT_PARAMS = 'current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m,surface_pressure,uv_index,visibility';
+const WEATHER_HOURLY_PARAMS = 'hourly=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m';
+const WEATHER_OPTIONS_PARAMS = `forecast_days=${DEFAULT_FORECAST_DAYS}&temperature_unit=celsius&wind_speed_unit=kmh&precipitation_unit=mm&timezone=auto`;
+const AQI_CURRENT_PARAMS = 'current=us_aqi,pm2_5,european_aqi';
+
 // ===== AIR QUALITY RATE LIMITER =====
-// The AQI API has strict rate limits (likely similar to NWS: 1 req/sec, burst of 3)
 const _aqiRateLimiter = {
   lastRequestTime: 0,
   burstCount: 0,
@@ -3692,7 +3720,7 @@ const _aqiRateLimiter = {
     return new Promise(resolve => {
       const check = () => {
         if (this._checkBurst()) resolve();
-        else setTimeout(check, 50);
+        else setTimeout(check, BURST_POLL_INTERVAL_MS);
       };
       check();
     });
@@ -3702,12 +3730,10 @@ const _aqiRateLimiter = {
     const now = Date.now();
     const timeSinceLast = now - this.lastRequestTime;
 
-    // If we're within the burst window and at max burst, wait
     if (timeSinceLast < this.burstWindowMs && !this._checkBurst()) {
       await this._waitForBurst();
     }
 
-    // Ensure minimum interval between requests
     if (timeSinceLast < this.minIntervalMs) {
       await new Promise(r => setTimeout(r, this.minIntervalMs - timeSinceLast));
     }
@@ -3719,15 +3745,12 @@ const _aqiRateLimiter = {
 };
 
 // ===== CROSS-SOURCE LOOKUP FUNCTIONS =====
-// Simplified: only look up weather data from NWS when OM is missing.
-// AQI cross-source lookup removed — NWS doesn't provide AQI, and OM handles it.
+// Check NWS cache keys for weather data (NWS doesn't provide AQI).
 
 function crossSourceGetWeather(lat, lon) {
-  // Try NWS point cache key (which contains full weather object)
   const nwsPoint = DataCache.get(nwsPointCacheKey(lat, lon), 'nwsPoint');
   if (nwsPoint && nwsPoint.weather) return { data: nwsPoint, source: 'nws' };
 
-  // Try NWS city data key (which contains full weather object)
   const nwsCityData = DataCache.get(nwsCacheKey(lat, lon), 'nwsCityData');
   if (nwsCityData && nwsCityData.weather) return { data: nwsCityData, source: 'nws' };
 
@@ -3751,7 +3774,7 @@ function aqiCacheKey(lat, lon) {
 
 // ===== RETRY HELPER =====
 // Retry a fetch with exponential backoff. Handles HTTP 429 (rate limit) specially.
-async function retryWithBackoff(fn, maxRetries = 3, baseDelay = 1000) {
+async function retryWithBackoff(fn, maxRetries = MAX_RETRIES, baseDelay = BASE_RETRY_DELAY_MS) {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       const result = await fn();
@@ -3774,6 +3797,16 @@ async function retryWithBackoff(fn, maxRetries = 3, baseDelay = 1000) {
 }
 
 // ===== OPEN-METEO SPECIFIC HELPERS =====
+
+// Parse AQI fields from a response object, handling both flat and nested (current) formats.
+function parseAqiFields(raw) {
+  return {
+    us_aqi: raw?.current?.us_aqi ?? raw?.us_aqi ?? null,
+    pm2_5: raw?.current?.pm2_5 ?? raw?.pm2_5 ?? null,
+    european_aqi: raw?.current?.european_aqi ?? raw?.european_aqi ?? null,
+  };
+}
+
 // Known keys that are NOT hourly variable data
 const KNOWN_NON_HOURLY_KEYS = new Set([
   'latitude', 'longitude', 'elevation',
@@ -3793,8 +3826,7 @@ function extractHourlyKeys(raw) {
 }
 
 // ===== DEDUPLICATION =====
-// Deduplicate city results by coordinate pair (keep first entry per coordinate pair)
-// Prefer entries with a non-null place_id when there's a tie
+
 function deduplicateResults(results) {
   const seenCoords = new Map();
   const deduped = [];
@@ -3806,21 +3838,15 @@ function deduplicateResults(results) {
       continue;
     }
     const coordKey = `${lat},${lon}`;
-    let isDup = false;
-    for (const [existingKey, existingEntry] of seenCoords) {
-      const [exLat, exLon] = existingKey.split(',').map(Number);
-      if (Math.abs(lat - exLat) < 0.01 && Math.abs(lon - exLon) < 0.01) {
-        isDup = true;
-        // Prefer the entry with a non-null place_id
-        if (!existingEntry.place_id && entry.place_id) {
-          seenCoords.set(existingKey, entry);
-          const dupIdx = deduped.findIndex(d => d === existingEntry);
-          if (dupIdx !== -1) deduped[dupIdx] = entry;
-        }
-        break;
+    if (seenCoords.has(coordKey)) {
+      // Prefer the entry with a non-null place_id
+      const existingEntry = seenCoords.get(coordKey);
+      if (!existingEntry.place_id && entry.place_id) {
+        const dupIdx = deduped.findIndex(d => d === existingEntry);
+        if (dupIdx !== -1) deduped[dupIdx] = entry;
+        seenCoords.set(coordKey, entry);
       }
-    }
-    if (!isDup) {
+    } else {
       seenCoords.set(coordKey, entry);
       deduped.push(entry);
     }
@@ -3828,7 +3854,7 @@ function deduplicateResults(results) {
   return deduped;
 }
 
-// Deduplicate cities by coordinate pair (for deduplication BEFORE the API call)
+// Deduplicate cities by coordinate pair (before the API call).
 function deduplicateCities(cities) {
   const seenCoords = new Set();
   const deduped = [];
@@ -3849,8 +3875,8 @@ function deduplicateCities(cities) {
 }
 
 // ===== REQUEST DEDUPLICATION =====
-// Prevent duplicate bulk fetches for the same city set
-const _pendingWeatherFetch = new Map(); // key (sorted lat,lon pairs) → Promise
+// Prevent duplicate bulk fetches for the same city set.
+const _pendingWeatherFetch = new Map();
 
 function getPendingWeatherFetch(cities) {
   const key = cities.map(c => `${DataCache._roundCoord(c.latitude)},${DataCache._roundCoord(c.longitude)}`).sort().join('|');
@@ -3871,55 +3897,34 @@ function clearPendingWeatherFetch(key) {
 
 // ===== PER-CITY WEATHER FETCH (for incremental updates) =====
 async function fetchWeatherForCity(city) {
-  // Check consolidated cache first
   const cacheKey = weatherAqiCacheKey(city.latitude, city.longitude);
-  
   const cached = DataCache.get(cacheKey, 'weatherAqi');
   if (cached) {
     return { ...city, source: 'open-meteo', weather: cached.weather, aqi: cached.aqi };
   }
-  
-  // Check cross-source: NWS data can serve as OM weather data
   const crossSource = crossSourceGetWeather(city.latitude, city.longitude);
   if (crossSource && crossSource.data.weather) {
     return { ...city, source: crossSource.source, weather: crossSource.data.weather, aqi: {} };
   }
-  
-  // Fetch weather for single city (with AQI rate limiting)
   try {
     await _aqiRateLimiter.waitForSlot();
-    
-    const weatherUrl = `${WEATHER_API}?latitude=${city.latitude}&longitude=${city.longitude}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m,surface_pressure,uv_index,visibility&hourly=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m&forecast_days=2&temperature_unit=celsius&wind_speed_unit=kmh&precipitation_unit=mm&timezone=auto`;
-    
+    const weatherUrl = `${WEATHER_API}?latitude=${city.latitude}&longitude=${city.longitude}&${WEATHER_CURRENT_PARAMS}&${WEATHER_HOURLY_PARAMS}&${WEATHER_OPTIONS_PARAMS}`;
     const weatherRes = await retryWithBackoff(() => fetch(weatherUrl));
     if (!weatherRes.ok) {
       return { ...city, source: 'open-meteo', weather: null, aqi: {} };
     }
-    
     const weatherAll = await weatherRes.json();
-    
-    // Parse single-city weather response (flat object, no results array)
     const cityWeather = {
       current: weatherAll.current || {},
       hourly: weatherAll.hourly || { time: [] },
     };
-    
-    // Fetch AQI for single city (with rate limiting)
     await _aqiRateLimiter.waitForSlot();
-    const aqiUrl = `${AIR_QUALITY_API}?latitude=${city.latitude}&longitude=${city.longitude}&current=us_aqi,pm2_5,european_aqi&timezone=auto`;
+    const aqiUrl = `${AIR_QUALITY_API}?latitude=${city.latitude}&longitude=${city.longitude}&${AQI_CURRENT_PARAMS}&timezone=auto`;
     const aqiRes = await retryWithBackoff(() => fetch(aqiUrl));
     const aqiData = await aqiRes.json();
-    
-    // Parse single-city AQI response (flat object, no results array)
-    const cityAqi = {
-      us_aqi: aqiData.current?.us_aqi ?? aqiData.us_aqi ?? null,
-      pm2_5: aqiData.current?.pm2_5 ?? aqiData.pm2_5 ?? null,
-      european_aqi: aqiData.current?.european_aqi ?? aqiData.european_aqi ?? null,
-    };
-    
-    // Store consolidated cache
+
+    const cityAqi = parseAqiFields(aqiData);
     DataCache.set(cacheKey, { weather: cityWeather, aqi: cityAqi }, 'weatherAqi');
-    
     return { ...city, source: 'open-meteo', weather: cityWeather, aqi: cityAqi };
   } catch (err) {
     console.error(`[fetchWeatherForCity] Failed for ${city.name}:`, err);
@@ -3975,7 +3980,7 @@ async function fetchWeatherForCities(cities) {
 
   // Build combined weather + AQI URL for deduplicated uncached cities only
   try {
-    const weatherUrl = `${WEATHER_API}?latitude=${dedupedUncached.map(c => c.latitude).join(',')}&longitude=${dedupedUncached.map(c => c.longitude).join(',')}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m,surface_pressure,uv_index,visibility&hourly=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m&forecast_days=2&temperature_unit=celsius&wind_speed_unit=kmh&precipitation_unit=mm&timezone=auto`;
+    const weatherUrl = `${WEATHER_API}?latitude=${dedupedUncached.map(c => c.latitude).join(',')}&longitude=${dedupedUncached.map(c => c.longitude).join(',')}&${WEATHER_CURRENT_PARAMS}&${WEATHER_HOURLY_PARAMS}&${WEATHER_OPTIONS_PARAMS}`;
 
     // Retry logic for weather API (handles 429)
     const weatherRes = await retryWithBackoff(() => fetch(weatherUrl));
@@ -3992,7 +3997,7 @@ async function fetchWeatherForCities(cities) {
 
     // Rate-limit the AQI request too
     await _aqiRateLimiter.waitForSlot();
-    const aqiUrl = `${AIR_QUALITY_API}?latitude=${dedupedUncached.map(c => c.latitude).join(',')}&longitude=${dedupedUncached.map(c => c.longitude).join(',')}&current=us_aqi,pm2_5,european_aqi&timezone=auto`;
+    const aqiUrl = `${AIR_QUALITY_API}?latitude=${dedupedUncached.map(c => c.latitude).join(',')}&longitude=${dedupedUncached.map(c => c.longitude).join(',')}&${AQI_CURRENT_PARAMS}&timezone=auto`;
     const aqiRes = await retryWithBackoff(() => fetch(aqiUrl));
     const aqiData = await aqiRes.json();
 
@@ -4041,11 +4046,7 @@ async function fetchWeatherForCities(cities) {
         // AQI from results array
         if (hasAqiResultsArray) {
           const aqiRaw = aqiData.results[wIdx] || {};
-          aqiResult = {
-            us_aqi: aqiRaw.current?.us_aqi ?? aqiRaw.us_aqi ?? null,
-            pm2_5: aqiRaw.current?.pm2_5 ?? aqiRaw.pm2_5 ?? null,
-            european_aqi: aqiRaw.current?.european_aqi ?? aqiRaw.european_aqi ?? null,
-          };
+          aqiResult = parseAqiFields(aqiRaw);
         } else {
           aqiResult = { us_aqi: null, pm2_5: null, european_aqi: null };
         }
@@ -4060,11 +4061,7 @@ async function fetchWeatherForCities(cities) {
         };
         if (Array.isArray(aqiData)) {
           const aqiRaw = aqiData[i] || {};
-          aqiResult = {
-            us_aqi: aqiRaw.current?.us_aqi ?? aqiRaw.us_aqi ?? null,
-            pm2_5: aqiRaw.current?.pm2_5 ?? aqiRaw.pm2_5 ?? null,
-            european_aqi: aqiRaw.current?.european_aqi ?? aqiRaw.european_aqi ?? null,
-          };
+          aqiResult = parseAqiFields(aqiRaw);
         } else {
           aqiResult = { us_aqi: null, pm2_5: null, european_aqi: null };
         }
@@ -4076,11 +4073,7 @@ async function fetchWeatherForCities(cities) {
           hourly: raw.hourly || { time: [] },
         };
         if (aqiData && !hasAqiResultsArray) {
-          aqiResult = {
-            us_aqi: aqiData.current?.us_aqi ?? aqiData.us_aqi ?? null,
-            pm2_5: aqiData.current?.pm2_5 ?? aqiData.pm2_5 ?? null,
-            european_aqi: aqiData.current?.european_aqi ?? aqiData.european_aqi ?? null,
-          };
+          aqiResult = parseAqiFields(aqiData);
         } else {
           aqiResult = { us_aqi: null, pm2_5: null, european_aqi: null };
         }
@@ -4116,8 +4109,7 @@ async function fetchWeatherForCities(cities) {
 }
 </script>
 <script>
-// ===== OPENSTREETMAP / NOMINATIM API CLIENT =====
-// Fetches nearby city data from Nominatim/OSM.
+// OpenStreetMap / Nominatim API client — fetches nearby city data from Nominatim/OSM.
 
 // ===== ENDPOINT =====
 const NOMINATIM = 'https://nominatim.openstreetmap.org/search';
@@ -4126,7 +4118,17 @@ const NOMINATIM = 'https://nominatim.openstreetmap.org/search';
 const NOMINATIM_CLOSE_RADIUS = 0.45;
 const NOMINATIM_WIDE_RADIUS = 1.0;
 
-// ===== HELPER: Scale viewbox for Nominatim =====
+// ===== FETCH LIMITS =====
+const NOMINATIM_CLOSE_LIMIT = 30;
+const NOMINATIM_WIDE_LIMIT = 50;
+
+// ===== BEARING =====
+const BEARING_WRAP_AROUND = 180;
+
+// ===== DEDUPLICATION =====
+const DEDUP_COORD_TOLERANCE = 0.01;
+const BOUNDARY_RANK_THRESHOLD = 4;
+
 function scaleViewbox(lat, lon, radiusDeg) {
   const south = (lat - radiusDeg).toFixed(4);
   const north = (lat + radiusDeg).toFixed(4);
@@ -4135,9 +4137,7 @@ function scaleViewbox(lat, lon, radiusDeg) {
   return `${west},${north},${east},${south}`;
 }
 
-// ===== FIND NEARBY CITIES =====
 async function findNearbyCities(lat, lon) {
-  // Handle _maxCities === 0
   if (_maxCities === 0) return [];
 
   // Check in-memory cache first
@@ -4145,7 +4145,6 @@ async function findNearbyCities(lat, lon) {
     return _nearbyCache;
   }
 
-  // Check localStorage cache
   const cacheKey = `nearby_${DataCache._roundCoord(lat)}_${DataCache._roundCoord(lon)}`;
   const cached = DataCache.get(cacheKey, 'nearby');
   if (cached) {
@@ -4156,7 +4155,7 @@ async function findNearbyCities(lat, lon) {
 
   // Fetch a larger set first so we can filter and still have enough
   let viewbox = scaleViewbox(lat, lon, NOMINATIM_CLOSE_RADIUS);
-  let url = `${NOMINATIM}?q=city&format=jsonv2&viewbox=${viewbox}&bounded=1&limit=30&addressdetails=1`;
+  let url = `${NOMINATIM}?q=city&format=jsonv2&viewbox=${viewbox}&bounded=1&limit=${NOMINATIM_CLOSE_LIMIT}&addressdetails=1`;
 
   let results;
   try {
@@ -4173,20 +4172,17 @@ async function findNearbyCities(lat, lon) {
     results = results.filter(r => {
       const type = (r.type || '').toLowerCase();
       const cls = (r.class || '').toLowerCase();
-      // Reject known non-city types
-      if (cls === 'boundary' && r.place_rank >= 4) return false;
+      if (cls === 'boundary' && r.place_rank >= BOUNDARY_RANK_THRESHOLD) return false;
       if (type === 'country' || type === 'state' || type === 'administrative') return false;
       if (type === 'fuel' || type === 'street' || type === 'residential') return false;
-      // Accept if rank 10-16 (typical city/town/village)
       if (r.place_rank >= 10 && r.place_rank <= 16) return true;
-      // Accept if type looks like a populated place
       return acceptableTypes.includes(type);
     });
   }
 
   if (results.length < _maxCities) {
     viewbox = scaleViewbox(lat, lon, NOMINATIM_WIDE_RADIUS);
-    url = `${NOMINATIM}?q=city&format=jsonv2&viewbox=${viewbox}&bounded=1&limit=50&addressdetails=1`;
+    url = `${NOMINATIM}?q=city&format=jsonv2&viewbox=${viewbox}&bounded=1&limit=${NOMINATIM_WIDE_LIMIT}&addressdetails=1`;
     try {
       const resp = await fetch(url);
       if (resp.ok) {
@@ -4196,12 +4192,12 @@ async function findNearbyCities(lat, lon) {
         extra.forEach(r => {
           // Skip if same place_id OR same name at same coordinates (dedup by name+coords)
           if (existingIds.has(r.place_id)) return;
-          const latMatch = Math.abs(parseFloat(r.lat) - parseFloat(results[0]?.lat || 0)) < 0.01;
+          const latMatch = Math.abs(parseFloat(r.lat) - parseFloat(results[0]?.lat || 0)) < DEDUP_COORD_TOLERANCE;
           const sameName = existingNames.has((r.name || '').toLowerCase().trim()) && latMatch;
           if (sameName) return;
           const type = (r.type || '').toLowerCase();
           const cls = (r.class || '').toLowerCase();
-          if (cls === 'boundary' && r.place_rank >= 4) return;
+          if (cls === 'boundary' && r.place_rank >= BOUNDARY_RANK_THRESHOLD) return;
           if (type === 'country' || type === 'state' || type === 'administrative') return;
           if (type === 'fuel' || type === 'street' || type === 'residential') return;
           if (r.place_rank >= 10 && r.place_rank <= 16) {
@@ -4241,11 +4237,10 @@ async function findNearbyCities(lat, lon) {
     };
   });
 
-  // Deduplicate by place_id AND by name+coordinate proximity
+  // Deduplicate by place_id AND by name+coordinate proximity (within DEDUP_COORD_TOLERANCE ≈ 1km)
   const seen = new Set();
   const deduped = cities.filter(c => {
     if (seen.has(c.place_id)) return false;
-    // Also check by name + coordinates (within 0.01° ≈ 1km)
     const nameKey = c.name.toLowerCase().trim();
     const coordKey = `${DataCache._roundCoord(c.latitude)},${DataCache._roundCoord(c.longitude)}`;
     for (const existing of seen) {
@@ -4253,7 +4248,7 @@ async function findNearbyCities(lat, lon) {
         return false;
       }
     }
-    seen.add({ name: nameKey, coordKey, place_id: c.place_id });
+    seen.add({ name: nameKey, coordKey });
     return true;
   });
 
@@ -4266,26 +4261,20 @@ async function findNearbyCities(lat, lon) {
   remaining.sort((a, b) => {
     const aMinDiff = Math.min(...selected.map(s => {
       let diff = Math.abs(a.bearing - s.bearing);
-      return diff > 180 ? 360 - diff : diff;
+      return diff > BEARING_WRAP_AROUND ? 360 - diff : diff;
     }));
     const bMinDiff = Math.min(...selected.map(s => {
       let diff = Math.abs(b.bearing - s.bearing);
-      return diff > 180 ? 360 - diff : diff;
+      return diff > BEARING_WRAP_AROUND ? 360 - diff : diff;
     }));
     return bMinDiff - aMinDiff;
   });
 
   for (const city of remaining) {
     if (selected.length >= _maxCities) break;
-    let tooClose = false;
-    for (const sel of selected) {
-      const dist = haversine(city.latitude, city.longitude, sel.latitude, sel.longitude);
-      if (dist < MIN_CITY_DISTANCE_MI) { tooClose = true; break; }
-    }
-    if (!tooClose) {
-      selected.push(city);
-      used.add(deduped.indexOf(city));
-    }
+    if (selected.some(sel => haversine(city.latitude, city.longitude, sel.latitude, sel.longitude) < MIN_CITY_DISTANCE_MI)) continue;
+    selected.push(city);
+    used.add(deduped.indexOf(city));
   }
 
   // Fill remaining slots if we still need more
@@ -5137,45 +5126,61 @@ function nwsToAppData(city, nwsData) {
 
 // ===== ENDPOINTS & CONSTANTS =====
 const RADAR_WMS_BASE = 'https://opengeo.ncep.noaa.gov/geoserver/conus/';
-const RADAR_DEFAULT_LAYER = 'conus_bref_qcd'; // MRMS Base Reflectivity (quality controlled, shows all radar returns)
-const RADAR_IMAGE_SIZE = 512;                  // Image dimension in pixels
-const RADAR_BBOX_RADIUS_KM = 200;              // Area around user location to capture (km)
-const RADAR_TTL = 5 * 60 * 1000;               // 5 minutes (radar updates every ~2 min)
-const RADAR_META_TTL = 30 * 60 * 1000;         // 30 minutes (metadata doesn't change often)
+const RADAR_DEFAULT_LAYER = 'conus_bref_qcd';
+const RADAR_IMAGE_SIZE = 512;
+const RADAR_BBOX_RADIUS_KM = 200;
+const RADAR_TTL = 5 * 60 * 1000;
+const RADAR_META_TTL = 30 * 60 * 1000;
 
 // Available radar layers
 const RADAR_LAYERS = {
-  BASE_REFLECTIVITY: 'conus_bref_qcd',      // Quality Controlled 1km Base Reflectivity (MRMS)
-  COMPOSITE_REFLECTIVITY: 'conus_cref_qcd',  // Composite Reflectivity
-  ECHO_TOPS: 'conus_neet_v18',              // Echo Tops
-  PRECIPITATION_TYPE: 'conus_pcpn_typ',      // Precipitation Type
+  BASE_REFLECTIVITY: 'conus_bref_qcd',
+  COMPOSITE_REFLECTIVITY: 'conus_cref_qcd',
+  ECHO_TOPS: 'conus_neet_v18',
+  PRECIPITATION_TYPE: 'conus_pcpn_typ',
 };
 
 // Cache API constants
 const RADAR_CACHE_NAME = 'hasw-radar-v1';
-// Fake HTTP prefix for cache keys — required because Cache API only accepts http(s) URLs
+// Fake HTTP prefix for cache keys — Cache API only accepts http(s) URLs
 const RADAR_FAKE_BASE = 'https://radar.hasweather.local/';
 const RADAR_FRAME_PREFIX = `${RADAR_FAKE_BASE}frame/`;
 const RADAR_FRAMES_KEY = 'frames';
-const RADAR_MAX_CACHE_BYTES = 250 * 1024 * 1024; // ~250MB total limit
+const RADAR_MAX_CACHE_BYTES = 250 * 1024 * 1024;
+
+// EPSG:3857 / Web Mercator constants
+const WEB_MERCATOR_SEMI_MAJOR_AXIS = 20037508.34;
+const EARTH_RADIUS_KM = 6371;
+
+// UTM constants (WGS84)
+const UTM_SCALE_FACTOR = 0.9996;
+const UTM_EASTING_OFFSET = 500000;
+const UTM_SOUTH_NORTHING_OFFSET = 10000000;
+const UTM_100K_NORTHING_OFFSET = 1000000;
+const UTM_MERIDIAN_ARC_POLE = 4000000;
+const UTM_SEMI_MAJOR_AXIS = 6378137;
+const UTM_ECCENTRICITY_SQUARED = 0.00669437999014;
+
+// WMS fetch settings
+const RADAR_WMS_TIMEOUT_MS = 15000;
+const RADAR_WMS_MAX_RETRIES = 3;
+
+// Base64 encoding chunk size (avoids stack overflow on large arrays)
+const BASE64_CHUNK_SIZE = 8192;
 
 // ===== BBOX CALCULATION =====
-// Convert lon to EPSG:3857 meters
 function lonToX(lon) {
-  return lon * 20037508.34 / 180;
+  return lon * WEB_MERCATOR_SEMI_MAJOR_AXIS / 180;
 }
 
-// Convert lat to EPSG:3857 meters
 function latToY(lat) {
   const y = Math.log(Math.tan((90 + lat) * Math.PI / 360)) / (Math.PI / 180);
-  return y * 20037508.34 / 180;
+  return y * WEB_MERCATOR_SEMI_MAJOR_AXIS / 180;
 }
 
-// Calculate bounding box in EPSG:3857 meters around a lat/lon point
 function latLonToBboxEPSG3857(lat, lon, radiusKm) {
-  const R = 6371; // Earth radius in km
-  const dLat = (radiusKm / R) * (180 / Math.PI);
-  const dLon = (radiusKm / R) * (180 / Math.PI) / Math.cos(lat * Math.PI / 180);
+  const dLat = (radiusKm / EARTH_RADIUS_KM) * (180 / Math.PI);
+  const dLon = (radiusKm / EARTH_RADIUS_KM) * (180 / Math.PI) / Math.cos(lat * Math.PI / 180);
 
   return [
     lonToX(lon - dLon),   // minx in meters
@@ -5183,6 +5188,17 @@ function latLonToBboxEPSG3857(lat, lon, radiusKm) {
     lonToX(lon + dLon),   // maxx in meters
     latToY(lat + dLat),   // maxy in meters
   ];
+}
+
+// ===== ARRAYBUFFER → BASE64 DATA URL =====
+function arrayBufferToBase64DataURL(arrayBuffer) {
+  const bytes = new Uint8Array(arrayBuffer);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += BASE64_CHUNK_SIZE) {
+    const chunk = bytes.subarray(i, i + BASE64_CHUNK_SIZE);
+    binary += String.fromCharCode(...chunk);
+  }
+  return 'data:image/png;base64,' + btoa(binary);
 }
 
 // ===== WMS URL BUILDER =====
@@ -5199,7 +5215,6 @@ function buildRadarImageUrl(lat, lon, layer, timestamp) {
 }
 
 // ===== CACHE KEY GENERATION =====
-// Build a fake HTTP URL as the cache key — Cache API only accepts http(s) URLs
 function radarFrameCacheKey(lat, lon, layer, timestamp) {
   return `${RADAR_FRAME_PREFIX}${lat.toFixed(4)}/${lon.toFixed(4)}/${layer}/frame/${timestamp}`;
 }
@@ -5213,51 +5228,40 @@ function radarLocationPrefix(lat, lon, layer) {
 }
 
 // ===== LATEST RADAR TIMESTAMP CACHE =====
-// Cache the latest radar timestamp to avoid repeated GetCapabilities calls
-let _latestTimestampCache = null; // { timestamp: string, expiresAt: number }
+let _latestTimestampCache = null;
 
 // ===== ALL RADAR TIMESTAMPS CACHE =====
-// Cache all available timestamps from GetCapabilities to populate the timeline
-let _allTimestampsCache = null; // { timestamps: string[], layer: string, expiresAt: number }
+let _allTimestampsCache = null;
 
 // Parse all available timestamps from WMS GetCapabilities response
 function parseRadarTimestamps(capabilitiesText) {
   const timestamps = [];
   
-  // Parse all <Extent> elements with name="time" to find time values
   const extentRegex = /<Extent[^>]+name="time"[^>]*>([^<]+)<\/Extent>/gi;
   let match;
   while ((match = extentRegex.exec(capabilitiesText)) !== null) {
-    // Timestamps can be comma-separated or space-separated
     const timeValues = match[1].split(/[\s,]+/).map(t => t.trim()).filter(Boolean);
     timestamps.push(...timeValues);
   }
   
-  // Also check for default attribute (most recent timestamp)
   const defaultMatch = capabilitiesText.match(/<Extent[^>]+name="time"[^>]*default="([^"]+)"/i);
   if (defaultMatch && defaultMatch[1] && !timestamps.includes(defaultMatch[1])) {
     timestamps.push(defaultMatch[1]);
   }
   
-  // Validate and deduplicate timestamps
   const validTimestamps = [];
   for (const ts of timestamps) {
-    // Validate ISO8601 format
     const date = new Date(ts);
     if (!isNaN(date.getTime())) {
-      // Normalize to consistent ISO8601 format
       validTimestamps.push(date.toISOString().replace(/\.\d+Z$/, 'Z'));
     }
   }
   
-  // Deduplicate
   return [...new Set(validTimestamps)].sort();
 }
 
-// Get ALL available timestamps for a layer (not just the latest)
+// Get ALL available timestamps for a layer
 async function getRadarTimestampsForLayer(layer = RADAR_DEFAULT_LAYER) {
-  const cacheKey = `${layer}`;
-  
   // Return cached timestamps if valid (30 min TTL — metadata rarely changes)
   if (_allTimestampsCache && _allTimestampsCache.layer === layer && Date.now() < _allTimestampsCache.expiresAt) {
     return [..._allTimestampsCache.timestamps];
@@ -5287,7 +5291,7 @@ async function getRadarTimestampsForLayer(layer = RADAR_DEFAULT_LAYER) {
   }
 }
 
-// Get the latest radar timestamp (convenience wrapper, uses same cache as getRadarTimestampsForLayer)
+// Convenience wrapper — uses same cache as getRadarTimestampsForLayer
 async function getLatestRadarTimestamp() {
   // Return cached timestamp if valid (2 min TTL — matches radar update interval)
   if (_latestTimestampCache && Date.now() < _latestTimestampCache.expiresAt) {
@@ -5300,7 +5304,6 @@ async function getLatestRadarTimestamp() {
     if (!response.ok) throw new Error(`WMS GetCapabilities failed: ${response.status}`);
 
     const text = await response.text();
-    // Parse the time extent from GetCapabilities response
     const timeMatch = text.match(/<Extent[^>]+name="time"[^>]*default="([^"]+)"/i);
     if (timeMatch && timeMatch[1]) {
       _latestTimestampCache = {
@@ -5310,10 +5313,8 @@ async function getLatestRadarTimestamp() {
       return timeMatch[1];
     }
 
-    // If no default, parse the available times and use the last one
     const times = parseRadarTimestamps(text);
     if (times.length > 0) {
-      // Sort and use the latest timestamp
       times.sort();
       _latestTimestampCache = {
         timestamp: times[times.length - 1],
@@ -5337,7 +5338,6 @@ function getRadarMeta(lat, lon, layer) {
     const raw = localStorage.getItem(key);
     if (!raw) return null;
     const meta = JSON.parse(raw);
-    // Check if metadata is stale (older than TTL — use longer TTL for metadata)
     if (Date.now() - meta.lastUpdated > RADAR_META_TTL) {
       localStorage.removeItem(key);
       return null;
@@ -5352,10 +5352,9 @@ function setRadarMeta(lat, lon, layer, timestamp) {
   try {
     const key = `hasw_cache_radar_meta_${lat.toFixed(4)}_${lon.toFixed(4)}_${layer}`;
     let meta = getRadarMeta(lat, lon, layer) || { timestamps: [], layer, lat, lon, lastUpdated: 0 };
-    // Add timestamp if not already present
     if (!meta.timestamps.includes(timestamp)) {
       meta.timestamps.push(timestamp);
-      // Keep only the last 500 timestamps (about 16 hours of radar data at 2-min intervals)
+      // Keep only the last 500 timestamps (~16 hours at 2-min intervals)
       if (meta.timestamps.length > 500) {
         meta.timestamps = meta.timestamps.slice(-500);
       }
@@ -5377,7 +5376,6 @@ async function getCache() {
   return await caches.open(RADAR_CACHE_NAME);
 }
 
-// Store a single radar frame as ArrayBuffer
 async function cacheRadarFrame(lat, lon, layer, timestamp, arrayBuffer) {
   try {
     const cache = await getCache();
@@ -5411,15 +5409,7 @@ async function getCachedRadarFrame(lat, lon, layer, timestamp) {
 // Get cached radar frame as base64 data URL (returns null if not found)
 async function getCachedRadarFrameAsDataURL(lat, lon, layer, timestamp) {
   const arrayBuffer = await getCachedRadarFrame(lat, lon, layer, timestamp);
-  if (!arrayBuffer) return null;
-  
-  // Convert ArrayBuffer to base64
-  const bytes = new Uint8Array(arrayBuffer);
-  let binary = '';
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return 'data:image/png;base64,' + btoa(binary);
+  return arrayBuffer ? arrayBufferToBase64DataURL(arrayBuffer) : null;
 }
 
 // Fetch a range of frames for animation (e.g., last N timestamps in order)
@@ -5427,19 +5417,13 @@ async function getRadarFramesForClip(lat, lon, layer, count = 10) {
   const meta = getRadarMeta(lat, lon, layer);
   if (!meta || !meta.timestamps.length) return null;
   
-  // Get the last `count` timestamps (oldest first for animation)
   const clipTimestamps = meta.timestamps.slice(-count);
   const frames = [];
   
   for (const ts of clipTimestamps) {
     const arrayBuffer = await getCachedRadarFrame(lat, lon, layer, ts);
     if (arrayBuffer) {
-      // Convert to base64 data URL for display
-      let binary = '';
-      for (let i = 0; i < arrayBuffer.length; i++) {
-        binary += String.fromCharCode(arrayBuffer[i]);
-      }
-      frames.push({ timestamp: ts, dataUrl: 'data:image/png;base64,' + btoa(binary) });
+      frames.push({ timestamp: ts, dataUrl: arrayBufferToBase64DataURL(arrayBuffer) });
     }
   }
   
@@ -5537,8 +5521,7 @@ async function evictCacheIfNecessary(lat, lon, layer) {
 }
 
 // ===== REQUEST DEDUPLICATION =====
-// Prevent duplicate radar fetches for the same location at the same time
-const _pendingRadarFetches = new Map(); // cacheKey → Promise
+const _pendingRadarFetches = new Map();
 
 function getPendingRadarFetch(cacheKey) {
   if (_pendingRadarFetches.has(cacheKey)) {
@@ -5557,10 +5540,10 @@ function clearPendingRadarFetch(cacheKey) {
 }
 
 // ===== RADAR IMAGE FETCH =====
-async function fetchRadarImageFromWMS(url, maxRetries = 3) {
+async function fetchRadarImageFromWMS(url, maxRetries = RADAR_WMS_MAX_RETRIES) {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000); // 15s timeout
+    const timeout = setTimeout(() => controller.abort(), RADAR_WMS_TIMEOUT_MS);
 
     try {
       const response = await fetch(url, { signal: controller.signal });
@@ -5570,7 +5553,6 @@ async function fetchRadarImageFromWMS(url, maxRetries = 3) {
         throw new Error(`WMS GetMap failed: ${response.status}`);
       }
 
-      // Validate content type (should be an image)
       const contentType = response.headers.get('content-type') || '';
       if (!contentType.includes('image/')) {
         throw new Error(`Unexpected content type: ${contentType}`);
@@ -5592,10 +5574,7 @@ async function fetchRadarImageFromWMS(url, maxRetries = 3) {
 }
 
 // ===== MAIN ORCHESTRATOR =====
-// Fetch radar image for user location and return base64 data URL.
-// Returns { imageUrl: 'data:image/png;base64,...', timestamp: string, cached: boolean } or { error: string } on failure.
 async function fetchRadarImageForLocation(lat, lon, layer = RADAR_DEFAULT_LAYER, timestamp = null) {
-  // Get the latest radar timestamp if none specified
   if (!timestamp) {
     timestamp = await getLatestRadarTimestamp();
   }
@@ -5616,21 +5595,13 @@ async function fetchRadarImageForLocation(lat, lon, layer = RADAR_DEFAULT_LAYER,
     return pending;
   }
 
-  // Build WMS URL and initiate fetch
   const imageUrl = buildRadarImageUrl(lat, lon, layer, timestamp);
   console.log(`[Radar] Cache MISS: ${cacheKey}, fetching from WMS`);
 
   const fetchPromise = (async () => {
     try {
-      // Fetch the radar image
       const arrayBuffer = await fetchRadarImageFromWMS(imageUrl);
-
-      // Convert to base64 data URL
-      let binary = '';
-      for (let i = 0; i < arrayBuffer.length; i++) {
-        binary += String.fromCharCode(arrayBuffer[i]);
-      }
-      const dataURL = 'data:image/png;base64,' + btoa(binary);
+      const dataURL = arrayBufferToBase64DataURL(arrayBuffer);
 
       // Cache the result in Cache API
       await cacheRadarFrame(lat, lon, layer, timestamp, arrayBuffer);
@@ -5644,36 +5615,22 @@ async function fetchRadarImageForLocation(lat, lon, layer = RADAR_DEFAULT_LAYER,
     }
   })();
 
-  // Store pending fetch for deduplication
   setPendingRadarFetch(cacheKey, fetchPromise);
   return fetchPromise;
 }
 
 // ===== RADAR CLIP FUNCTIONS =====
-// Fetch radar image for a specific timestamp (for clip playback)
 async function fetchRadarImageForTimestamp(lat, lon, layer, timestamp) {
-  // Check cache first
   const cachedDataURL = await getCachedRadarFrameAsDataURL(lat, lon, layer, timestamp);
   if (cachedDataURL) {
     return { imageUrl: cachedDataURL, timestamp };
   }
 
-  // Fetch from WMS
   const imageUrl = buildRadarImageUrl(lat, lon, layer, timestamp);
   try {
     const arrayBuffer = await fetchRadarImageFromWMS(imageUrl);
-    
-    // Cache the result
     await cacheRadarFrame(lat, lon, layer, timestamp, arrayBuffer);
-
-    // Convert to base64 data URL
-    let binary = '';
-    for (let i = 0; i < arrayBuffer.length; i++) {
-      binary += String.fromCharCode(arrayBuffer[i]);
-    }
-    const dataURL = 'data:image/png;base64,' + btoa(binary);
-
-    return { imageUrl: dataURL, timestamp };
+    return { imageUrl: arrayBufferToBase64DataURL(arrayBuffer), timestamp };
   } catch (e) {
     console.error('[Radar] Failed to fetch radar image:', e);
     return { error: `Failed to load radar: ${e.message}` };
@@ -5696,7 +5653,6 @@ function invalidateRadarCache(lat, lon) {
 }
 
 // ===== COORDINATE CONVERSION FOR PINS =====
-// Convert lat/lon to pixel position within the radar image (512x512 canvas)
 function latLonToPixel(lat, lon, latCenter, lonCenter, radiusKm) {
   const bbox = latLonToBboxEPSG3857(latCenter, lonCenter, radiusKm);
   const [minx, miny, maxx, maxy] = bbox;
@@ -5711,7 +5667,6 @@ function latLonToPixel(lat, lon, latCenter, lonCenter, radiusKm) {
   return { x: pixelX, y: pixelY };
 }
 
-// Check if a lat/lon point is within the radar image bounds
 function latLonInBounds(lat, lon, latCenter, lonCenter, radiusKm) {
   const bbox = latLonToBboxEPSG3857(latCenter, lonCenter, radiusKm);
   const [minx, miny, maxx, maxy] = bbox;
@@ -5722,8 +5677,6 @@ function latLonInBounds(lat, lon, latCenter, lonCenter, radiusKm) {
   return x >= minx && x <= maxx && y >= miny && y <= maxy;
 }
 
-// ===== RADAR CACHE CLEAR =====
-// Clear all radar cache entries (used during manual refresh or storage cleanup)
 async function clearRadarCache() {
   try {
     const cache = await getCache();
@@ -5745,7 +5698,6 @@ async function clearRadarCache() {
   } catch { /* ignore */ }
 }
 
-// ===== RADAR CACHE SIZE =====
 async function getRadarCacheSize() {
   try {
     const cache = await getCache();
@@ -5766,8 +5718,6 @@ async function getRadarCacheSize() {
   }
 }
 
-// ===== BATCH PRE-FETCH FOR A RANGE OF FRAMES =====
-// Fetch a contiguous range of frames for the radar player timeline
 async function prefetchFramesInRange(lat, lon, layer, startIdx, endIdx) {
   const meta = getRadarMeta(lat, lon, layer);
   if (!meta || !meta.timestamps.length) return;
@@ -5788,8 +5738,6 @@ async function prefetchFramesInRange(lat, lon, layer, startIdx, endIdx) {
   return results;
 }
 
-// ===== GET FRAME RANGE FOR PLAYBACK =====
-// Get frames within a time range for the radar player
 async function getFramesInRange(lat, lon, layer, startTimestamp, endTimestamp) {
   const meta = getRadarMeta(lat, lon, layer);
   if (!meta || !meta.timestamps.length) return [];
@@ -5808,7 +5756,6 @@ async function getFramesInRange(lat, lon, layer, startTimestamp, endTimestamp) {
   return frames;
 }
 
-// ===== CHECK IF ALL FRAMES IN RANGE ARE CACHED =====
 async function areFramesCachedInRange(lat, lon, layer, startIdx, endIdx) {
   const meta = getRadarMeta(lat, lon, layer);
   if (!meta || !meta.timestamps.length) return false;
@@ -5830,47 +5777,37 @@ const COORD_FORMATS = [
 ];
 
 // ===== MGRS CONVERSION =====
-const MGRS_ZONE_ROWS = 'CDEFGHJKLMNPQRSTUVWX'; // excludes I and O
+const MGRS_ZONE_ROWS = 'CDEFGHJKLMNPQRSTUVWX';
 const MGRS_100K_SQUARES = [
-  'ABCDEFGH', 'JKLMNPQR', 'STUVWXYZ', // 0-2 (even zone, even hemisphere)
-  'BCDEFGH', 'CDEFGH', 'DEFGH',       // shifted for odd zones
+  'ABCDEFGH', 'JKLMNPQR', 'STUVWXYZ',   // even zone, even hemisphere
+  'BCDEFGH', 'CDEFGH', 'DEFGH',         // shifted for odd zones
 ];
 
-// MGRS 100km square lookup by zone and hemisphere
 const MGRS_100K_SQUARES_TABLE = [
-  ['ABCDEFGH', 'JKLMNPQR', 'STUVWXYZ'], // Zone even, Hemisphere N
-  ['BCDEFGH', 'CDEFGH', 'DEFGH'],       // Zone odd, Hemisphere N (shifted)
-  ['JKLMNOPQ', 'RSTUVWXY', 'ABCDEFGH'], // Zone even, Hemisphere S
-  ['KLMNPQR', 'MNOPQR', 'NOPQR'],       // Zone odd, Hemisphere S (shifted)
+  ['ABCDEFGH', 'JKLMNPQR', 'STUVWXYZ'],   // Zone even, Hemisphere N
+  ['BCDEFGH', 'CDEFGH', 'DEFGH'],         // Zone odd, Hemisphere N (shifted)
+  ['JKLMNOPQ', 'RSTUVWXY', 'ABCDEFGH'],   // Zone even, Hemisphere S
+  ['KLMNPQR', 'MNOPQR', 'NOPQR'],         // Zone odd, Hemisphere S (shifted)
 ];
 
-// MGRS column letter by 100km index
-const MGRS_COL_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'; // skips I
+const MGRS_COL_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
 function latLonToMGRS(lat, lon) {
   const zone = getUTMZone(lat, lon);
   const hemisphere = lat >= 0 ? 'N' : 'S';
   
-  // Get UTM easting and northing
   const utm = latLonToUTMLatLon(lat, lon);
   const [easting, northing] = utm;
   
-  // Determine 100km square
-  const zoneOdd = (zone % 2) !== 0;
   const colIndex = Math.floor((easting % 5000000) / 100000);
-  const rowIndex = Math.floor(((hemisphere === 'N' ? northing : northing - 1000000) % 4000000) / 100000);
+  const rowIndex = Math.floor(((hemisphere === 'N' ? northing : northing - UTM_100K_NORTHING_OFFSET) % UTM_MERIDIAN_ARC_POLE) / 100000);
   
-  // Get column letter (A-Z excluding I)
   const colLetter = MGRS_COL_LETTERS[colIndex];
+  const rowLetter = 'ABCDEFGH'[rowIndex % 8];
   
-  // Get row letter (A-H, excluding I)
-  const rowLetters = 'ABCDEFGH';
-  const rowLetter = rowLetters[rowIndex % 8];
-  
-  // 100km square identifier
   const hundredKmSquare = `${colLetter}${rowLetter}`;
   
-  // Determine precision (5 digits = ~1m accuracy)
+  // 5 digits = ~1m accuracy
   const precisionDigits = 5;
   const precisionFactor = Math.pow(10, precisionDigits);
   
@@ -5881,7 +5818,6 @@ function latLonToMGRS(lat, lon) {
 }
 
 function getUTMZone(lat, lon) {
-  // Zone number: (floor((lon + 180) / 6)) + 1
   const zoneNum = Math.floor((lon + 180) / 6) + 1;
   
   // Special cases for Norway and Svalbard
@@ -5901,42 +5837,33 @@ function latLonToUTMLatLon(lat, lon) {
   const zone = getUTMZone(lat, lon);
   const hemisphere = lat >= 0 ? 'N' : 'S';
   
-  // UTM constants
-  const k0 = 0.9996; // scale factor
-  const a = 6378137; // semi-major axis (WGS84)
-  const e2 = 0.00669437999014; // eccentricity squared
-  
-  // Central meridian of zone
   const lonOrigin = (zone - 1) * 6 - 180 + 3;
   
-  // Convert to radians
   const phi = lat * Math.PI / 180;
   const lam = (lon - lonOrigin) * Math.PI / 180;
   
-  // Radius of curvature
-  const N = a / Math.sqrt(1 - e2 * Math.sin(phi) * Math.sin(phi));
+  const N = UTM_SEMI_MAJOR_AXIS / Math.sqrt(1 - UTM_ECCENTRICITY_SQUARED * Math.sin(phi) * Math.sin(phi));
   
-  // Northing and easting
   const A = lam * Math.cos(phi);
   
-  const M = a * (
-    (1 - e2/4 - 3*e2*e2/64 - 5*e2*e2*e2/256) * phi
-    - (3*e2/8 + 3*e2*e2/32 + 45*e2*e2*e2/1024) * Math.sin(2*phi)
-    + (15*e2*e2/256 + 45*e2*e2*e2/1024) * Math.sin(4*phi)
-    - (35*e2*e2*e2/3072) * Math.sin(6*phi)
+  const M = UTM_SEMI_MAJOR_AXIS * (
+    (1 - UTM_ECCENTRICITY_SQUARED/4 - 3*UTM_ECCENTRICITY_SQUARED*UTM_ECCENTRICITY_SQUARED/64 - 5*UTM_ECCENTRICITY_SQUARED**3/256) * phi
+    - (3*UTM_ECCENTRICITY_SQUARED/8 + 3*UTM_ECCENTRICITY_SQUARED**2/32 + 45*UTM_ECCENTRICITY_SQUARED**3/1024) * Math.sin(2*phi)
+    + (15*UTM_ECCENTRICITY_SQUARED**2/256 + 45*UTM_ECCENTRICITY_SQUARED**3/1024) * Math.sin(4*phi)
+    - (35*UTM_ECCENTRICITY_SQUARED**3/3072) * Math.sin(6*phi)
   );
   
   const T = Math.tan(phi) * Math.tan(phi);
-  const C = e2 / (1 - e2) * Math.cos(phi) * Math.cos(phi);
-  const R = a * (1 - e2) / Math.pow(1 - e2 * Math.sin(phi) * Math.sin(phi), 1.5);
+  const C = UTM_ECCENTRICITY_SQUARED / (1 - UTM_ECCENTRICITY_SQUARED) * Math.cos(phi) * Math.cos(phi);
+  const R = UTM_SEMI_MAJOR_AXIS * (1 - UTM_ECCENTRICITY_SQUARED) / Math.pow(1 - UTM_ECCENTRICITY_SQUARED * Math.sin(phi) * Math.sin(phi), 1.5);
   
-  let easting = k0 * N * (A + (1 - T + C) * A*A*A/6 + (5 - 18*T + T*T + 72*C - 58*e2/(1-e2)) * A*A*A*A*A/120) + 500000;
+  let easting = UTM_SCALE_FACTOR * N * (A + (1 - T + C) * A**3/6 + (5 - 18*T + T**2 + 72*C - 58*UTM_ECCENTRICITY_SQUARED/(1-UTM_ECCENTRICITY_SQUARED)) * A**5/120) + UTM_EASTING_OFFSET;
   
   let northing;
   if (hemisphere === 'N') {
-    northing = k0 * (M + N * Math.tan(phi) * (A*A/2 + (5 - T + 9*C + 4*C*C) * A*A*A*A/24 + (61 - 58*T + T*T + 600*C - 330*e2/(1-e2)) * A*A*A*A*A*A/720));
+    northing = UTM_SCALE_FACTOR * (M + N * Math.tan(phi) * (A**2/2 + (5 - T + 9*C + 4*C**2) * A**4/24 + (61 - 58*T + T**2 + 600*C - 330*UTM_ECCENTRICITY_SQUARED/(1-UTM_ECCENTRICITY_SQUARED)) * A**6/720));
   } else {
-    northing = k0 * (M + N * Math.tan(phi) * (A*A/2 + (5 - T + 9*C + 4*C*C) * A*A*A*A/24 + (61 - 58*T + T*T + 600*C - 330*e2/(1-e2)) * A*A*A*A*A*A/720)) + 10000000;
+    northing = UTM_SCALE_FACTOR * (M + N * Math.tan(phi) * (A**2/2 + (5 - T + 9*C + 4*C**2) * A**4/24 + (61 - 58*T + T**2 + 600*C - 330*UTM_ECCENTRICITY_SQUARED/(1-UTM_ECCENTRICITY_SQUARED)) * A**6/720)) + UTM_SOUTH_NORTHING_OFFSET;
   }
   
   return [easting, northing];
@@ -5944,9 +5871,7 @@ function latLonToUTMLatLon(lat, lon) {
 
 // ===== DMS CONVERSION =====
 function latLngToDMS(lat, lng) {
-  const latDMS = toDMSType(lat, 'lat');
-  const lngDMS = toDMSType(lng, 'lng');
-  return `${latDMS}, ${lngDMS}`;
+  return `${toDMSType(lat, 'lat')}, ${toDMSType(lng, 'lng')}`;
 }
 
 function toDMSType(value, type) {
@@ -6067,9 +5992,7 @@ function formatCoordinate(lat, lon, format) {
   const CANVAS_BASE_SIZE = 512;
   const VIEWPORT_PADDING = 200;
   
-  // Zoom/pan constants
-  const MAX_ZOOM = 3;
-  const PAN_SPEED = 8;
+  // Pre-fetch constants
   const PRE_FETCH_COUNT = 50;
   
   // Pin rendering constants
@@ -6116,7 +6039,15 @@ function formatCoordinate(lat, lon, format) {
   const SPINNER_LINE_WIDTH = 3;
   const SPINNER_ROTATION_SPEED = 3;
   
-  // Expose speed options globally so main.js can use them
+  // Mercator projection constants
+  const MERCATOR_EQUATORIAL_RADIUS = 20037508.34;
+
+  // UI text constants
+  const DEFAULT_LOADING_TEXT = 'Loading radar...';
+  const EMPTY_TIMESTAMP_DISPLAY = '--:--';
+  const ERROR_TEXT_COLOR = '#ff4444';
+
+  // Expose speed options globally
   window.SPEED_OPTIONS = [0.5, 1, 2, 4, 8];
 
   // ===== STATE =====
@@ -6124,7 +6055,7 @@ function formatCoordinate(lat, lon, format) {
     lat: null,
     lon: null,
     layer: RADAR_DEFAULT_LAYER,
-    zoomLevel: 0, // index into ZOOM_LEVELS
+    zoomLevel: 0,
     panX: 0,
     panY: 0,
     isPanning: false,
@@ -6134,10 +6065,10 @@ function formatCoordinate(lat, lon, format) {
     panStartPanY: 0,
     isPlaying: false,
     currentFrameIndex: -1,
-    frames: null, // array of { timestamp, dataUrl }
+    frames: null,
     speed: 1,
-    allTimestamps: [], // all available timestamps for this location/layer
-    cachedTimestamps: [], // timestamps that have been fetched
+    allTimestamps: [],
+    cachedTimestamps: [],
     isPreFetching: false,
     preFetchProgress: 0,
     totalPreFetch: 0,
@@ -6146,14 +6077,10 @@ function formatCoordinate(lat, lon, format) {
     animFrameId: null,
     lastFrameTime: 0,
     isFullscreen: false,
-    
-    // Coordinate readout state
-    coordFormat: 'mgrs', // default format
-    
-    // Pin state
-    pins: [], // array of { lat, lon, label, type, offsetX, offsetY }
-    pinOffsetX: 0, // accumulated X offset for panning pins
-    pinOffsetY: 0, // accumulated Y offset for panning pins
+    coordFormat: 'mgrs',
+    pins: [],
+    pinOffsetX: 0,
+    pinOffsetY: 0,
     showPins: true,
   };
 
@@ -6189,15 +6116,10 @@ function formatCoordinate(lat, lon, format) {
     canvas = document.getElementById('radar-canvas');
     ctx = canvas.getContext('2d');
 
-    // Set canvas size based on zoom level
     updateCanvasSize();
-
-    // Event listeners
     setupCanvasEvents();
     setupKeyboardEvents();
     setupCoordReadout();
-
-    // Load initial data
     setupTimelineScrubbing();
     loadInitialRadarFrame();
   }
@@ -6226,9 +6148,9 @@ function formatCoordinate(lat, lon, format) {
     const loadingOverlay = document.getElementById('radar-loading-overlay');
     if (loadingOverlay) {
       loadingOverlay.classList.remove('hidden');
-      const loadingText = document.getElementById('radar-loading-text');
+    const loadingText = document.getElementById('radar-loading-text');
       if (loadingText) {
-        loadingText.textContent = text || 'Loading radar...';
+        loadingText.textContent = text || DEFAULT_LOADING_TEXT;
       }
     }
   }
@@ -6242,7 +6164,7 @@ function formatCoordinate(lat, lon, format) {
     const loadingText = document.getElementById('radar-loading-text');
     if (loadingText) {
       loadingText.textContent = text || 'Error loading radar';
-      loadingText.style.color = '#ff4444';
+      loadingText.style.color = ERROR_TEXT_COLOR;
     }
   }
 
@@ -6254,7 +6176,7 @@ function formatCoordinate(lat, lon, format) {
     if (spinner) spinner.style.display = '';
     const loadingText = document.getElementById('radar-loading-text');
     if (loadingText) {
-      loadingText.textContent = 'Loading radar...';
+      loadingText.textContent = DEFAULT_LOADING_TEXT;
       loadingText.style.color = '';
     }
   }
@@ -6370,7 +6292,7 @@ function formatCoordinate(lat, lon, format) {
     const progressBar = document.getElementById('radar-prefetch-progress');
     const progressText = document.getElementById('radar-frame-count-text');
     if (progressBar) progressBar.style.width = '0%';
-    if (progressText) progressText.textContent = 'Loading radar...';
+    if (progressText) progressText.textContent = DEFAULT_LOADING_TEXT;
 
     let meta = getRadarMeta(state.lat, state.lon, state.layer);
     
@@ -6871,20 +6793,13 @@ function formatCoordinate(lat, lon, format) {
     const timestampEl = document.getElementById('radar-timestamp');
     const loadingOverlay = document.getElementById('radar-loading-overlay');
     if (!timestampEl) return;
-    
-    if (!timestamp) {
-      timestampEl.textContent = '--:--';
-      return;
+
+    if (!timestamp || isNaN(new Date(timestamp).getTime())) {
+      timestampEl.textContent = EMPTY_TIMESTAMP_DISPLAY;
+    } else {
+      timestampEl.textContent = new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     }
-    
-    const date = new Date(timestamp);
-    if (isNaN(date.getTime())) {
-      timestampEl.textContent = '--:--';
-      return;
-    }
-    
-    timestampEl.textContent = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    
+
     if (loadingOverlay) loadingOverlay.classList.add('hidden');
   }
 
@@ -7386,11 +7301,10 @@ function formatCoordinate(lat, lon, format) {
     
     const x = minx + (imageX / CANVAS_BASE_SIZE) * (maxx - minx);
     const y = maxy - (imageY / CANVAS_BASE_SIZE) * (maxy - miny);
-    
-    const latFromY = (360 * Math.atan(Math.exp(y * Math.PI / 20037508.34)) / Math.PI) - 90;
-    
-    const lon = x * 180 / 20037508.34;
-    
+
+    const latFromY = (360 * Math.atan(Math.exp(y * Math.PI / MERCATOR_EQUATORIAL_RADIUS)) / Math.PI) - 90;
+    const lon = x * 180 / MERCATOR_EQUATORIAL_RADIUS;
+
     return { lat: latFromY, lon };
   }
 
@@ -7431,8 +7345,24 @@ function formatCoordinate(lat, lon, format) {
 <script>
 // ===== RENDER =====
 
-// ===== PLACEHOLDER CARD RENDERING =====
-// Renders minimal city cards immediately after location is known, before any weather data arrives.
+// --- Constants ---
+const CARD_ANIMATION_STAGGER_MS = 120;
+const OM_FADE_TRANSITION_MS = 300;
+const NWS_FADE_TRANSITION_MS = 200;
+const RENDER_CHART_DRAW_DELAY_MS = 50;
+const RENDER_ALL_CHART_DELAY_MS = 400;
+const COORD_MATCH_TOLERANCE = 0.01;
+const LARGE_ICON_SIZE_PX = 80;
+const PRECIP_DISPLAY_THRESHOLD_MM = 0.1;
+
+// --- Utilities ---
+function parseDecimalTime(timeStr, fallback) {
+  if (!timeStr) return fallback;
+  const [h, m] = timeStr.split(':').map(Number);
+  return h + (m / 60);
+}
+
+// --- Placeholder Cards ---
 
 function renderPlaceholderCards(cities) {
   const grid = document.getElementById('city-grid');
@@ -7448,10 +7378,10 @@ function renderPlaceholderCards(cities) {
     card.dataset.citydist = city.distance != null ? city.distance : '';
     card.dataset.citylat = city.latitude != null ? city.latitude : '';
     card.dataset.citylon = city.longitude != null ? city.longitude : '';
-    card.style.animationDelay = `${i * 120}ms`;
-    
-    const suffix = city.latitude != null && city.longitude != null 
-      ? `${city.latitude}_${city.longitude}` 
+    card.style.animationDelay = `${i * CARD_ANIMATION_STAGGER_MS}ms`;
+
+    const suffix = city.latitude != null && city.longitude != null
+      ? `${city.latitude}_${city.longitude}`
       : undefined;
     card.innerHTML = renderPlaceholderCard(city, suffix);
     grid.appendChild(card);
@@ -7468,211 +7398,94 @@ function renderPlaceholderCard(city, suffix) {
     </div>`;
 }
 
-// ===== INCREMENTAL OM DATA UPDATE =====
-// Updates placeholder cards with Open-Meteo weather data as it arrives.
+// --- Incremental Updates ---
 
 function updateCardsWithOMData(omWeatherData) {
-  // For each city in omWeatherData, find the matching card and update it
   for (const cityData of omWeatherData) {
     const card = findCardByCoords(cityData.latitude, cityData.longitude);
     if (!card) continue;
 
-    // Remove placeholder class and add loading class for transition
     card.classList.remove('placeholder');
     card.classList.add('loading-om');
-    
-    // Build the full card HTML with OM data
+
     const suffix = cityData.place_id || `${cityData.latitude || 0}_${cityData.longitude || 0}`;
     const html = renderCityCard(cityData, suffix);
-    
-    // Fade out placeholder, then swap content
+
     card.style.opacity = '0';
     setTimeout(() => {
       card.innerHTML = html;
       card.classList.remove('loading-om');
-      
-      // Apply gradient background based on weather
+
       const w = cityData.weather;
       if (w && w.current) {
         const code = w.current.weather_code || 0;
         const bg = WMO_GRADIENTS[code] || WMO_GRADIENTS[0];
         card.style.background = `linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.04)), ${bg}`;
       }
-      
-      // Fade in
+
       card.style.opacity = '1';
-      
-      // Draw chart for this card now that canvas exists (don't wait for global drawAllCharts)
+
       const safeName = cityData.place_id || `${cityData.latitude || 0}_${cityData.longitude || 0}`;
       setTimeout(() => {
         drawMergedChart(`chart-merged-${safeName}`, cityData.weather, cityData.highTemp, cityData.lowTemp);
         drawCombinedChart(`chart-combined-${safeName}`, cityData.weather);
-      }, 50);
-    }, 300);
+      }, RENDER_CHART_DRAW_DELAY_MS);
+    }, OM_FADE_TRANSITION_MS);
   }
 }
-
-// ===== INCREMENTAL NWS DATA UPDATE =====
-// Updates OM cards with NWS ghost overlay data as it arrives.
-// Re-renders the full card HTML (OM + ghost) for affected cities.
 
 function updateCardsWithNWSData(nwsCityData) {
   for (const cityData of nwsCityData) {
     const card = findCardByCoords(cityData.latitude, cityData.longitude);
     if (!card || !cityData.nwsData || !cityData.weather) continue;
 
-    // Add loading-nws class for transition
     card.classList.add('loading-nws');
-    
-    // Build the full card HTML with OM + ghost data
+
     const suffix = cityData.place_id || `${cityData.latitude || 0}_${cityData.longitude || 0}`;
     const html = renderCityCard(cityData, suffix);
-    
-    // Fade out, swap content, fade in
+
     card.style.opacity = '0';
     setTimeout(() => {
       card.innerHTML = html;
       card.classList.remove('loading-nws');
-      
-      // Apply gradient background based on weather
+
       const w = cityData.weather;
       if (w && w.current) {
         const code = w.current.weather_code || 0;
         const bg = WMO_GRADIENTS[code] || WMO_GRADIENTS[0];
         card.style.background = `linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.04)), ${bg}`;
       }
-      
-      // Fade in
+
       card.style.opacity = '1';
-      
-      // Draw OM chart on the new canvas (card innerHTML was replaced, destroying old canvas)
+
       const safeName = cityData.place_id || `${cityData.latitude || 0}_${cityData.longitude || 0}`;
       setTimeout(() => {
         drawMergedChart(`chart-merged-${safeName}`, cityData.weather, cityData.highTemp, cityData.lowTemp);
         drawCombinedChart(`chart-combined-${safeName}`, cityData.weather);
-        // Draw ghost chart for this card now that canvas exists
         drawGhostMergedChart(`chart-ghost-merged-${safeName}`, cityData.nwsData.weather, cityData.highTemp, cityData.lowTemp);
-      }, 50);
-    }, 200);
+      }, RENDER_CHART_DRAW_DELAY_MS);
+    }, NWS_FADE_TRANSITION_MS);
   }
 }
-
-// ===== CARD LOOKUP BY COORDINATES =====
-// More reliable than matching by name (which can contain quotes/special chars)
 
 function findCardByCoords(lat, lon) {
   const cards = document.querySelectorAll('.city-card');
   for (const card of cards) {
     const cardLat = parseFloat(card.dataset.citylat);
     const cardLon = parseFloat(card.dataset.citylon);
-    if (!isNaN(cardLat) && !isNaN(cardLon) && Math.abs(lat - cardLat) < 0.01 && Math.abs(lon - cardLon) < 0.01) {
+    if (!isNaN(cardLat) && !isNaN(cardLon) && Math.abs(lat - cardLat) < COORD_MATCH_TOLERANCE && Math.abs(lon - cardLon) < COORD_MATCH_TOLERANCE) {
       return card;
     }
   }
   return null;
 }
 
-function buildNWSGhostOverlay(cityData, safeName) {
-  const hasNwsData = !!cityData.nwsData;
-  if (!hasNwsData) return '';
-  
-  const current = cityData.nwsData.weather?.current || {};
-  const hourly = cityData.nwsData.weather?.hourly || {};
-  const now = new Date();
-  const currentHour = now.getHours();
-
-  // Ghost temperature
-  const ghostTemp = current?.temperature_2m != null ? convertTemp(current.temperature_2m) :
-                    current?.temperature != null ? convertTemp(current.temperature) : '—';
-  
-  // Ghost weather icon
-  const ghostWeatherCode = current?.weather_code ?? current?.weatherCode ?? 0;
-  const isNwsDay = isDaytime(currentHour, parseDecimalTime(current?.sunrise || '', 6), parseDecimalTime(current?.sunset || '', 19));
-  const ghostIcon = isNwsDay ? getWeatherIcon(ghostWeatherCode) : getMoonIcon(ghostWeatherCode);
-
-  // Ghost details grid values
-  const ghostHumidity = current?.relative_humidity_2m ?? current?.relativeHumidity ?? '—';
-  const ghostWindSpeed = current?.wind_speed_10m != null ? `${Math.round(current.wind_speed_10m)} km/h` :
-                        current?.windSpeed != null ? `${Math.round(current.windSpeed)} km/h` : '';
-  const ghostWindDir = current?.wind_direction_10m ?? current?.windDirection ?? 0;
-  let ghostPressure = '—';
-  if (current?.surface_pressure != null) {
-    ghostPressure = current.surface_pressure;
-  } else if (current?.pressure != null) {
-    ghostPressure = current.pressure;
-  }
-  const ghostUv = '—';
-  let ghostVis = '—';
-  if (current?.visibility != null) {
-    ghostVis = current.visibilityUnit === 'mi' ? current.visibility.toFixed(1) : (current.visibility / 1609.34).toFixed(1);
-  }
-
-  // Ghost hourly forecast
-  const nwsTimeArr = hourly?.time || [];
-  let ghostHourlySlotsHTML = '';
-  for (let i = 0; i < 24; i++) {
-    const hIdx = nwsTimeArr.findIndex(t => {
-      const [datePart, timePart] = t.split('T');
-      return datePart === now.toISOString().split('T')[0] && timePart.startsWith(`T${String(currentHour + i).padStart(2, '0')}`);
-    });
-    if (hIdx < 0 || hIdx >= nwsTimeArr.length) break;
-    const hTime = nwsTimeArr[hIdx]?.split('T')[1]?.split('+')[0]?.slice(0, 5);
-    const hTemp = hourly?.temperature_2m?.[hIdx] != null ? convertTemp(hourly.temperature_2m[hIdx]) :
-                  hourly?.temperature?.[hIdx] != null ? convertTemp(hourly.temperature[hIdx]) : '—';
-    const hCode = hourly?.weather_code?.[hIdx] ?? hourly?.weatherCode?.[hIdx] ?? 0;
-    const isGhostCurrent = i === 0;
-    const hHourDecimal = parseDecimalTime(hTime, 12);
-    const hIsDay = isDaytime(hHourDecimal, parseDecimalTime(current?.sunrise || '', 6), parseDecimalTime(current?.sunset || '', 19));
-    const hWind = hourly?.wind_speed_10m?.[hIdx] != null ? `${Math.round(hourly.wind_speed_10m[hIdx])} km/h` :
-                  hourly?.windSpeed?.[hIdx] != null ? `${Math.round(hourly.windSpeed[hIdx])} km/h` : '';
-    const hPrecip = hourly?.precipitation?.[hIdx] != null && hourly.precipitation[hIdx] > 0.1 
-      ? `${Math.round(hourly.precipitation[hIdx])}mm` : '';
-    ghostHourlySlotsHTML += `<div class="nws-ghost-hour-slot${isGhostCurrent ? ' current' : ''}">
-      <div class="nws-ghost-hour-icon">${isGhostCurrent ? ghostIcon : (hIsDay ? getWeatherIcon(hCode) : getMoonIcon(hCode))}</div>
-      <div class="nws-ghost-hour-temp">${Math.round(hTemp)}°</div>
-      ${hWind ? `<div class="nws-ghost-hour-wind">${hWind}</div>` : ''}
-      ${hPrecip ? `<div class="nws-ghost-hour-precip">${hPrecip}</div>` : ''}
-    </div>`;
-  }
-
-  // Ghost merged canvas
-  const ghostMergedCanvas = `<canvas class="chart-canvas chart-merged nws-ghost-chart" id="chart-ghost-merged-${safeName}" style="position:absolute;top:0;left:0;right:0;bottom:0;z-index:-1;pointer-events:none;"></canvas>`;
-
-  return {
-    headerHTML: `
-      <div class="nws-ghost nws-ghost-temp">${Math.round(ghostTemp)}°</div>
-      <div class="nws-ghost nws-ghost-icon">${ghostIcon}</div>`,
-    detailsHTML: `
-      <div class="nws-ghost nws-ghost-details">
-        <div class="nws-ghost-detail-cell"><span class="nws-ghost-detail-label">Humidity</span><span class="nws-ghost-detail-value">${ghostHumidity}%</span></div>
-        <div class="nws-ghost-detail-cell"><span class="nws-ghost-detail-label">Wind</span><span class="nws-ghost-detail-value">${ghostWindDir !== 0 ? getWindCompass(ghostWindDir) + ' ' + ghostWindSpeed : '—'}</span></div>
-        <div class="nws-ghost-detail-cell"><span class="nws-ghost-detail-label">Pressure</span><span class="nws-ghost-detail-value">${ghostPressure} hPa</span></div>
-        <div class="nws-ghost-detail-cell"><span class="nws-ghost-detail-label">UV Index</span><span class="nws-ghost-detail-value">${ghostUv}</span></div>
-        <div class="nws-ghost-detail-cell"><span class="nws-ghost-detail-label">Visibility</span><span class="nws-ghost-detail-value">${ghostVis} mi</span></div>
-      </div>`,
-    hourlyHTML: `
-      <div class="nws-ghost nws-ghost-hourly">
-        ${ghostHourlySlotsHTML}
-      </div>`,
-    ghostCanvas: ghostMergedCanvas,
-  };
-}
-
-// ===== FULL RENDER =====
-// Renders all city cards with complete data. Used for refresh/background updates.
-
-// Parse time string as decimal hours so minutes are accounted for (e.g., "18:45" → 18.75)
-function parseDecimalTime(timeStr, fallback) {
-  if (!timeStr) return fallback;
-  const [h, m] = timeStr.split(':').map(Number);
-  return h + (m / 60);
-}
+// --- Full Render ---
 
 function renderAll() {
   const grid = document.getElementById('city-grid');
   if (!grid) return;
 
-  // De-duplicate weatherData by coordinates before rendering (keep entry with non-null place_id)
   const seenCoords = new Map();
   const deduped = [];
   for (const entry of weatherData) {
@@ -7686,9 +7499,8 @@ function renderAll() {
     let isDup = false;
     for (const [existingKey, existingEntry] of seenCoords) {
       const [exLat, exLon] = existingKey.split(',').map(Number);
-      if (Math.abs(lat - exLat) < 0.01 && Math.abs(lon - exLon) < 0.01) {
+      if (Math.abs(lat - exLat) < COORD_MATCH_TOLERANCE && Math.abs(lon - exLon) < COORD_MATCH_TOLERANCE) {
         isDup = true;
-        // Prefer the entry with a non-null place_id
         if (!existingEntry.place_id && entry.place_id) {
           seenCoords.set(existingKey, entry);
           const dupIdx = deduped.findIndex(d => d === existingEntry);
@@ -7714,22 +7526,21 @@ function renderAll() {
     card.dataset.citydist = data.distance != null ? data.distance : '';
     card.dataset.citylat = data.latitude != null ? data.latitude : '';
     card.dataset.citylon = data.longitude != null ? data.longitude : '';
-    card.style.animationDelay = `${i * 120}ms`;
+    card.style.animationDelay = `${i * CARD_ANIMATION_STAGGER_MS}ms`;
     card.style.animationFillMode = 'forwards';
     card.style.overflow = 'visible';
     const suffix = data.latitude != null && data.longitude != null ? `${data.latitude}_${data.longitude}` : undefined;
     card.innerHTML = renderCityCard(data, suffix);
     grid.appendChild(card);
-
   });
 
-   applyBackgrounds();
-   
-   setTimeout(() => {
-     drawAllCharts();
-     drawGhostCharts();
-   }, 400);
- }
+  applyBackgrounds();
+
+  setTimeout(() => {
+    drawAllCharts();
+    drawGhostCharts();
+  }, RENDER_ALL_CHART_DELAY_MS);
+}
 
 function applyBackgrounds() {
   let style = document.getElementById('dynamic-bg');
@@ -7762,12 +7573,10 @@ function renderCityCard(data, suffix) {
   const curTemp = current?.temperature_2m != null ? convertTemp(current.temperature_2m) :
                   current?.temperature != null ? convertTemp(current.temperature) : '—';
   const curWeatherCode = current?.weather_code ?? current?.weatherCode ?? 0;
-  // Field names: both sources use the same field names after nwsToAppData mapping
   const humidity = current?.relative_humidity_2m ?? current?.relativeHumidity ?? '—';
   const windSpeed = current?.wind_speed_10m ?? current?.windSpeed ?? '—';
   const windDir = current?.wind_direction_10m ?? current?.windDirection ?? 0;
-  
-  // Pressure: always in hPa (NWS converted from inHg, OM already in hPa)
+
   let pressure = '—';
   if (current?.surface_pressure != null) {
     pressure = current.surface_pressure;
@@ -7775,21 +7584,16 @@ function renderCityCard(data, suffix) {
     pressure = current.pressure;
   }
   
-  // UV Index: cross-source from OM cache if available
   const uv = current?.uv_index != null ? current.uv_index : '—';
-  
-  // Visibility: always in meters, convert to miles for display
+
   let vis = '—';
   if (current?.visibility != null) {
     if (current.visibilityUnit === 'mi') {
       vis = current.visibility.toFixed(1);
     } else {
-      // meters to miles
-      vis = (current.visibility / 1609.34).toFixed(1);
+      vis = (current.visibility / METERS_PER_MILE).toFixed(1);
     }
   }
-  
-  // PM2.5: cross-source from OM cache if available
   const pm25 = a && a.pm2_5 !== undefined && a.pm2_5 !== null ? a.pm2_5 : '—';
 
   const now = new Date();
@@ -7800,7 +7604,7 @@ function renderCityCard(data, suffix) {
   const isDay = isDaytime(currentHour, sunriseTime, sunsetTime);
 
   const curIcon = isDay ? getWeatherIcon(curWeatherCode) : getMoonIcon(curWeatherCode);
-  const curIconLarge = isDay ? getWeatherIcon(curWeatherCode, 80) : getMoonIcon(curWeatherCode, 80);
+  const curIconLarge = isDay ? getWeatherIcon(curWeatherCode, LARGE_ICON_SIZE_PX) : getMoonIcon(curWeatherCode, LARGE_ICON_SIZE_PX);
 
   const timeArr = hourly?.time || [];
   const currentDay = now.toISOString().split('T')[0];
@@ -7810,14 +7614,14 @@ function renderCityCard(data, suffix) {
   });
 
   let hourlyHTML = '';
-  for (let i = 0; i < 24; i++) {
+  for (let i = 0; i < HOURLY_FORECAST_SLOTS; i++) {
     const hIdx = currentIdx >= 0 ? currentIdx + i : currentHour + i;
     if (hIdx < 0 || hIdx >= timeArr.length) break;
     const hTime = timeArr[hIdx]?.split('T')[1]?.split('+')[0]?.slice(0, 5);
     const hTemp = hourly?.temperature_2m?.[hIdx] != null ? convertTemp(hourly.temperature_2m[hIdx]) :
                   hourly?.temperature?.[hIdx] != null ? convertTemp(hourly.temperature[hIdx]) : 0;
     const precipMM = hourly?.precipitation?.[hIdx] || 0;
-    const hPrecip = precipMM > 0.1 ? `${Math.round(precipMM)}mm` : '';
+    const hPrecip = precipMM > PRECIP_DISPLAY_THRESHOLD_MM ? `${Math.round(precipMM)}mm` : '';
     const hCode = hourly?.weather_code?.[hIdx] ?? hourly?.weatherCode?.[hIdx] ?? 0;
     const isCurrent = i === 0;
     const hHourDecimal = parseDecimalTime(hTime, 12);
@@ -7833,9 +7637,8 @@ function renderCityCard(data, suffix) {
     </div>`;
   }
 
-    // NOAA badge — show when NWS data is available for this city
-    const hasNwsData = !!data.nwsData;
-    const nwsBadge = hasNwsData 
+  const hasNwsData = !!data.nwsData;
+  const nwsBadge = hasNwsData
       ? `<span class="nws-badge" title="NWS data available"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 74 74"><path fill="#003087" d="M70.17,20.61c-5.27,7.93-14,19-24.19,22.69l-1.26.53a2.86,2.86,0,0,0,.77.23h1.2c2.58-.1,6.3-1.19,7.06,1.43A30.55,30.55,0,0,0,39,49.41c-4.61,2.53-10.45,4.81-14.27,1.26,3.06-.41,8.71-2.26,10.7-4.07C19.25,46.38,12.06,36.3,7,30.79c-1.82-2.11-3.69-3.88-5.6-4.06a37,37,0,1,0,68.74-6.12Z"/><path fill="#fff" d="M7,30.77c5,5.51,12.22,15.58,28.42,15.81-2,1.8-7.64,3.65-10.7,4.07C28.53,54.22,34.41,52,39,49.39a30.46,30.46,0,0,1,14.69-3.87C53,42.9,49.23,44,46.65,44.08h-1.2a2.63,2.63,0,0,1-.77-.23l1.26-.52C56.1,39.54,64.85,28.54,70.13,20.55a35.57,35.57,0,0,0-3.78-6c-9.52,1.74-12.6,15.68-18,22.59-7.16,10.08-14,7.85-21.27,1.13S14.44,19.61,6.77,15.54A37.06,37.06,0,0,0,1.38,26.72C3.34,26.91,5.21,28.68,7,30.77Z"/><path fill="#003087" d="M27.1,38.26c7.22,6.72,14.11,8.92,21.28-1.14,5.45-6.91,8.5-20.85,18-22.59a37,37,0,0,0-59.58,1C14.49,19.61,19.88,31.65,27.1,38.26Z"/></svg></span>`
       : '<span class="source-badge open-meteo">OM</span>';
 
@@ -7843,13 +7646,10 @@ function renderCityCard(data, suffix) {
   const mergedCanvasId = `chart-merged-${safeName}`;
   const combinedCanvasId = `chart-combined-${safeName}`;
 
-  // Slice to 24 hours (current day only) for chart display
-  const temps = (hourly?.temperature_2m || hourly?.temperature || []).slice(0, 24);
-  const rain = (hourly?.precipitation || []).slice(0, 24);
-  const hum = (hourly?.relative_humidity_2m || hourly?.relativeHumidity || []).slice(0, 24);
-  const wind = (hourly?.wind_speed_10m || hourly?.windSpeed || []).slice(0, 24);
+  const rain = (hourly?.precipitation || []).slice(0, HOURLY_FORECAST_SLOTS);
+  const hum = (hourly?.relative_humidity_2m || hourly?.relativeHumidity || []).slice(0, HOURLY_FORECAST_SLOTS);
+  const wind = (hourly?.wind_speed_10m || hourly?.windSpeed || []).slice(0, HOURLY_FORECAST_SLOTS);
   const chartStats = (data) => {
-    // Filter out null values before computing stats
     const valid = data.filter(v => v != null);
     return valid.length ? {
       min: Math.round(Math.min(...valid)),
@@ -7862,24 +7662,20 @@ function renderCityCard(data, suffix) {
   const windStats = chartStats(wind);
   const rainStats = chartStats(rain);
 
-  // Build ghost overlay HTML when NWS data is available
   let ghostHeaderHTML = '';
   let ghostDetailsHTML = '';
   let ghostHourlyHTML = '';
   if (hasNwsData) {
     const nwsCurrent = data.nwsData?.weather?.current || {};
     const nwsHourly = data.nwsData?.weather?.hourly || {};
-    
-    // Ghost temperature (offset from OM temp)
+
     const ghostTemp = nwsCurrent?.temperature_2m != null ? convertTemp(nwsCurrent.temperature_2m) :
                       nwsCurrent?.temperature != null ? convertTemp(nwsCurrent.temperature) : '—';
-    
-    // Ghost weather icon
+
     const ghostWeatherCode = nwsCurrent?.weather_code ?? nwsCurrent?.weatherCode ?? 0;
     const isNwsDay = isDaytime(currentHour, sunriseTime, sunsetTime);
     const ghostIcon = isNwsDay ? getWeatherIcon(ghostWeatherCode) : getMoonIcon(ghostWeatherCode);
-    
-    // Ghost details grid values
+
     const ghostHumidity = nwsCurrent?.relative_humidity_2m ?? nwsCurrent?.relativeHumidity ?? '—';
     const ghostWindSpeed = nwsCurrent?.wind_speed_10m != null ? `${Math.round(nwsCurrent.wind_speed_10m)} km/h` :
                           nwsCurrent?.windSpeed != null ? `${Math.round(nwsCurrent.windSpeed)} km/h` : '';
@@ -7890,18 +7686,16 @@ function renderCityCard(data, suffix) {
     } else if (nwsCurrent?.pressure != null) {
       ghostPressure = nwsCurrent.pressure;
     }
-    // NWS doesn't provide UV Index
     const ghostUv = '—';
     let ghostVis = '—';
     if (nwsCurrent?.visibility != null) {
       if (nwsCurrent.visibilityUnit === 'mi') {
         ghostVis = nwsCurrent.visibility.toFixed(1);
       } else {
-        ghostVis = (nwsCurrent.visibility / 1609.34).toFixed(1);
+        ghostVis = (nwsCurrent.visibility / METERS_PER_MILE).toFixed(1);
       }
     }
     
-    // Ghost hourly forecast
     const nwsTimeArr = nwsHourly?.time || [];
     const nwsCurrentDay = now.toISOString().split('T')[0];
     const nwsCurrentIdx = nwsTimeArr.findIndex(t => {
@@ -7909,9 +7703,8 @@ function renderCityCard(data, suffix) {
       return datePart === nwsCurrentDay && timePart.startsWith(`T${String(currentHour).padStart(2, '0')}`);
     });
     
-    // Build ghost hourly slots
     let ghostHourlySlotsHTML = '';
-    for (let i = 0; i < 24; i++) {
+    for (let i = 0; i < HOURLY_FORECAST_SLOTS; i++) {
       const hIdx = nwsCurrentIdx >= 0 ? nwsCurrentIdx + i : currentHour + i;
       if (hIdx < 0 || hIdx >= nwsTimeArr.length) break;
       const hTime = nwsTimeArr[hIdx]?.split('T')[1]?.split('+')[0]?.slice(0, 5);
@@ -7923,7 +7716,7 @@ function renderCityCard(data, suffix) {
       const hIsDay = isDaytime(hHourDecimal, sunriseTime, sunsetTime);
       const hWind = nwsHourly?.wind_speed_10m?.[hIdx] != null ? `${Math.round(nwsHourly.wind_speed_10m[hIdx])} km/h` :
                     nwsHourly?.windSpeed?.[hIdx] != null ? `${Math.round(nwsHourly.windSpeed[hIdx])} km/h` : '';
-      const hPrecip = nwsHourly?.precipitation?.[hIdx] != null && nwsHourly.precipitation[hIdx] > 0.1 
+      const hPrecip = nwsHourly?.precipitation?.[hIdx] != null && nwsHourly.precipitation[hIdx] > PRECIP_DISPLAY_THRESHOLD_MM
         ? `${Math.round(nwsHourly.precipitation[hIdx])}mm` : '';
       ghostHourlySlotsHTML += `<div class="nws-ghost-hour-slot${isGhostCurrent ? ' current' : ''}">
         <div class="nws-ghost-hour-icon">${isGhostCurrent ? ghostIcon : (hIsDay ? getWeatherIcon(hCode) : getMoonIcon(hCode))}</div>
@@ -7933,12 +7726,10 @@ function renderCityCard(data, suffix) {
       </div>`;
     }
     
-    // Ghost header elements (positioned relative to city-header)
     ghostHeaderHTML = `
       <div class="nws-ghost nws-ghost-temp">${Math.round(ghostTemp)}°</div>
       <div class="nws-ghost nws-ghost-icon">${ghostIcon}</div>`;
-    
-    // Ghost details grid (positioned relative to details-grid)
+
     ghostDetailsHTML = `
       <div class="nws-ghost nws-ghost-details">
         <div class="nws-ghost-detail-cell">
@@ -7963,14 +7754,12 @@ function renderCityCard(data, suffix) {
         </div>
       </div>`;
     
-    // Ghost hourly forecast (positioned relative to hourly-section)
     ghostHourlyHTML = `
       <div class="nws-ghost nws-ghost-hourly">
         ${ghostHourlySlotsHTML}
       </div>`;
   }
 
-  // Build ghost merged canvas element if NWS data is available (positioned behind OM chart that spans entire card)
   const ghostMergedCanvasId = hasNwsData ? `chart-ghost-merged-${safeName}` : '';
   const ghostMergedCanvas = hasNwsData
     ? `<canvas class="chart-canvas chart-merged nws-ghost-chart" id="${ghostMergedCanvasId}" style="position:absolute;top:0;left:0;right:0;bottom:0;z-index:-1;pointer-events:none;"></canvas>`
@@ -8034,7 +7823,7 @@ function renderCityCard(data, suffix) {
     </div>`;
 }
 
-// ===== DRAW GHOST CHARTS =====
+// --- Ghost Charts ---
 function drawGhostCharts() {
   weatherData.forEach((data) => {
     if (!data.weather || !data.nwsData) return;
@@ -8042,24 +7831,19 @@ function drawGhostCharts() {
     const safeName = data.place_id || `${data.latitude || 0}_${data.longitude || 0}`;
     if (Object.keys(hourly).length === 0) return;
 
-    // Find current hour index in NWS hourly data to align with OM chart's time window
     const nwsTimeArr = hourly.time || [];
     const nwsCurrentDay = new Date().toISOString().split('T')[0];
     const currentHour = new Date().getHours();
     let currentIdx = -1;
-    if (nwsTimeArr.length > 0) {
-      // Find the index where the date matches current day and time starts with current hour
-      for (let i = 0; i < nwsTimeArr.length; i++) {
-        const t = nwsTimeArr[i];
-        const [datePart, timePart] = t.split('T');
-        if (datePart === nwsCurrentDay && timePart.startsWith(`T${String(currentHour).padStart(2, '0')}`)) {
-          currentIdx = i;
-          break;
-        }
+    for (let i = 0; i < nwsTimeArr.length; i++) {
+      const t = nwsTimeArr[i];
+      const [datePart, timePart] = t.split('T');
+      if (datePart === nwsCurrentDay && timePart.startsWith(`T${String(currentHour).padStart(2, '0')}`)) {
+        currentIdx = i;
+        break;
       }
     }
 
-    // If no exact match found, fall back to first hour of current day
     if (currentIdx === -1) {
       for (let i = 0; i < nwsTimeArr.length; i++) {
         const t = nwsTimeArr[i];
@@ -8079,6 +7863,78 @@ function drawGhostCharts() {
 
 </script>
 <script>
+// ===== CHART CONSTANTS =====
+const CHART_PAD_MERGED = { top: 6, right: 0, bottom: 6, left: 0 };
+const CHART_PAD_COMBINED = { top: 10, right: 10, bottom: 10, left: 10 };
+
+// Grid and layout
+const GRID_LINE_COUNT = 3;
+const TEMP_LABEL_OFFSET_X = 17;
+const TEMP_LABEL_OFFSET_Y = 3;
+
+// Bar dimensions
+const BAR_WIDTH_MIN = 2;
+const BAR_WIDTH_RATIO = 0.5;
+const RAINFOALL_HEIGHT_RATIO = 0.25;
+const COMBINED_RAIN_HEIGHT_RATIO = 0.2;
+
+// Line widths
+const LINE_WIDTH_GRID = 0.5;
+const LINE_WIDTH_TEMP = 2;
+const LINE_WIDTH_WIND = 1;
+const LINE_WIDTH_HUMIDITY = 1.5;
+
+// Dot radii
+const DOT_RADIUS_TEMP = 2.5;
+const DOT_RADIUS_WIND = 1.5;
+
+// Wind height ratios
+const WIND_HEIGHT_RATIO_MERGED = 0.15;
+const WIND_HEIGHT_RATIO_COMBINED = 1.0;
+
+// Humidity scale
+const HUMIDITY_SCALE = 100;
+
+// Particle dimensions
+const PARTICLE_RADIUS_MIN = 0.5;
+const PARTICLE_RADIUS_MAX = 1.5;
+const PARTICLE_SPEED_MIN = 0.1;
+const PARTICLE_SPEED_MAX = 0.3;
+const PARTICLE_OPACITY_MIN = 0.05;
+const PARTICLE_OPACITY_MAX = 0.1;
+const PARTICLE_PAUSE_Y = -10;
+const PARTICLE_RESUME_Y = 10;
+
+// ===== CANVAS SETUP HELPER =====
+function setupCanvas(canvasId, pad) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return null;
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  ctx.scale(dpr, dpr);
+  const w = rect.width;
+  const h = rect.height;
+  const plotW = w - pad.left - pad.right;
+  const plotH = h - pad.top - pad.bottom;
+  return { ctx, canvas, w, h, pad, plotW, plotH };
+}
+
+// ===== GRID DRAWING HELPER =====
+function drawGrid(ctx, pad, plotW, plotH, color) {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = LINE_WIDTH_GRID;
+  for (let i = 0; i <= GRID_LINE_COUNT; i++) {
+    const y = pad.top + (plotH / GRID_LINE_COUNT) * i;
+    ctx.beginPath();
+    ctx.moveTo(pad.left, y);
+    ctx.lineTo(pad.left + plotW, y);
+    ctx.stroke();
+  }
+}
+
 // ===== CLEAN CANVAS CHART =====
 function drawMergedChart(canvasId, cityData, dayHigh, dayLow) {
   const canvas = document.getElementById(canvasId);
@@ -8091,9 +7947,7 @@ function drawMergedChart(canvasId, cityData, dayHigh, dayLow) {
   ctx.scale(dpr, dpr);
   const w = rect.width;
   const h = rect.height;
-  const pad = { top: 6, right: 0, bottom: 6, left: 0 };
-  const plotW = w - pad.left - pad.right;
-  const plotH = h - pad.top - pad.bottom;
+  const pad = CHART_PAD_MERGED;
 
   ctx.clearRect(0, 0, w, h);
 
@@ -8106,7 +7960,7 @@ function drawMergedChart(canvasId, cityData, dayHigh, dayLow) {
   if (temps.length === 0) return;
 
   const n = temps.length;
-  const stepX = plotW / (n - 1 || 1);
+  const stepX = w / (n - 1 || 1);
 
   // Temp range - use day high/low when available
   const tempMin = (dayLow != null ? dayLow : Math.min(...temps)) - 2;
@@ -8120,29 +7974,21 @@ function drawMergedChart(canvasId, cityData, dayHigh, dayLow) {
   const windMax = Math.max(...wind, 1);
 
   // Draw grid lines
-  ctx.strokeStyle = 'rgba(255,255,255,0.04)';
-  ctx.lineWidth = 0.5;
-  for (let i = 0; i <= 3; i++) {
-    const y = pad.top + (plotH / 3) * i;
-    ctx.beginPath();
-    ctx.moveTo(pad.left, y);
-    ctx.lineTo(pad.left + plotW, y);
-    ctx.stroke();
-  }
+  drawGrid(ctx, pad, w, h, 'rgba(255,255,255,0.04)');
 
   // Temperature area fill
-  const tempFillGrad = ctx.createLinearGradient(0, pad.top, 0, pad.top + plotH);
+  const tempFillGrad = ctx.createLinearGradient(0, pad.top, 0, pad.top + h);
   tempFillGrad.addColorStop(0, 'rgba(255,140,66,0.25)');
   tempFillGrad.addColorStop(1, 'rgba(255,140,66,0.02)');
 
   ctx.beginPath();
   temps.forEach((v, i) => {
     const x = pad.left + i * stepX;
-    const y = pad.top + (1 - (v - tempMin) / tempRange) * plotH;
+    const y = pad.top + (1 - (v - tempMin) / tempRange) * h;
     i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
   });
-  ctx.lineTo(pad.left + (n - 1) * stepX, pad.top + plotH);
-  ctx.lineTo(pad.left, pad.top + plotH);
+  ctx.lineTo(pad.left + (n - 1) * stepX, pad.top + h);
+  ctx.lineTo(pad.left, pad.top + h);
   ctx.closePath();
   ctx.fillStyle = tempFillGrad;
   ctx.fill();
@@ -8151,11 +7997,11 @@ function drawMergedChart(canvasId, cityData, dayHigh, dayLow) {
   ctx.beginPath();
   temps.forEach((v, i) => {
     const x = pad.left + i * stepX;
-    const y = pad.top + (1 - (v - tempMin) / tempRange) * plotH;
+    const y = pad.top + (1 - (v - tempMin) / tempRange) * h;
     i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
   });
   ctx.strokeStyle = '#ff8c42';
-  ctx.lineWidth = 2;
+  ctx.lineWidth = LINE_WIDTH_TEMP;
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
   ctx.stroke();
@@ -8163,20 +8009,20 @@ function drawMergedChart(canvasId, cityData, dayHigh, dayLow) {
   // Temperature dots
   temps.forEach((v, i) => {
     const x = pad.left + i * stepX;
-    const y = pad.top + (1 - (v - tempMin) / tempRange) * plotH;
+    const y = pad.top + (1 - (v - tempMin) / tempRange) * h;
     ctx.beginPath();
-    ctx.arc(x, y, 2.5, 0, Math.PI * 2);
+    ctx.arc(x, y, DOT_RADIUS_TEMP, 0, Math.PI * 2);
     ctx.fillStyle = '#ff8c42';
     ctx.fill();
     ctx.strokeStyle = '#000';
-    ctx.lineWidth = 1;
+    ctx.lineWidth = LINE_WIDTH_WIND;
     ctx.stroke();
   });
 
   // Rain bars (bottom)
-  const rainH = plotH * 0.25;
-  const rainY = pad.top + plotH - rainH;
-  const barW = Math.max(2, stepX * 0.5);
+  const rainH = h * RAINFOALL_HEIGHT_RATIO;
+  const rainY = pad.top + h - rainH;
+  const barW = Math.max(BAR_WIDTH_MIN, stepX * BAR_WIDTH_RATIO);
   rain.forEach((v, i) => {
     const x = pad.left + i * stepX + (stepX - barW) / 2;
     const barH = (v / rainMax) * rainH;
@@ -8188,11 +8034,11 @@ function drawMergedChart(canvasId, cityData, dayHigh, dayLow) {
   ctx.beginPath();
   wind.forEach((v, i) => {
     const x = pad.left + i * stepX;
-    const y = pad.top + plotH - (v / windMax) * (plotH * 0.15);
+    const y = pad.top + h - (v / windMax) * (h * WIND_HEIGHT_RATIO_MERGED);
     i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
   });
   ctx.strokeStyle = 'rgba(125,217,160,0.3)';
-  ctx.lineWidth = 1;
+  ctx.lineWidth = LINE_WIDTH_WIND;
   ctx.lineJoin = 'round';
   ctx.stroke();
 
@@ -8200,10 +8046,10 @@ function drawMergedChart(canvasId, cityData, dayHigh, dayLow) {
   ctx.fillStyle = 'rgba(255,255,255,0.5)';
   ctx.font = '9px -apple-system, sans-serif';
   ctx.textAlign = 'right';
-  for (let i = 0; i <= 3; i++) {
-    const val = tempMax - (tempRange / 3) * i;
-    const y = pad.top + (plotH / 3) * i;
-    ctx.fillText(Math.round(val) + '°', pad.left + 17, y + 3);
+  for (let i = 0; i <= GRID_LINE_COUNT; i++) {
+    const val = tempMax - (tempRange / GRID_LINE_COUNT) * i;
+    const y = pad.top + (h / GRID_LINE_COUNT) * i;
+    ctx.fillText(Math.round(val) + '°', pad.left + TEMP_LABEL_OFFSET_X, y + TEMP_LABEL_OFFSET_Y);
   }
 
 }
@@ -8220,9 +8066,7 @@ function drawGhostMergedChart(canvasId, cityData, dayHigh, dayLow, currentIdx = 
   ctx.scale(dpr, dpr);
   const w = rect.width;
   const h = rect.height;
-  const pad = { top: 6, right: 0, bottom: 6, left: 0 };
-  const plotW = w - pad.left - pad.right;
-  const plotH = h - pad.top - pad.bottom;
+  const pad = CHART_PAD_MERGED;
 
   ctx.clearRect(0, 0, w, h);
 
@@ -8235,7 +8079,7 @@ function drawGhostMergedChart(canvasId, cityData, dayHigh, dayLow, currentIdx = 
   if (temps.length === 0) return;
 
   const n = temps.length;
-  const stepX = plotW / (n - 1 || 1);
+  const stepX = w / (n - 1 || 1);
 
   // Temp range - use day high/low when available
   const tempMin = (dayLow != null ? dayLow : Math.min(...temps)) - 2;
@@ -8249,29 +8093,21 @@ function drawGhostMergedChart(canvasId, cityData, dayHigh, dayLow, currentIdx = 
   const windMax = Math.max(...wind, 1);
 
   // Draw grid lines (ghost)
-  ctx.strokeStyle = 'rgba(0,48,135,0.06)';
-  ctx.lineWidth = 0.5;
-  for (let i = 0; i <= 3; i++) {
-    const y = pad.top + (plotH / 3) * i;
-    ctx.beginPath();
-    ctx.moveTo(pad.left, y);
-    ctx.lineTo(pad.left + plotW, y);
-    ctx.stroke();
-  }
+  drawGrid(ctx, pad, w, h, 'rgba(0,48,135,0.06)');
 
   // Temperature area fill (ghost - blue tones)
-  const tempFillGrad = ctx.createLinearGradient(0, pad.top, 0, pad.top + plotH);
+  const tempFillGrad = ctx.createLinearGradient(0, pad.top, 0, pad.top + h);
   tempFillGrad.addColorStop(0, 'rgba(0,48,135,0.15)');
   tempFillGrad.addColorStop(1, 'rgba(0,48,135,0.02)');
 
   ctx.beginPath();
   temps.forEach((v, i) => {
     const x = pad.left + i * stepX;
-    const y = pad.top + (1 - (v - tempMin) / tempRange) * plotH;
+    const y = pad.top + (1 - (v - tempMin) / tempRange) * h;
     i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
   });
-  ctx.lineTo(pad.left + (n - 1) * stepX, pad.top + plotH);
-  ctx.lineTo(pad.left, pad.top + plotH);
+  ctx.lineTo(pad.left + (n - 1) * stepX, pad.top + h);
+  ctx.lineTo(pad.left, pad.top + h);
   ctx.closePath();
   ctx.fillStyle = tempFillGrad;
   ctx.fill();
@@ -8280,11 +8116,11 @@ function drawGhostMergedChart(canvasId, cityData, dayHigh, dayLow, currentIdx = 
   ctx.beginPath();
   temps.forEach((v, i) => {
     const x = pad.left + i * stepX;
-    const y = pad.top + (1 - (v - tempMin) / tempRange) * plotH;
+    const y = pad.top + (1 - (v - tempMin) / tempRange) * h;
     i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
   });
   ctx.strokeStyle = 'rgba(0,48,135,0.35)';
-  ctx.lineWidth = 2;
+  ctx.lineWidth = LINE_WIDTH_TEMP;
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
   ctx.stroke();
@@ -8292,20 +8128,20 @@ function drawGhostMergedChart(canvasId, cityData, dayHigh, dayLow, currentIdx = 
   // Temperature dots (ghost - blue tones)
   temps.forEach((v, i) => {
     const x = pad.left + i * stepX;
-    const y = pad.top + (1 - (v - tempMin) / tempRange) * plotH;
+    const y = pad.top + (1 - (v - tempMin) / tempRange) * h;
     ctx.beginPath();
-    ctx.arc(x, y, 2.5, 0, Math.PI * 2);
+    ctx.arc(x, y, DOT_RADIUS_TEMP, 0, Math.PI * 2);
     ctx.fillStyle = 'rgba(0,48,135,0.35)';
     ctx.fill();
     ctx.strokeStyle = 'rgba(0,48,135,0.6)';
-    ctx.lineWidth = 1;
+    ctx.lineWidth = LINE_WIDTH_WIND;
     ctx.stroke();
   });
 
   // Rain bars (ghost - blue tones)
-  const rainH = plotH * 0.25;
-  const rainY = pad.top + plotH - rainH;
-  const barW = Math.max(2, stepX * 0.5);
+  const rainH = h * RAINFOALL_HEIGHT_RATIO;
+  const rainY = pad.top + h - rainH;
+  const barW = Math.max(BAR_WIDTH_MIN, stepX * BAR_WIDTH_RATIO);
   rain.forEach((v, i) => {
     const x = pad.left + i * stepX + (stepX - barW) / 2;
     const barH = (v / rainMax) * rainH;
@@ -8317,11 +8153,11 @@ function drawGhostMergedChart(canvasId, cityData, dayHigh, dayLow, currentIdx = 
   ctx.beginPath();
   wind.forEach((v, i) => {
     const x = pad.left + i * stepX;
-    const y = pad.top + plotH - (v / windMax) * (plotH * 0.15);
+    const y = pad.top + h - (v / windMax) * (h * WIND_HEIGHT_RATIO_MERGED);
     i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
   });
   ctx.strokeStyle = 'rgba(125,217,160,0.2)';
-  ctx.lineWidth = 1;
+  ctx.lineWidth = LINE_WIDTH_WIND;
   ctx.lineJoin = 'round';
   ctx.stroke();
 
@@ -8329,10 +8165,10 @@ function drawGhostMergedChart(canvasId, cityData, dayHigh, dayLow, currentIdx = 
   ctx.fillStyle = 'rgba(0,48,135,0.4)';
   ctx.font = '9px -apple-system, sans-serif';
   ctx.textAlign = 'right';
-  for (let i = 0; i <= 3; i++) {
-    const val = tempMax - (tempRange / 3) * i;
-    const y = pad.top + (plotH / 3) * i;
-    ctx.fillText(Math.round(val) + '°', pad.left + 17, y + 3);
+  for (let i = 0; i <= GRID_LINE_COUNT; i++) {
+    const val = tempMax - (tempRange / GRID_LINE_COUNT) * i;
+    const y = pad.top + (h / GRID_LINE_COUNT) * i;
+    ctx.fillText(Math.round(val) + '°', pad.left + TEMP_LABEL_OFFSET_X, y + TEMP_LABEL_OFFSET_Y);
   }
 
 }
@@ -8349,9 +8185,7 @@ function drawCombinedChart(canvasId, cityData) {
   ctx.scale(dpr, dpr);
   const w = rect.width;
   const h = rect.height;
-  const pad = { top: 10, right: 10, bottom: 10, left: 10 };
-  const plotW = w - pad.left - pad.right;
-  const plotH = h - pad.top - pad.bottom;
+  const pad = CHART_PAD_COMBINED;
 
   ctx.clearRect(0, 0, w, h);
 
@@ -8364,22 +8198,22 @@ function drawCombinedChart(canvasId, cityData) {
   if (hum.length === 0) return;
 
   const n = hum.length;
-  const stepX = plotW / (n - 1 || 1);
+  const stepX = w / (n - 1 || 1);
   const windMax = Math.max(...wind, 1);
   const rainMax = Math.max(...rain, 0.5);
 
   // Humidity gradient fill
-  const humGrad = ctx.createLinearGradient(0, pad.top, 0, pad.top + plotH);
+  const humGrad = ctx.createLinearGradient(0, pad.top, 0, pad.top + h);
   humGrad.addColorStop(0, 'rgba(77,166,255,0.05)');
   humGrad.addColorStop(1, 'rgba(77,166,255,0.3)');
   ctx.beginPath();
   hum.forEach((v, i) => {
     const x = pad.left + i * stepX;
-    const y = pad.top + plotH - (v / 100) * plotH;
+    const y = pad.top + h - (v / HUMIDITY_SCALE) * h;
     i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
   });
-  ctx.lineTo(pad.left + (n - 1) * stepX, pad.top + plotH);
-  ctx.lineTo(pad.left, pad.top + plotH);
+  ctx.lineTo(pad.left + (n - 1) * stepX, pad.top + h);
+  ctx.lineTo(pad.left, pad.top + h);
   ctx.closePath();
   ctx.fillStyle = humGrad;
   ctx.fill();
@@ -8388,11 +8222,11 @@ function drawCombinedChart(canvasId, cityData) {
   ctx.beginPath();
   hum.forEach((v, i) => {
     const x = pad.left + i * stepX;
-    const y = pad.top + plotH - (v / 100) * plotH;
+    const y = pad.top + h - (v / HUMIDITY_SCALE) * h;
     i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
   });
   ctx.strokeStyle = 'rgba(77,166,255,0.7)';
-  ctx.lineWidth = 1.5;
+  ctx.lineWidth = LINE_WIDTH_HUMIDITY;
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
   ctx.stroke();
@@ -8401,11 +8235,11 @@ function drawCombinedChart(canvasId, cityData) {
   ctx.beginPath();
   wind.forEach((v, i) => {
     const x = pad.left + i * stepX;
-    const y = pad.top + plotH - (v / windMax) * plotH;
+    const y = pad.top + h - (v / windMax) * (h * WIND_HEIGHT_RATIO_COMBINED);
     i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
   });
   ctx.strokeStyle = 'rgba(125,217,160,0.6)';
-  ctx.lineWidth = 1.5;
+  ctx.lineWidth = LINE_WIDTH_HUMIDITY;
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
   ctx.stroke();
@@ -8413,17 +8247,17 @@ function drawCombinedChart(canvasId, cityData) {
   // Wind dots
   wind.forEach((v, i) => {
     const x = pad.left + i * stepX;
-    const y = pad.top + plotH - (v / windMax) * plotH;
+    const y = pad.top + h - (v / windMax) * (h * WIND_HEIGHT_RATIO_COMBINED);
     ctx.beginPath();
-    ctx.arc(x, y, 1.5, 0, Math.PI * 2);
+    ctx.arc(x, y, DOT_RADIUS_WIND, 0, Math.PI * 2);
     ctx.fillStyle = 'rgba(125,217,160,0.8)';
     ctx.fill();
   });
 
   // Rain bars (bottom)
-  const rainH = plotH * 0.2;
-  const rainY = pad.top + plotH - rainH;
-  const barW = Math.max(2, stepX * 0.5);
+  const rainH = h * COMBINED_RAIN_HEIGHT_RATIO;
+  const rainY = pad.top + h - rainH;
+  const barW = Math.max(BAR_WIDTH_MIN, stepX * BAR_WIDTH_RATIO);
   rain.forEach((v, i) => {
     const x = pad.left + i * stepX + (stepX - barW) / 2;
     const barH = (v / rainMax) * rainH;
@@ -8436,8 +8270,8 @@ function drawCombinedChart(canvasId, cityData) {
   ctx.font = '9px -apple-system, sans-serif';
   ctx.textAlign = 'left';
   ctx.fillText('100%', pad.left + 2, pad.top + 4);
-  ctx.fillText('0%', pad.left + 2, pad.top + plotH);
-  ctx.fillText(Math.round(windMax) + ' km/h', pad.left + 2, pad.top + plotH - 2);
+  ctx.fillText('0%', pad.left + 2, pad.top + h);
+  ctx.fillText(Math.round(windMax) + ' km/h', pad.left + 2, pad.top + h - 2);
 }
 
 // ===== CANVAS CHARTS =====
@@ -8471,9 +8305,9 @@ function initParticles() {
     particles.push({
       x: Math.random() * canvas.width,
       y: Math.random() * canvas.height,
-      r: Math.random() * 1.5 + 0.5,
-      speed: Math.random() * 0.3 + 0.1,
-      opacity: Math.random() * 0.1 + 0.05,
+      r: Math.random() * (PARTICLE_RADIUS_MAX - PARTICLE_RADIUS_MIN) + PARTICLE_RADIUS_MIN,
+      speed: Math.random() * (PARTICLE_SPEED_MAX - PARTICLE_SPEED_MIN) + PARTICLE_SPEED_MIN,
+      opacity: Math.random() * (PARTICLE_OPACITY_MAX - PARTICLE_OPACITY_MIN) + PARTICLE_OPACITY_MIN,
     });
   }
 
@@ -8493,7 +8327,7 @@ function initParticles() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         particles.forEach(p => {
           p.y -= p.speed;
-          if (p.y < -10) { p.y = canvas.height + 10; p.x = Math.random() * canvas.width; }
+          if (p.y < PARTICLE_PAUSE_Y) { p.y = canvas.height + PARTICLE_RESUME_Y; p.x = Math.random() * canvas.width; }
           ctx.beginPath();
           ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
           ctx.fillStyle = `rgba(255,255,255,${p.opacity})`;
@@ -8960,6 +8794,10 @@ const DONKEY_RUNNER = {
   maxSpeed: 0,
   nearMissCount: 0,
 
+  // Dumb luck tracking
+  dumbLuckCount: 0,
+  dumbLuckPenalty: 0,
+
   // Jump tracking
   totalJumps: 0,
   doubleJumps: 0,
@@ -9028,7 +8866,8 @@ const DONKEY_RUNNER = {
     drone: ["Drone incoming! Your donkey is not a spaceship", "Surveillance state meets incompetence"],
     milestone: ["MILESTONE! You survived a while!", "Another thousand points! The donkey is proud"],
     "ignored-jump": ["Jump ignored! Your donkey said no", "Not every jump is welcome here"],
-    restart: ["Round two! Why do you keep doing this?", "Again? Really?"]
+    restart: ["Round two! Why do you keep doing this?", "Again? Really?"],
+    "dumb-luck": ["DUMB LUCK! You survived, but at what cost?", "Pure luck saved your hide!", "Score halved! But you're alive!", "Fortune favors the clumsy!", "The donkey got lucky — barely!"]
   },
   messageIndex: {},  // tracks which message was last shown per event type
   messageCooldown: 0,  // cooldown timer
@@ -9077,6 +8916,7 @@ const DONKEY_RUNNER = {
           <canvas id="donkey-canvas" width="600" height="180"></canvas>
           <div class="donkey-speed-lines" id="donkey-speed-lines"></div>
           <div class="donkey-near-miss" id="donkey-near-miss">NEAR MISS!</div>
+          <div class="donkey-dumb-luck" id="donkey-dumb-luck">DUMB LUCK!</div>
           <div class="donkey-bonus-text" id="donkey-bonus-text"></div>
           <div class="donkey-snarky-message" id="donkey-snarky-message"></div>
           <div class="donkey-startscreen" id="donkey-startscreen">
@@ -9105,6 +8945,10 @@ const DONKEY_RUNNER = {
               <div class="donkey-gameover-stat-row">
                 <span class="donkey-gameover-stat-label">PROPERTY DAMAGE</span>
                 <span class="donkey-gameover-stat-value" id="donkey-gameover-property-damage">0</span>
+              </div>
+              <div class="donkey-gameover-stat-row">
+                <span class="donkey-gameover-stat-label">DUMB LUCK</span>
+                <span class="donkey-gameover-stat-value" id="donkey-gameover-dumb-luck">0</span>
               </div>
             </div>
             <!-- Top-right stats — non-score block (4 items) -->
@@ -9181,6 +9025,7 @@ const DONKEY_RUNNER = {
     this.startScreenEl = document.getElementById('donkey-startscreen');
     this.gameOverEl = document.getElementById('donkey-gameover');
     this.nearMissEl = document.getElementById('donkey-near-miss');
+    this.dumbLuckEl = document.getElementById('donkey-dumb-luck');
     this.bonusTextEl = document.getElementById('donkey-bonus-text');
     this.speedLinesEl = document.getElementById('donkey-speed-lines');
     this.soundBtnEl = document.getElementById('donkey-sound-btn');
@@ -9577,6 +9422,59 @@ const DONKEY_RUNNER = {
           oscillator.start(now);
           oscillator.stop(now + 0.2);
           break;
+
+        case 'dumbluck':
+          // Comedic "bonk + golden ding" — lucky save sound
+          // Bonk: low thud
+          const bonkOsc = this.audioCtx.createOscillator();
+          const bonkGain = this.audioCtx.createGain();
+          bonkOsc.connect(bonkGain);
+          bonkGain.connect(this.audioCtx.destination);
+          bonkOsc.type = 'triangle';
+          bonkOsc.frequency.setValueAtTime(150, now);
+          bonkOsc.frequency.exponentialRampToValueAtTime(60, now + 0.1);
+          bonkGain.gain.setValueAtTime(0.15, now);
+          bonkGain.gain.exponentialRampToValueAtTime(0.01, now + 0.12);
+          bonkOsc.start(now);
+          bonkOsc.stop(now + 0.12);
+
+          // Golden ding: bright ascending chime
+          const dingOsc = this.audioCtx.createOscillator();
+          const dingGain = this.audioCtx.createGain();
+          dingOsc.connect(dingGain);
+          dingGain.connect(this.audioCtx.destination);
+          dingOsc.type = 'sine';
+          dingOsc.frequency.setValueAtTime(600, now + 0.05);
+          dingOsc.frequency.exponentialRampToValueAtTime(1400, now + 0.2);
+          dingGain.gain.setValueAtTime(0.01, now);
+          dingGain.gain.linearRampToValueAtTime(0.12, now + 0.06);
+          dingGain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+          dingOsc.start(now + 0.05);
+          dingOsc.stop(now + 0.4);
+
+          // Sparkle noise burst
+          const sparkleDur = 0.25;
+          const sparkleBuf = this.audioCtx.createBuffer(1, Math.round(this.audioCtx.sampleRate * sparkleDur), this.audioCtx.sampleRate);
+          const sparkleData = sparkleBuf.getChannelData(0);
+          for (let i = 0; i < sparkleData.length; i++) {
+            sparkleData[i] = (Math.random() * 2 - 1);
+          }
+          const sparkleSource = this.audioCtx.createBufferSource();
+          sparkleSource.buffer = sparkleBuf;
+          const sparkleFilter = this.audioCtx.createBiquadFilter();
+          sparkleFilter.type = 'bandpass';
+          sparkleFilter.frequency.setValueAtTime(3000, now + 0.05);
+          sparkleFilter.Q.setValueAtTime(4, now);
+          const sparkleGain = this.audioCtx.createGain();
+          sparkleGain.gain.setValueAtTime(0.01, now);
+          sparkleGain.gain.linearRampToValueAtTime(0.06, now + 0.08);
+          sparkleGain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+          sparkleSource.connect(sparkleFilter);
+          sparkleFilter.connect(sparkleGain);
+          sparkleGain.connect(this.audioCtx.destination);
+          sparkleSource.start(now + 0.05);
+          sparkleSource.stop(now + 0.3);
+          break;
       }
     } catch (e) {
       // Silently fail if audio context has issues
@@ -9710,6 +9608,28 @@ const DONKEY_RUNNER = {
     this.frameCount = 0;
     this.nearMissActive = false;
     this.lastFrameTime = 0; // Reset so first frame after restart gets default deltaTime
+
+    // Reset obstacle counts for the new game
+    this.obstacleCounts = {
+      'cactus-small': 0,
+      'cactus-large': 0,
+      'rock': 0,
+      'car': 0,
+      'jet': 0,
+      'falling-rock': 0,
+      'drone': 0,
+    };
+
+    // Also reset gameOverObstacleType so no highlight persists
+    this.gameOverObstacleType = null;
+
+    // Reset other timers that might not be zeroed
+    this.jumpCooldownTimer = 0;
+    this.messageCooldown = 0;
+
+    // Reset dumb luck tracking
+    this.dumbLuckCount = 0;
+    this.dumbLuckPenalty = 0;
 
     // Regenerate clouds for fresh start
     this.generateClouds();
@@ -9857,7 +9777,7 @@ const DONKEY_RUNNER = {
     // Reduce score rate while airborne to 10% of ground rate
     const airborneMultiplier = this.donkey.grounded ? 1.0 : 0.1;
     this.distance += this.speed * 0.01 * deltaTime * 60 * airborneMultiplier;
-    this.score = Math.floor(this.distance * 100);
+    this.score = Math.floor(this.distance * 100) - this.dumbLuckPenalty;
 
     // Score milestone flash check
     const currentMilestone = Math.floor(this.score / 1000) * 1000;
@@ -10022,6 +9942,9 @@ const DONKEY_RUNNER = {
           // Knock aside: remove obstacle, spawn particles
           this.knockObstacle(obs, i);
           this.showSnarkyMessage('property-damage');
+        } else if (Math.random() < 0.5) {
+          // Dumb Luck! 50% chance to survive by knocking obstacle away
+          this.triggerDumbLuck(obs, i);
         } else {
           // Record the killer obstacle type for the table
           this.gameOverObstacleType = obs.type;
@@ -10244,6 +10167,85 @@ const DONKEY_RUNNER = {
     }
   },
 
+  // Spawn golden sparkle particles for dumb luck effect
+  spawnDumbLuckParticles(px, py) {
+    const goldColors = ['#FFD700', '#FFC107', '#FFAB00', '#FFE082', '#FFF176', '#FFEE58'];
+    for (let i = 0; i < 25; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 1 + Math.random() * 5;
+      this.particles.push({
+        x: px,
+        y: py,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed - 3,
+        size: 2 + Math.random() * 4,
+        color: goldColors[Math.floor(Math.random() * goldColors.length)],
+        life: 0.5 + Math.random() * 0.8,
+      });
+    }
+  },
+
+  // Trigger Dumb Luck effect — donkey survives collision by knocking obstacle away
+  triggerDumbLuck(obs, index) {
+    const px = obs.x + obs.width / 2;
+    const py = obs.y + obs.height / 2;
+
+    // Remove obstacle
+    this.obstacles.splice(index, 1);
+    this.obstacleCounts[obs.type]++;
+
+    // Increment dumb luck counter
+    this.dumbLuckCount++;
+
+    // Add 50% of current score to penalty
+    const currentScore = Math.floor(this.distance * 100) - this.dumbLuckPenalty;
+    this.dumbLuckPenalty += Math.floor(currentScore / 2);
+
+    // Recalculate score with penalty
+    this.score = Math.floor(this.distance * 100) - this.dumbLuckPenalty;
+
+    // Update score display immediately
+    if (this.scoreEl) {
+      this.scoreEl.textContent = String(this.score).padStart(5, '0');
+    }
+
+    // Flash "DUMB LUCK!" text
+    if (this.dumbLuckEl) {
+      this.dumbLuckEl.classList.remove('flash');
+      void this.dumbLuckEl.offsetWidth;
+      this.dumbLuckEl.classList.add('flash');
+      setTimeout(() => this.dumbLuckEl.classList.remove('flash'), 800);
+    }
+
+    // Show "-50%" penalty text at obstacle position
+    if (this.bonusTextEl) {
+      this.bonusTextEl.textContent = '-50%';
+      this.bonusTextEl.classList.remove('flash');
+      void this.bonusTextEl.offsetWidth;
+      this.bonusTextEl.classList.add('flash');
+      setTimeout(() => this.bonusTextEl.classList.remove('flash'), 700);
+    }
+
+    // Spawn golden sparkle particles
+    this.spawnDumbLuckParticles(px, py);
+
+    // Also spawn obstacle knock particles
+    this.spawnKnockParticles(px, py, obs.type);
+
+    // Play dumb luck sound
+    this.playSound('dumbluck');
+
+    // Trigger a short stumble on the donkey
+    if (!this.donkey.stumbling) {
+      this.donkey.stumbling = true;
+      this.donkey.stumbleTimer = 0;
+      this.donkey.stumbleDuration = 0.5;
+    }
+
+    // Show snarky message
+    this.showSnarkyMessage('dumb-luck');
+  },
+
   // Spawn particles when donkey hits the ceiling
   spawnCeilingParticles() {
     for (let i = 0; i < 8; i++) {
@@ -10327,8 +10329,8 @@ const DONKEY_RUNNER = {
       messageEl.classList.add('snarky-green');
     } else if (eventType === 'game-over') {
       messageEl.classList.add('snarky-red');
-    } else if (eventType === 'high-score') {
-      messageEl.classList.add('snarky-yellow');
+    } else if (eventType === 'high-score' || eventType === 'dumb-luck') {
+      messageEl.classList.add('snarky-gold');
     } else if (eventType === 'jump' || eventType === 'double-jump' || eventType === 'ignored-jump') {
       messageEl.classList.add('snarky-blue');
     } else {
@@ -10706,6 +10708,11 @@ const DONKEY_RUNNER = {
       const propertyDamageDisplay = document.getElementById('donkey-gameover-property-damage');
       if (propertyDamageDisplay) {
         propertyDamageDisplay.textContent = String(this.propertyDamageCount);
+      }
+      // Populate dumb luck count (top-left)
+      const dumbLuckDisplay = document.getElementById('donkey-gameover-dumb-luck');
+      if (dumbLuckDisplay) {
+        dumbLuckDisplay.textContent = String(this.dumbLuckCount);
       }
       this.gameOverEl.classList.remove('hidden');
     }
@@ -11431,17 +11438,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
 </script>
  <script>
-// ===== LOCAL SENSOR BAR =====
-// Reads sensor values from weather-local.js and displays them in a bar below the header.
-// Only sensors with non-null values are shown.
-// Respects the existing unit toggle (°F/°C) for temperature, speed, pressure, etc.
-// Supports flexible input formats: plain numbers default to US customary units, or
-// strings can include explicit units like "19km/h", "47kph", "1017hPa", "0.002\"", "0.002ft", etc.
-
 (function () {
   'use strict';
 
-  // === Sensor definitions: maps config keys to display metadata ===
   const SENSOR_DEFS = [
     { key: 'LOCAL_SENSOR_TEMPERATURE',          label: 'Temp', unit: '\u00B0F', type: 'temp' },
     { key: 'LOCAL_SENSOR_FEELSLIKE',            label: 'Feels Like', unit: '\u00B0F', type: 'temp' },
@@ -11460,7 +11459,19 @@ document.addEventListener('DOMContentLoaded', () => {
     { key: 'LOCAL_SENSOR_SOIL_MOISTURE_PERCENT', label: 'Soil Moisture', unit: '%', type: 'soil-moisture' },
   ];
 
-  // === Current sensor state (tracks which sensors are active) ===
+  // Timing & retry config
+  const SENSOR_SCRIPT_TIMEOUT_MS   = 10000;
+  const SENSOR_BACKOFF_BASE_MS     = 1000;
+  const SENSOR_BACKOFF_MAX_MS      = 300000;
+  const SENSOR_HIDDEN_REFRESH_MS   = 60000;
+  const SENSOR_HEALTH_CHECK_MS     = 300000;
+
+  // Unit conversion factors
+  const SENSOR_INHG_TO_HPAA = 33.8639;
+  const SENSOR_MPH_TO_KMH   = 1.60934;
+  const SENSOR_IN_TO_MM     = 25.4;
+  const SENSOR_FT_TO_IN     = 12;
+
   let _activeSensors = [];
   let _sensorValues = {};
   let _refreshIntervalId = null;
@@ -11479,103 +11490,72 @@ document.addEventListener('DOMContentLoaded', () => {
     return 'F';
   }
 
-  // === Converters (used by formatSensorValue) ===
-  // Each converter takes (value, fromUnit, toUnit) and returns a formatted string or NaN.
   function convertPressure(value, fromUnit, toUnit) {
     if (value == null || value !== value || isNaN(value)) return NaN;
     if (fromUnit === 'inHg' && toUnit === 'hPa') {
-      return (value * 33.8639).toFixed(1);
+      return (value * SENSOR_INHG_TO_HPAA).toFixed(1);
     }
     if (fromUnit === 'hPa' && toUnit === 'inHg') {
-      return (value / 33.8639).toFixed(2);
+      return (value / SENSOR_INHG_TO_HPAA).toFixed(2);
     }
-    // Same unit, no conversion needed
     return Number.isInteger(value) ? value : value.toFixed(2);
   }
 
   function convertWindSpeed(value, fromUnit, toUnit) {
     if (value == null || value !== value || isNaN(value)) return NaN;
     if (fromUnit === 'mph' && toUnit === 'km/h') {
-      return (value * 1.60934).toFixed(1);
+      return (value * SENSOR_MPH_TO_KMH).toFixed(1);
     }
     if (fromUnit === 'km/h' && toUnit === 'mph') {
-      const mph = value / 1.60934;
-      return mph.toFixed(1);
+      return (value / SENSOR_MPH_TO_KMH).toFixed(1);
     }
-    // Same unit, no conversion needed
     return Number.isInteger(value) ? value : value.toFixed(1);
   }
 
   function convertVisibility(value, fromUnit, toUnit) {
     if (value == null || value !== value || isNaN(value)) return NaN;
     if (fromUnit === 'mi' && toUnit === 'km') {
-      return (value * 1.60934).toFixed(1);
+      return (value * SENSOR_MPH_TO_KMH).toFixed(1);
     }
     if (fromUnit === 'km' && toUnit === 'mi') {
-      const mi = value / 1.60934;
-      return mi.toFixed(1);
+      return (value / SENSOR_MPH_TO_KMH).toFixed(1);
     }
-    // Same unit, no conversion needed
     return Number.isInteger(value) ? value : value.toFixed(1);
   }
 
   function convertRainfall(value, fromUnit, toUnit) {
     if (value == null || value !== value || isNaN(value)) return NaN;
     if (fromUnit === 'in' && toUnit === 'mm') {
-      return (value * 25.4).toFixed(1);
+      return (value * SENSOR_IN_TO_MM).toFixed(1);
     }
     if (fromUnit === 'mm' && toUnit === 'in') {
-      const inVal = value / 25.4;
-      return inVal.toFixed(2);
+      return (value / SENSOR_IN_TO_MM).toFixed(2);
     }
     if (fromUnit === 'ft' && toUnit === 'in') {
-      return (value * 12).toFixed(3);
+      return (value * SENSOR_FT_TO_IN).toFixed(3);
     }
     if (fromUnit === 'in' && toUnit === 'ft') {
-      return (value / 12).toFixed(4);
+      return (value / SENSOR_FT_TO_IN).toFixed(4);
     }
-    // Same unit, no conversion needed
     return Number.isInteger(value) ? value : value.toFixed(2);
   }
 
-  function convertWindDir(value, fromUnit, toUnit) {
+  function convertWindDir(value) {
     if (value == null || value !== value || isNaN(value)) return NaN;
-    // Wind direction is always in degrees; no conversion needed
     return Math.round(value);
   }
 
-  // === Unit parsing: converts flexible input strings into a value and unit string ===
-  // Supported formats:
-  //   "12" → [12, 'mph'] (wind speed default) or [12, 'inHg'] (pressure default) etc.
-  //   "19km/h", "19kph", "19k" → [19, 'km/h']
-  //   "1017hPa", "1017hpa" → [1017, 'hPa']
-  //   "47m", "47mph" → [47, 'mph']
-  //   "10mi" → [10, 'mi']
-  //   "16km" → [16, 'km']
-  //   "0.15in", "0.15\"" → [0.15, 'in']
-  //   "4mm" → [4, 'mm']
-  //   "22.5C", "22.5c" → [22.5, 'C']
-  //   "72.5F", "72.5f" → [72.5, 'F']
-  //   "0.002\"", "0.002in" → [0.002, 'in'] (rainfall)
-  //   "0.002ft", "0.002ft" → [0.002, 'ft'] (rainfall in feet)
   function parseSensorValue(rawValue, defaultUnit) {
     if (rawValue == null || rawValue !== rawValue) return { value: NaN, unit: '' };
-
-    // If it's already a number, use the default unit
     if (typeof rawValue === 'number') {
       return { value: rawValue, unit: defaultUnit };
     }
 
-    // Parse string input like "19km/h", "47mph", "22.5C"
     const str = String(rawValue).trim();
     if (!str) return { value: NaN, unit: '' };
 
-    // Robust regex to extract number and unit suffix, handling backslashes before quotes.
-    // Pattern matches: optional sign, digits with optional decimal, optional whitespace,
-    // optional trailing quote (for inches like "0.002\""), then optional unit suffix.
     const match = str.match(/^([+-]?\d+\.?\d*)\s*(?:"|\u0022)?\s*([a-zA-Z\/°]+)?$/);
     if (!match) {
-      // Fallback: try simpler pattern for edge cases
       const simpleMatch = str.match(/^([+-]?\d+\.?\d*)/);
       if (simpleMatch) {
         return { value: parseFloat(simpleMatch[1]), unit: defaultUnit };
@@ -11584,86 +11564,24 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const numVal = parseFloat(match[1]);
-    let suffix = (match[2] || '').toLowerCase();
-
+    const suffix = (match[2] || '').toLowerCase();
     if (!suffix) {
-      // No suffix → use default unit
       return { value: numVal, unit: defaultUnit };
     }
 
-    // Resolve suffix to a standard unit string
     const unitMap = {
-      // Wind speed units
       'km/h': 'km/h', 'kph': 'km/h', 'k': 'km/h',
       'mph': 'mph', 'm': 'mph',
-      // Pressure units
       'hpa': 'hPa',
       'inhg': 'inHg', 'inh': 'inHg', 'in': 'inHg',
-      // Visibility units
-      'mi': 'mi',
-      'km': 'km',
-      // Rainfall units
+      'mi': 'mi', 'km': 'km',
       'mm': 'mm',
       'ft': 'ft', 'feet': 'ft', 'foot': 'ft',
-      // Temperature units
       'c': 'C', '°c': 'C',
       'f': 'F', '°f': 'F',
     };
 
     const resolvedUnit = unitMap[suffix] || suffix;
-
-    // For wind speed, normalize to mph or km/h
-    if (defaultUnit === 'mph') {
-      if (resolvedUnit === 'km/h') {
-        return { value: numVal, unit: 'km/h' };
-      }
-      return { value: numVal, unit: 'mph' };
-    }
-
-    // For pressure, normalize to inHg or hPa
-    if (defaultUnit === 'inHg') {
-      if (resolvedUnit === 'hPa') {
-        return { value: numVal, unit: 'hPa' };
-      }
-      return { value: numVal, unit: 'inHg' };
-    }
-
-    // For visibility, normalize to mi or km
-    if (defaultUnit === 'mi') {
-      if (resolvedUnit === 'km') {
-        return { value: numVal, unit: 'km' };
-      }
-      return { value: numVal, unit: 'mi' };
-    }
-
-    // For rainfall, normalize to in or mm or ft
-    if (defaultUnit === 'in') {
-      if (resolvedUnit === 'mm') {
-        return { value: numVal, unit: 'mm' };
-      }
-      if (resolvedUnit === 'ft') {
-        return { value: numVal, unit: 'ft' };
-      }
-      return { value: numVal, unit: 'in' };
-    }
-
-    // For temperature, normalize to F or C
-    if (defaultUnit === '\u00B0F') {
-      if (resolvedUnit === 'C') {
-        return { value: numVal, unit: 'C' };
-      }
-      return { value: numVal, unit: '\u00B0F' };
-    }
-
-    // For temperature with Celsius default
-    if (defaultUnit === '\u00B0C') {
-      if (resolvedUnit === 'F') {
-        return { value: numVal, unit: 'F' };
-      }
-      return { value: numVal, unit: 'C' };
-    }
-
-    // Fallback: use the resolved unit as-is
     return { value: numVal, unit: resolvedUnit };
   }
 
@@ -11812,7 +11730,7 @@ document.addEventListener('DOMContentLoaded', () => {
       case 'wind-dir': {
         const value = typeof rawValue === 'number' ? rawValue : parseFloat(rawValue);
         if (isNaN(value)) return '\u2014';
-        displayVal = convertWindDir(value, '', '');
+        displayVal = convertWindDir(value);
         break;
       }
 
@@ -12073,14 +11991,13 @@ document.addEventListener('DOMContentLoaded', () => {
       script.type = 'text/javascript';
       script.src = 'weather-local.js?t=' + Date.now();
       
-      // Timeout after 10 seconds to prevent hanging loads
       var timeoutId = setTimeout(function() {
         if (script.parentNode) {
           script.parentNode.removeChild(script);
         }
         _configLoadSuccess = false;
         resolve(false);
-      }, 10000);
+      }, SENSOR_SCRIPT_TIMEOUT_MS);
 
       script.onload = function() {
         clearTimeout(timeoutId);
@@ -12133,10 +12050,8 @@ document.addEventListener('DOMContentLoaded', () => {
       startAutoRefresh();
     } else {
       _retryCount++;
-      const backoffMs = Math.min(1000 * Math.pow(2, _retryCount), 300000); // Cap at 5 min
+      const backoffMs = Math.min(SENSOR_BACKOFF_BASE_MS * Math.pow(2, _retryCount), SENSOR_BACKOFF_MAX_MS);
       console.warn(`[local-sensor] Config load failed (${_retryCount}), retrying in ${backoffMs/1000}s`);
-
-      // Use setTimeout for exponential backoff instead of setInterval
       _refreshIntervalId = setTimeout(refreshConfig, backoffMs);
     }
   }
@@ -12179,7 +12094,7 @@ document.addEventListener('DOMContentLoaded', () => {
       clearInterval(_refreshIntervalId);
       clearTimeout(_refreshIntervalId);
       _refreshIntervalId = null;
-      _hiddenRefreshInterval = setInterval(refreshConfig, 60000); // Every minute when hidden
+      _hiddenRefreshInterval = setInterval(refreshConfig, SENSOR_HIDDEN_REFRESH_MS);
     } else {
       // Restore normal refresh when tab is visible again
       clearInterval(_hiddenRefreshInterval);
@@ -12189,19 +12104,18 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // === Periodic health check - detect and recover from stuck states ===
   function startHealthCheck() {
     setInterval(function() {
-      if (_configLoadSuccess) return; // Already handling failed state via backoff
+      if (_configLoadSuccess) return;
 
       const timeSinceLastSuccess = Date.now() - _lastSuccessTime;
-      const interval = getConfigInterval() * 1000 || 60000; // Default to 1 min if unknown
+      const interval = getConfigInterval() * 1000 || SENSOR_HIDDEN_REFRESH_MS;
       if (timeSinceLastSuccess > interval * 3) {
-        console.warn('[local-sensor] No config success in ' + Math.round(timeSinceLastSuccess/60000) + ' minutes, forcing refresh');
-        _configLoadSuccess = false; // Force a fresh attempt
+        console.warn('[local-sensor] No config success in ' + Math.round(timeSinceLastSuccess / SENSOR_HIDDEN_REFRESH_MS) + ' minutes, forcing refresh');
+        _configLoadSuccess = false;
         refreshConfig();
       }
-    }, 300000); // Check every 5 minutes
+    }, SENSOR_HEALTH_CHECK_MS);
   }
 
   // === Escape HTML for safe DOM insertion ===
