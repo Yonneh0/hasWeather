@@ -153,6 +153,37 @@
     return 0; // disabled
   }
 
+  // === Check if sensor system is enabled (positive refresh interval) ===
+  function isSensorEnabled() {
+    var interval = getConfigInterval();
+    return interval > 0;
+  }
+
+  // === Stop all timers ===
+  function stopAllTimers() {
+    clearInterval(_refreshIntervalId);
+    clearTimeout(_refreshIntervalId);
+    _refreshIntervalId = null;
+    clearInterval(_hiddenRefreshInterval);
+    clearTimeout(_hiddenRefreshInterval);
+    _hiddenRefreshInterval = null;
+    clearTimeout(_ttlCheckTimer);
+    _ttlCheckTimer = null;
+  }
+
+  // === Hide the sensor bar and kill all timers ===
+  function hideSensorBar() {
+    var bar = document.getElementById('local-sensor-bar');
+    if (bar) bar.style.display = 'none';
+    stopAllTimers();
+  }
+
+  // === Show the sensor bar (reset display) ===
+  function showSensorBar() {
+    var bar = document.getElementById('local-sensor-bar');
+    if (bar) bar.style.display = '';
+  }
+
   // === Get the preferred display unit for a sensor type based on current unit preference ===
   function getPreferredUnit(def) {
     const u = getUnit();
@@ -466,17 +497,25 @@
 
     var active = getActiveSensors();
 
-    // If no sensors are active, hide the bar
+    // Build HTML for info line (even when no active sensors, note/timestamp may still display)
+    var html = buildInfoLine();
+
+    // If no sensors are active, show info line only if there's content to display
     if (active.length === 0) {
-      if (bar.innerHTML !== '') {
-        bar.innerHTML = '';
-      }
       _activeSensors = [];
+
+      if (html !== '') {
+        // Wrap info line in same structure for consistent styling
+        html += '<div class="sensor-items"></div>';
+        if (bar.innerHTML !== html) {
+          bar.innerHTML = html;
+        }
+        showSensorBar();
+      } else if (!isSensorEnabled()) {
+        hideSensorBar();
+      }
       return;
     }
-
-    // Build HTML for info line + sensor items
-    var html = buildInfoLine();
 
     // Group location sensors together
     var hasLocation = false;
@@ -513,6 +552,9 @@
     if (bar.innerHTML !== html) {
       bar.innerHTML = html;
     }
+
+    // Ensure bar is visible when we have active sensors
+    showSensorBar();
 
     _activeSensors = active;
   }
@@ -597,22 +639,25 @@
 
   window.addEventListener('unload', cleanupScriptElement);
 
-  // === Refresh config with exponential backoff on failure ===
+  // === Refresh config (simple load and render) ===
   async function refreshConfig() {
     const success = await loadConfig();
 
     if (success) {
+      // Check if sensor system is enabled after config reload
+      if (!isSensorEnabled()) {
+        hideSensorBar();
+        stopAllTimers();
+        return;
+      }
+
+      showSensorBar();
       renderSensorBar();
       _lastSuccessTime = Date.now();
-      _retryCount = 0;
-
-      // Always restart interval with current config value (handles changes to LOCAL_CONFIG_REFRESH_INTERVAL_SECONDS)
-      startAutoRefresh();
     } else {
-      _retryCount++;
-      const backoffMs = Math.min(SENSOR_BACKOFF_BASE_MS * Math.pow(2, _retryCount), SENSOR_BACKOFF_MAX_MS);
-      console.warn(`[local-sensor] Config load failed (${_retryCount}), retrying in ${backoffMs/1000}s`);
-      _refreshIntervalId = setTimeout(refreshConfig, backoffMs);
+      // File load failed - hide bar and stop all timers
+      hideSensorBar();
+      stopAllTimers();
     }
   }
 
@@ -626,6 +671,9 @@
     var interval = getConfigInterval();
     if (interval > 0) {
       _refreshIntervalId = setInterval(refreshConfig, interval * 1000);
+    } else {
+      // When interval is 0/disabled, render to check sensor state
+      renderSensorBar();
     }
   }
 
