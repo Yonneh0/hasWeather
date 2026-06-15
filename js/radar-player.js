@@ -630,9 +630,9 @@
       playBtn.textContent = '⏸';
     }
 
-    const timelineContainer = document.getElementById('radar-timeline-container');
-    if (timelineContainer) {
-      timelineContainer.classList.add('playing');
+    const timelineTrack = document.querySelector('.radar-timeline-track');
+    if (timelineTrack) {
+      timelineTrack.classList.add('playing');
     }
 
     const playerHeader = document.getElementById('radar-player-card')?.querySelector('.radar-player-header');
@@ -656,9 +656,9 @@
       playBtn.textContent = '▶';
     }
 
-    const timelineContainer = document.getElementById('radar-timeline-container');
-    if (timelineContainer) {
-      timelineContainer.classList.remove('playing');
+    const timelineTrack = document.querySelector('.radar-timeline-track');
+    if (timelineTrack) {
+      timelineTrack.classList.remove('playing');
     }
 
     const playerHeader = document.getElementById('radar-player-card')?.querySelector('.radar-player-header');

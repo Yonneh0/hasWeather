@@ -168,36 +168,25 @@ async function loadRadarCard(lat, lon) {
     <div id="radar-player-card" class="radar-fade-in">
       <!-- Titlebar -->
       <div class="radar-player-header">
-        <!-- Left: Playback Controls -->
-        <div class="radar-header-section">
-          <button class="radar-btn radar-btn-play radar-tooltip" id="radar-play-btn" data-tooltip="Play/Pause (Space)">▶</button>
-          <span class="radar-speed-select" title="Playback speed">
-            <select class="radar-speed-select" id="radar-speed-select" title="Speed">${speedOptions}</select>
-          </span>
-        </div>
-        
-        <div class="radar-header-divider"></div>
-        
-        <!-- Center: Zoom Controls -->
-        <div class="radar-header-section">
-          <button class="radar-btn radar-tooltip" id="radar-zoom-out-btn" data-tooltip="Zoom out (-)">−</button>
-          <span class="radar-zoom-text" id="radar-zoom-text">100%</span>
-          <button class="radar-btn radar-tooltip" id="radar-zoom-in-btn" data-tooltip="Zoom in (+)">+</button>
-          <button class="radar-btn radar-tooltip" id="radar-reset-btn" data-tooltip="Reset view (0)">⟲</button>
-        </div>
-        
-        <div class="radar-header-divider"></div>
-        
-        <!-- Right: Layer & Info -->
-        <div class="radar-header-section">
-          <select class="radar-layer-select" id="radar-layer-select" title="Radar layer">${layerOptions}</select>
+        <!-- Left: Title + Timestamp -->
+        <div class="radar-header-section radar-header-left">
+          <span class="radar-player-title">Radar</span>
           <span class="radar-timestamp" id="radar-timestamp">--:--</span>
+        </div>
+        
+        <!-- Center: Layer + Speed -->
+        <div class="radar-header-section radar-header-center">
+          <select class="radar-layer-select" id="radar-layer-select" title="Radar layer">${layerOptions}</select>
+          <select class="radar-speed-select" id="radar-speed-select" title="Playback speed">${speedOptions}</select>
+        </div>
+        
+        <!-- Right: Tools -->
+        <div class="radar-header-section radar-header-right">
           <button class="radar-btn radar-btn-pins radar-tooltip" id="radar-pins-btn" data-tooltip="Toggle location pins" title="Pins">📌</button>
-          <button class="radar-btn radar-tooltip" id="radar-load-all-btn" data-tooltip="Load all cached frames">Load All</button>
           <button class="radar-btn radar-fullscreen-btn radar-tooltip" id="radar-fullscreen-btn" data-tooltip="Toggle fullscreen">⛶</button>
         </div>
         
-        <!-- Coordinate readout section -->
+        <!-- Coordinate readout section (injected by JS) -->
         <div id="radar-coord-readout-section" class="radar-header-section"></div>
       </div>
       
@@ -210,19 +199,37 @@ async function loadRadarCard(lat, lon) {
         </div>
       </div>
       
-      <!-- Prefetch Progress -->
-      <div class="radar-prefetch-bar">
-        <div class="radar-prefetch-progress" id="radar-prefetch-progress" style="width: 0%"></div>
-      </div>
-      <span class="radar-prefetch-text" id="radar-frame-count-text">0/0 frames</span>
-      
-      <!-- Timeline -->
-      <div class="radar-timeline-container">
-        <span class="radar-time-range" id="radar-time-range">--:-- — --:--</span>
-        <div class="radar-timeline-progress-bar">
+      <!-- Bottom Controls: Prefetch + Playback + Timeline -->
+      <div class="radar-bottom-controls">
+        <!-- Prefetch bar -->
+        <div class="radar-prefetch-row">
+          <div class="radar-prefetch-bar">
+            <div class="radar-prefetch-progress" id="radar-prefetch-progress" style="width: 0%"></div>
+          </div>
+          <span class="radar-prefetch-text" id="radar-frame-count-text">0/0 frames</span>
+        </div>
+        
+        <!-- Playback row -->
+        <div class="radar-playback-row">
+          <button class="radar-btn radar-btn-play radar-tooltip" id="radar-play-btn" data-tooltip="Play/Pause (Space)">▶</button>
+          <button class="radar-btn radar-zoom-level-btn radar-tooltip" id="radar-zoom-out-btn" data-tooltip="Zoom out (-)">−</button>
+          <span class="radar-zoom-text" id="radar-zoom-text">100%</span>
+          <button class="radar-btn radar-zoom-level-btn radar-tooltip" id="radar-zoom-in-btn" data-tooltip="Zoom in (+)">+</button>
+          <button class="radar-btn radar-tooltip" id="radar-reset-btn" data-tooltip="Reset view (0)">⟲</button>
+          <button class="radar-btn radar-load-all-btn radar-tooltip" id="radar-load-all-btn" data-tooltip="Load all cached frames">Load All Frames</button>
+          <div class="radar-playback-spacer"></div>
+          <span class="radar-time-range" id="radar-time-range">--:-- — --:--</span>
+        </div>
+        
+        <!-- Timeline scrubber -->
+        <div class="radar-timeline-progress-bar" id="radar-timeline-progress-bar">
           <div class="radar-timeline-progress" id="radar-timeline-progress" style="width: 0%"></div>
         </div>
-        <div class="radar-timeline" id="radar-timeline"></div>
+        
+        <!-- Timeline dots -->
+        <div class="radar-timeline-track">
+          <div class="radar-timeline" id="radar-timeline"></div>
+        </div>
       </div>
     </div>`;
 
