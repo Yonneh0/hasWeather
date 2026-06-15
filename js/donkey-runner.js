@@ -111,6 +111,10 @@ const DONKEY_RUNNER = {
   maxSpeed: 0,
   nearMissCount: 0,
 
+  // Dumb luck tracking
+  dumbLuckCount: 0,
+  dumbLuckPenalty: 0,
+
   // Jump tracking
   totalJumps: 0,
   doubleJumps: 0,
@@ -179,7 +183,8 @@ const DONKEY_RUNNER = {
     drone: ["Drone incoming! Your donkey is not a spaceship", "Surveillance state meets incompetence"],
     milestone: ["MILESTONE! You survived a while!", "Another thousand points! The donkey is proud"],
     "ignored-jump": ["Jump ignored! Your donkey said no", "Not every jump is welcome here"],
-    restart: ["Round two! Why do you keep doing this?", "Again? Really?"]
+    restart: ["Round two! Why do you keep doing this?", "Again? Really?"],
+    "dumb-luck": ["DUMB LUCK! You survived, but at what cost?", "Pure luck saved your hide!", "Score halved! But you're alive!", "Fortune favors the clumsy!", "The donkey got lucky — barely!"]
   },
   messageIndex: {},  // tracks which message was last shown per event type
   messageCooldown: 0,  // cooldown timer
@@ -228,6 +233,7 @@ const DONKEY_RUNNER = {
           <canvas id="donkey-canvas" width="600" height="180"></canvas>
           <div class="donkey-speed-lines" id="donkey-speed-lines"></div>
           <div class="donkey-near-miss" id="donkey-near-miss">NEAR MISS!</div>
+          <div class="donkey-dumb-luck" id="donkey-dumb-luck">DUMB LUCK!</div>
           <div class="donkey-bonus-text" id="donkey-bonus-text"></div>
           <div class="donkey-snarky-message" id="donkey-snarky-message"></div>
           <div class="donkey-startscreen" id="donkey-startscreen">
@@ -256,6 +262,10 @@ const DONKEY_RUNNER = {
               <div class="donkey-gameover-stat-row">
                 <span class="donkey-gameover-stat-label">PROPERTY DAMAGE</span>
                 <span class="donkey-gameover-stat-value" id="donkey-gameover-property-damage">0</span>
+              </div>
+              <div class="donkey-gameover-stat-row">
+                <span class="donkey-gameover-stat-label">DUMB LUCK</span>
+                <span class="donkey-gameover-stat-value" id="donkey-gameover-dumb-luck">0</span>
               </div>
             </div>
             <!-- Top-right stats — non-score block (4 items) -->
@@ -332,6 +342,7 @@ const DONKEY_RUNNER = {
     this.startScreenEl = document.getElementById('donkey-startscreen');
     this.gameOverEl = document.getElementById('donkey-gameover');
     this.nearMissEl = document.getElementById('donkey-near-miss');
+    this.dumbLuckEl = document.getElementById('donkey-dumb-luck');
     this.bonusTextEl = document.getElementById('donkey-bonus-text');
     this.speedLinesEl = document.getElementById('donkey-speed-lines');
     this.soundBtnEl = document.getElementById('donkey-sound-btn');
@@ -728,6 +739,59 @@ const DONKEY_RUNNER = {
           oscillator.start(now);
           oscillator.stop(now + 0.2);
           break;
+
+        case 'dumbluck':
+          // Comedic "bonk + golden ding" — lucky save sound
+          // Bonk: low thud
+          const bonkOsc = this.audioCtx.createOscillator();
+          const bonkGain = this.audioCtx.createGain();
+          bonkOsc.connect(bonkGain);
+          bonkGain.connect(this.audioCtx.destination);
+          bonkOsc.type = 'triangle';
+          bonkOsc.frequency.setValueAtTime(150, now);
+          bonkOsc.frequency.exponentialRampToValueAtTime(60, now + 0.1);
+          bonkGain.gain.setValueAtTime(0.15, now);
+          bonkGain.gain.exponentialRampToValueAtTime(0.01, now + 0.12);
+          bonkOsc.start(now);
+          bonkOsc.stop(now + 0.12);
+
+          // Golden ding: bright ascending chime
+          const dingOsc = this.audioCtx.createOscillator();
+          const dingGain = this.audioCtx.createGain();
+          dingOsc.connect(dingGain);
+          dingGain.connect(this.audioCtx.destination);
+          dingOsc.type = 'sine';
+          dingOsc.frequency.setValueAtTime(600, now + 0.05);
+          dingOsc.frequency.exponentialRampToValueAtTime(1400, now + 0.2);
+          dingGain.gain.setValueAtTime(0.01, now);
+          dingGain.gain.linearRampToValueAtTime(0.12, now + 0.06);
+          dingGain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+          dingOsc.start(now + 0.05);
+          dingOsc.stop(now + 0.4);
+
+          // Sparkle noise burst
+          const sparkleDur = 0.25;
+          const sparkleBuf = this.audioCtx.createBuffer(1, Math.round(this.audioCtx.sampleRate * sparkleDur), this.audioCtx.sampleRate);
+          const sparkleData = sparkleBuf.getChannelData(0);
+          for (let i = 0; i < sparkleData.length; i++) {
+            sparkleData[i] = (Math.random() * 2 - 1);
+          }
+          const sparkleSource = this.audioCtx.createBufferSource();
+          sparkleSource.buffer = sparkleBuf;
+          const sparkleFilter = this.audioCtx.createBiquadFilter();
+          sparkleFilter.type = 'bandpass';
+          sparkleFilter.frequency.setValueAtTime(3000, now + 0.05);
+          sparkleFilter.Q.setValueAtTime(4, now);
+          const sparkleGain = this.audioCtx.createGain();
+          sparkleGain.gain.setValueAtTime(0.01, now);
+          sparkleGain.gain.linearRampToValueAtTime(0.06, now + 0.08);
+          sparkleGain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+          sparkleSource.connect(sparkleFilter);
+          sparkleFilter.connect(sparkleGain);
+          sparkleGain.connect(this.audioCtx.destination);
+          sparkleSource.start(now + 0.05);
+          sparkleSource.stop(now + 0.3);
+          break;
       }
     } catch (e) {
       // Silently fail if audio context has issues
@@ -861,6 +925,28 @@ const DONKEY_RUNNER = {
     this.frameCount = 0;
     this.nearMissActive = false;
     this.lastFrameTime = 0; // Reset so first frame after restart gets default deltaTime
+
+    // Reset obstacle counts for the new game
+    this.obstacleCounts = {
+      'cactus-small': 0,
+      'cactus-large': 0,
+      'rock': 0,
+      'car': 0,
+      'jet': 0,
+      'falling-rock': 0,
+      'drone': 0,
+    };
+
+    // Also reset gameOverObstacleType so no highlight persists
+    this.gameOverObstacleType = null;
+
+    // Reset other timers that might not be zeroed
+    this.jumpCooldownTimer = 0;
+    this.messageCooldown = 0;
+
+    // Reset dumb luck tracking
+    this.dumbLuckCount = 0;
+    this.dumbLuckPenalty = 0;
 
     // Regenerate clouds for fresh start
     this.generateClouds();
@@ -1008,7 +1094,7 @@ const DONKEY_RUNNER = {
     // Reduce score rate while airborne to 10% of ground rate
     const airborneMultiplier = this.donkey.grounded ? 1.0 : 0.1;
     this.distance += this.speed * 0.01 * deltaTime * 60 * airborneMultiplier;
-    this.score = Math.floor(this.distance * 100);
+    this.score = Math.floor(this.distance * 100) - this.dumbLuckPenalty;
 
     // Score milestone flash check
     const currentMilestone = Math.floor(this.score / 1000) * 1000;
@@ -1173,6 +1259,9 @@ const DONKEY_RUNNER = {
           // Knock aside: remove obstacle, spawn particles
           this.knockObstacle(obs, i);
           this.showSnarkyMessage('property-damage');
+        } else if (Math.random() < 0.5) {
+          // Dumb Luck! 50% chance to survive by knocking obstacle away
+          this.triggerDumbLuck(obs, i);
         } else {
           // Record the killer obstacle type for the table
           this.gameOverObstacleType = obs.type;
@@ -1395,6 +1484,85 @@ const DONKEY_RUNNER = {
     }
   },
 
+  // Spawn golden sparkle particles for dumb luck effect
+  spawnDumbLuckParticles(px, py) {
+    const goldColors = ['#FFD700', '#FFC107', '#FFAB00', '#FFE082', '#FFF176', '#FFEE58'];
+    for (let i = 0; i < 25; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 1 + Math.random() * 5;
+      this.particles.push({
+        x: px,
+        y: py,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed - 3,
+        size: 2 + Math.random() * 4,
+        color: goldColors[Math.floor(Math.random() * goldColors.length)],
+        life: 0.5 + Math.random() * 0.8,
+      });
+    }
+  },
+
+  // Trigger Dumb Luck effect — donkey survives collision by knocking obstacle away
+  triggerDumbLuck(obs, index) {
+    const px = obs.x + obs.width / 2;
+    const py = obs.y + obs.height / 2;
+
+    // Remove obstacle
+    this.obstacles.splice(index, 1);
+    this.obstacleCounts[obs.type]++;
+
+    // Increment dumb luck counter
+    this.dumbLuckCount++;
+
+    // Add 50% of current score to penalty
+    const currentScore = Math.floor(this.distance * 100) - this.dumbLuckPenalty;
+    this.dumbLuckPenalty += Math.floor(currentScore / 2);
+
+    // Recalculate score with penalty
+    this.score = Math.floor(this.distance * 100) - this.dumbLuckPenalty;
+
+    // Update score display immediately
+    if (this.scoreEl) {
+      this.scoreEl.textContent = String(this.score).padStart(5, '0');
+    }
+
+    // Flash "DUMB LUCK!" text
+    if (this.dumbLuckEl) {
+      this.dumbLuckEl.classList.remove('flash');
+      void this.dumbLuckEl.offsetWidth;
+      this.dumbLuckEl.classList.add('flash');
+      setTimeout(() => this.dumbLuckEl.classList.remove('flash'), 800);
+    }
+
+    // Show "-50%" penalty text at obstacle position
+    if (this.bonusTextEl) {
+      this.bonusTextEl.textContent = '-50%';
+      this.bonusTextEl.classList.remove('flash');
+      void this.bonusTextEl.offsetWidth;
+      this.bonusTextEl.classList.add('flash');
+      setTimeout(() => this.bonusTextEl.classList.remove('flash'), 700);
+    }
+
+    // Spawn golden sparkle particles
+    this.spawnDumbLuckParticles(px, py);
+
+    // Also spawn obstacle knock particles
+    this.spawnKnockParticles(px, py, obs.type);
+
+    // Play dumb luck sound
+    this.playSound('dumbluck');
+
+    // Trigger a short stumble on the donkey
+    if (!this.donkey.stumbling) {
+      this.donkey.stumbling = true;
+      this.donkey.stumbleTimer = 0;
+      this.donkey.stumbleDuration = 0.5;
+    }
+
+    // Show snarky message
+    this.showSnarkyMessage('dumb-luck');
+  },
+
   // Spawn particles when donkey hits the ceiling
   spawnCeilingParticles() {
     for (let i = 0; i < 8; i++) {
@@ -1478,8 +1646,8 @@ const DONKEY_RUNNER = {
       messageEl.classList.add('snarky-green');
     } else if (eventType === 'game-over') {
       messageEl.classList.add('snarky-red');
-    } else if (eventType === 'high-score') {
-      messageEl.classList.add('snarky-yellow');
+    } else if (eventType === 'high-score' || eventType === 'dumb-luck') {
+      messageEl.classList.add('snarky-gold');
     } else if (eventType === 'jump' || eventType === 'double-jump' || eventType === 'ignored-jump') {
       messageEl.classList.add('snarky-blue');
     } else {
@@ -1857,6 +2025,11 @@ const DONKEY_RUNNER = {
       const propertyDamageDisplay = document.getElementById('donkey-gameover-property-damage');
       if (propertyDamageDisplay) {
         propertyDamageDisplay.textContent = String(this.propertyDamageCount);
+      }
+      // Populate dumb luck count (top-left)
+      const dumbLuckDisplay = document.getElementById('donkey-gameover-dumb-luck');
+      if (dumbLuckDisplay) {
+        dumbLuckDisplay.textContent = String(this.dumbLuckCount);
       }
       this.gameOverEl.classList.remove('hidden');
     }

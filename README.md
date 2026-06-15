@@ -42,7 +42,7 @@ completely self-contained single file weather app, that uses public sources, wit
 
 ## Getting Started
 
-Just open `weather.html` in your browser. That's it. No install, no server, no nonsense.
+Just open `weather-prod.html` in your browser. That's it. No install, no server, no nonsense.
 
 ```
 file:///path/to/weather.html
@@ -91,21 +91,21 @@ css/
   donkey-runner.css    740 lines — minigame panel styling & animations
   radar-player.css     350+ lines — radar player UI with zoom, pan, timeline, playback controls
 js/
-  api-nws.js          1162 lines — NWS API client (gridpoint data, observation stations, alerts) with rate limiting and cross-source lookup
-  api-openmeteo.js     314 lines — Open-Meteo weather/AQI API client with deduplication and retry logic
-  api-openstreetmap.js 184 lines — Nominatim/OSM nearby city discovery
-  api-radar.js         549 lines — NOAA/NCEP GeoServer WMS radar API client (MRMS composite imagery, Cache API storage, request deduplication)
-  cache.js             189 lines — DataCache (localStorage caching with configurable TTLs and LRU eviction)
-  charts.js            302 lines — canvas chart rendering (merged chart, combined chart, ghost NWS overlay charts, particles)
+  api-nws.js          824 lines — NWS API client (gridpoint data, observation stations, alerts, snowfall/ice accumulation parsing, sky cover, cross-source lookup) with rate limiting and exponential backoff for 429 responses
+  api-openmeteo.js     428 lines — Open-Meteo weather/AQI API client with consolidated cache keys, per-city incremental fetch, request deduplication, and cross-source NWS fallback
+  api-openstreetmap.js 181 lines — Nominatim/OSM nearby city discovery with bearing-based diversity selection
+  api-radar.js         856 lines — NOAA/NCEP GeoServer WMS radar API client (MRMS composite imagery, Cache API storage, request deduplication, MGRS/UTM/DMS/geohash coordinate conversion)
+  cache.js             247 lines — DataCache (localStorage caching with configurable TTLs per type and LRU eviction, NWS toggle state persistence)
+   charts.js            481 lines — canvas chart rendering (merged chart, combined chart, ghost NWS overlay charts, particles) with named constants and shared helpers
   constants.js          72 lines — shared constants (WMO codes & gradients)
   donkey-runner.js    2581 lines — Donkey Runner minigame engine (canvas-based runner with extensive features)
   icons.js             289 lines — animated SVG weather icons
-  local-sensor.js      400+ lines — Local Sensor Bar for displaying local weather station data
+  local-sensor.js      704 lines — Local Sensor Bar for displaying local weather station data (15 sensor types, flexible unit parsing, auto-refresh with exponential backoff, TTL expiry, page visibility awareness, health checks)
   main.js              252 lines — entry point (state + DOM init + event bindings + game toggle + radar player + run orchestration)
   network-monitor.js   331 lines — network outage detection, animated error panel, auto-retry
-  radar-player.js      450+ lines — Radar Player engine (zoom, pan, timeline scrubbing, playback state management)
-  render.js            255 lines — DOM rendering (city cards, hourly forecast, ghost NWS overlay)
-  utils.js             340 lines — utility functions (unit conversion, haversine, bearing, wind compass, day/night check, refresh, background refresh, IP-based location fallback (ipinfo.io))
+  radar-player.js      1202 lines — Radar Player engine (zoom, pan, timeline scrubbing, playback state management, pin rendering with animation, coordinate readout with MGRS/UTM/DMS conversion, fullscreen mode, layer switching)
+  render.js            518 lines — DOM rendering (placeholder cards, incremental OM/NWS updates, full card render with ghost NWS overlay, chart coordination) using named constants
+  utils.js             213 lines — utility functions (unit conversion, haversine, bearing, wind compass, AQI labeling, day/night check, IP-based location, NWS bounds check, background refresh, unit toggle)
 rag-docs/
   air-quality-api.md      167 lines — documentation for the air-quality endpoint
   alternate-weather-apis.md — list of alternative weather APIs
@@ -134,7 +134,7 @@ All API responses are cached in `localStorage` with type-specific TTLs and LRU e
 | NWS Alerts       | 10 min    | `hasw_cache_nws_alerts_ZONE_ID`     |
 | NWS Zone Forecast| 15 min    | `hasw_cache_nws_zoneforecast_ZONE`  |
 
-**Note:** Weather and AQI data now use **separate cache keys** (`weather_X_Y` and `airQuality_X_Y`) instead of sharing the same key. This prevents cache type conflicts and allows each to expire independently.
+**Note:** Weather and AQI data now use a **consolidated cache key** (`weatherAqi_X_Y`) — they share the same TTL and are always fetched together, eliminating cache type conflicts. Legacy separate keys (`weather_X_Y` and `airQuality_X_Y`) remain for backward compatibility.
 
 ### Cross-Source Data Model
 
@@ -146,7 +146,11 @@ The app uses a dual-source architecture: Open-Meteo is always the base for all c
 | `'nws'`        | NWS-only city (NWS coverage but no OM data)     |
 | `'enhanced'`   | OM base + NWS supplemental (merged data)        |
 
-When cross-sourcing, the app checks both source caches for missing fields. For example, if NWS doesn't provide UV index or visibility, those fields are filled from OM cache.
+When cross-sourcing, the app checks both source caches for missing fields. For example, if NWS doesn't provide UV index or visibility, those fields are filled from OM cache. Cross-source lookups check both the consolidated `weatherAqi` key and legacy `weather` key for OM data.
+
+### Per-City Incremental Fetch
+
+In addition to batch fetching, Open-Meteo supports **per-city incremental fetch** (`fetchWeatherForCity`) — used for background refresh of individual cities without re-fetching the entire city set. This also respects cross-source lookups and deduplication.
 
 ### LRU Eviction
 
@@ -165,6 +169,10 @@ Radar images use **Browser Cache API** (CacheStorage) instead of localStorage �
 - **Cache API key pattern:** `https://radar.hasweather.local/frame/{lat}/{lon}/{layer}/frame/{timestamp}`
 - **localStorage metadata:** `hasw_cache_radar_meta_{lat}_{lon}_{layer}` — `{ timestamps: [...], layer, lat, lon, lastUpdated }`
 - **Cache eviction:** ~250MB total limit — evicts oldest frames when exceeded
+
+### NWS Toggle State Persistence
+
+The app persists per-city NWS toggle state in localStorage (`hasW_nwsActive`) — entries are intentionally NOT cleaned up when cities are removed, preserving user preference across removal/re-addition. This has negligible storage impact (~30 bytes per entry).
 
 ### Radar Player Features
 
@@ -187,6 +195,7 @@ Additional `localStorage` keys used by the app:
 |-------------------------|------------------------------------------|
 | `hasW_maxCities`        | User-configured max city count (default: 6) |
 | `hasW_donkeyHighScore`  | Donkey Runner minigame high score         |
+| `hasW_nwsActive`          | Per-city NWS toggle state persistence       |
 | `hasw_cache_radar_meta_*` | Radar frame timestamps per location/layer |
 
 Clear all cached data via browser dev tools → Application → Local Storage → remove keys starting with `hasw_cache_`, `hasw_lru_`, or `hasW_`. For radar cache, also clear Cache Storage entries in the `hasw-radar-v1` cache.

@@ -12,9 +12,7 @@
   const CANVAS_BASE_SIZE = 512;
   const VIEWPORT_PADDING = 200;
   
-  // Zoom/pan constants
-  const MAX_ZOOM = 3;
-  const PAN_SPEED = 8;
+  // Pre-fetch constants
   const PRE_FETCH_COUNT = 50;
   
   // Pin rendering constants
@@ -61,7 +59,15 @@
   const SPINNER_LINE_WIDTH = 3;
   const SPINNER_ROTATION_SPEED = 3;
   
-  // Expose speed options globally so main.js can use them
+  // Mercator projection constants
+  const MERCATOR_EQUATORIAL_RADIUS = 20037508.34;
+
+  // UI text constants
+  const DEFAULT_LOADING_TEXT = 'Loading radar...';
+  const EMPTY_TIMESTAMP_DISPLAY = '--:--';
+  const ERROR_TEXT_COLOR = '#ff4444';
+
+  // Expose speed options globally
   window.SPEED_OPTIONS = [0.5, 1, 2, 4, 8];
 
   // ===== STATE =====
@@ -69,7 +75,7 @@
     lat: null,
     lon: null,
     layer: RADAR_DEFAULT_LAYER,
-    zoomLevel: 0, // index into ZOOM_LEVELS
+    zoomLevel: 0,
     panX: 0,
     panY: 0,
     isPanning: false,
@@ -79,10 +85,10 @@
     panStartPanY: 0,
     isPlaying: false,
     currentFrameIndex: -1,
-    frames: null, // array of { timestamp, dataUrl }
+    frames: null,
     speed: 1,
-    allTimestamps: [], // all available timestamps for this location/layer
-    cachedTimestamps: [], // timestamps that have been fetched
+    allTimestamps: [],
+    cachedTimestamps: [],
     isPreFetching: false,
     preFetchProgress: 0,
     totalPreFetch: 0,
@@ -91,14 +97,10 @@
     animFrameId: null,
     lastFrameTime: 0,
     isFullscreen: false,
-    
-    // Coordinate readout state
-    coordFormat: 'mgrs', // default format
-    
-    // Pin state
-    pins: [], // array of { lat, lon, label, type, offsetX, offsetY }
-    pinOffsetX: 0, // accumulated X offset for panning pins
-    pinOffsetY: 0, // accumulated Y offset for panning pins
+    coordFormat: 'mgrs',
+    pins: [],
+    pinOffsetX: 0,
+    pinOffsetY: 0,
     showPins: true,
   };
 
@@ -134,15 +136,10 @@
     canvas = document.getElementById('radar-canvas');
     ctx = canvas.getContext('2d');
 
-    // Set canvas size based on zoom level
     updateCanvasSize();
-
-    // Event listeners
     setupCanvasEvents();
     setupKeyboardEvents();
     setupCoordReadout();
-
-    // Load initial data
     setupTimelineScrubbing();
     loadInitialRadarFrame();
   }
@@ -171,9 +168,9 @@
     const loadingOverlay = document.getElementById('radar-loading-overlay');
     if (loadingOverlay) {
       loadingOverlay.classList.remove('hidden');
-      const loadingText = document.getElementById('radar-loading-text');
+    const loadingText = document.getElementById('radar-loading-text');
       if (loadingText) {
-        loadingText.textContent = text || 'Loading radar...';
+        loadingText.textContent = text || DEFAULT_LOADING_TEXT;
       }
     }
   }
@@ -187,7 +184,7 @@
     const loadingText = document.getElementById('radar-loading-text');
     if (loadingText) {
       loadingText.textContent = text || 'Error loading radar';
-      loadingText.style.color = '#ff4444';
+      loadingText.style.color = ERROR_TEXT_COLOR;
     }
   }
 
@@ -199,7 +196,7 @@
     if (spinner) spinner.style.display = '';
     const loadingText = document.getElementById('radar-loading-text');
     if (loadingText) {
-      loadingText.textContent = 'Loading radar...';
+      loadingText.textContent = DEFAULT_LOADING_TEXT;
       loadingText.style.color = '';
     }
   }
@@ -315,7 +312,7 @@
     const progressBar = document.getElementById('radar-prefetch-progress');
     const progressText = document.getElementById('radar-frame-count-text');
     if (progressBar) progressBar.style.width = '0%';
-    if (progressText) progressText.textContent = 'Loading radar...';
+    if (progressText) progressText.textContent = DEFAULT_LOADING_TEXT;
 
     let meta = getRadarMeta(state.lat, state.lon, state.layer);
     
@@ -816,20 +813,13 @@
     const timestampEl = document.getElementById('radar-timestamp');
     const loadingOverlay = document.getElementById('radar-loading-overlay');
     if (!timestampEl) return;
-    
-    if (!timestamp) {
-      timestampEl.textContent = '--:--';
-      return;
+
+    if (!timestamp || isNaN(new Date(timestamp).getTime())) {
+      timestampEl.textContent = EMPTY_TIMESTAMP_DISPLAY;
+    } else {
+      timestampEl.textContent = new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     }
-    
-    const date = new Date(timestamp);
-    if (isNaN(date.getTime())) {
-      timestampEl.textContent = '--:--';
-      return;
-    }
-    
-    timestampEl.textContent = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    
+
     if (loadingOverlay) loadingOverlay.classList.add('hidden');
   }
 
@@ -1331,11 +1321,10 @@
     
     const x = minx + (imageX / CANVAS_BASE_SIZE) * (maxx - minx);
     const y = maxy - (imageY / CANVAS_BASE_SIZE) * (maxy - miny);
-    
-    const latFromY = (360 * Math.atan(Math.exp(y * Math.PI / 20037508.34)) / Math.PI) - 90;
-    
-    const lon = x * 180 / 20037508.34;
-    
+
+    const latFromY = (360 * Math.atan(Math.exp(y * Math.PI / MERCATOR_EQUATORIAL_RADIUS)) / Math.PI) - 90;
+    const lon = x * 180 / MERCATOR_EQUATORIAL_RADIUS;
+
     return { lat: latFromY, lon };
   }
 

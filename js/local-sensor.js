@@ -1,14 +1,6 @@
-// ===== LOCAL SENSOR BAR =====
-// Reads sensor values from weather-local.js and displays them in a bar below the header.
-// Only sensors with non-null values are shown.
-// Respects the existing unit toggle (°F/°C) for temperature, speed, pressure, etc.
-// Supports flexible input formats: plain numbers default to US customary units, or
-// strings can include explicit units like "19km/h", "47kph", "1017hPa", "0.002\"", "0.002ft", etc.
-
 (function () {
   'use strict';
 
-  // === Sensor definitions: maps config keys to display metadata ===
   const SENSOR_DEFS = [
     { key: 'LOCAL_SENSOR_TEMPERATURE',          label: 'Temp', unit: '\u00B0F', type: 'temp' },
     { key: 'LOCAL_SENSOR_FEELSLIKE',            label: 'Feels Like', unit: '\u00B0F', type: 'temp' },
@@ -27,7 +19,19 @@
     { key: 'LOCAL_SENSOR_SOIL_MOISTURE_PERCENT', label: 'Soil Moisture', unit: '%', type: 'soil-moisture' },
   ];
 
-  // === Current sensor state (tracks which sensors are active) ===
+  // Timing & retry config
+  const SENSOR_SCRIPT_TIMEOUT_MS   = 10000;
+  const SENSOR_BACKOFF_BASE_MS     = 1000;
+  const SENSOR_BACKOFF_MAX_MS      = 300000;
+  const SENSOR_HIDDEN_REFRESH_MS   = 60000;
+  const SENSOR_HEALTH_CHECK_MS     = 300000;
+
+  // Unit conversion factors
+  const SENSOR_INHG_TO_HPAA = 33.8639;
+  const SENSOR_MPH_TO_KMH   = 1.60934;
+  const SENSOR_IN_TO_MM     = 25.4;
+  const SENSOR_FT_TO_IN     = 12;
+
   let _activeSensors = [];
   let _sensorValues = {};
   let _refreshIntervalId = null;
@@ -46,103 +50,72 @@
     return 'F';
   }
 
-  // === Converters (used by formatSensorValue) ===
-  // Each converter takes (value, fromUnit, toUnit) and returns a formatted string or NaN.
   function convertPressure(value, fromUnit, toUnit) {
     if (value == null || value !== value || isNaN(value)) return NaN;
     if (fromUnit === 'inHg' && toUnit === 'hPa') {
-      return (value * 33.8639).toFixed(1);
+      return (value * SENSOR_INHG_TO_HPAA).toFixed(1);
     }
     if (fromUnit === 'hPa' && toUnit === 'inHg') {
-      return (value / 33.8639).toFixed(2);
+      return (value / SENSOR_INHG_TO_HPAA).toFixed(2);
     }
-    // Same unit, no conversion needed
     return Number.isInteger(value) ? value : value.toFixed(2);
   }
 
   function convertWindSpeed(value, fromUnit, toUnit) {
     if (value == null || value !== value || isNaN(value)) return NaN;
     if (fromUnit === 'mph' && toUnit === 'km/h') {
-      return (value * 1.60934).toFixed(1);
+      return (value * SENSOR_MPH_TO_KMH).toFixed(1);
     }
     if (fromUnit === 'km/h' && toUnit === 'mph') {
-      const mph = value / 1.60934;
-      return mph.toFixed(1);
+      return (value / SENSOR_MPH_TO_KMH).toFixed(1);
     }
-    // Same unit, no conversion needed
     return Number.isInteger(value) ? value : value.toFixed(1);
   }
 
   function convertVisibility(value, fromUnit, toUnit) {
     if (value == null || value !== value || isNaN(value)) return NaN;
     if (fromUnit === 'mi' && toUnit === 'km') {
-      return (value * 1.60934).toFixed(1);
+      return (value * SENSOR_MPH_TO_KMH).toFixed(1);
     }
     if (fromUnit === 'km' && toUnit === 'mi') {
-      const mi = value / 1.60934;
-      return mi.toFixed(1);
+      return (value / SENSOR_MPH_TO_KMH).toFixed(1);
     }
-    // Same unit, no conversion needed
     return Number.isInteger(value) ? value : value.toFixed(1);
   }
 
   function convertRainfall(value, fromUnit, toUnit) {
     if (value == null || value !== value || isNaN(value)) return NaN;
     if (fromUnit === 'in' && toUnit === 'mm') {
-      return (value * 25.4).toFixed(1);
+      return (value * SENSOR_IN_TO_MM).toFixed(1);
     }
     if (fromUnit === 'mm' && toUnit === 'in') {
-      const inVal = value / 25.4;
-      return inVal.toFixed(2);
+      return (value / SENSOR_IN_TO_MM).toFixed(2);
     }
     if (fromUnit === 'ft' && toUnit === 'in') {
-      return (value * 12).toFixed(3);
+      return (value * SENSOR_FT_TO_IN).toFixed(3);
     }
     if (fromUnit === 'in' && toUnit === 'ft') {
-      return (value / 12).toFixed(4);
+      return (value / SENSOR_FT_TO_IN).toFixed(4);
     }
-    // Same unit, no conversion needed
     return Number.isInteger(value) ? value : value.toFixed(2);
   }
 
-  function convertWindDir(value, fromUnit, toUnit) {
+  function convertWindDir(value) {
     if (value == null || value !== value || isNaN(value)) return NaN;
-    // Wind direction is always in degrees; no conversion needed
     return Math.round(value);
   }
 
-  // === Unit parsing: converts flexible input strings into a value and unit string ===
-  // Supported formats:
-  //   "12" → [12, 'mph'] (wind speed default) or [12, 'inHg'] (pressure default) etc.
-  //   "19km/h", "19kph", "19k" → [19, 'km/h']
-  //   "1017hPa", "1017hpa" → [1017, 'hPa']
-  //   "47m", "47mph" → [47, 'mph']
-  //   "10mi" → [10, 'mi']
-  //   "16km" → [16, 'km']
-  //   "0.15in", "0.15\"" → [0.15, 'in']
-  //   "4mm" → [4, 'mm']
-  //   "22.5C", "22.5c" → [22.5, 'C']
-  //   "72.5F", "72.5f" → [72.5, 'F']
-  //   "0.002\"", "0.002in" → [0.002, 'in'] (rainfall)
-  //   "0.002ft", "0.002ft" → [0.002, 'ft'] (rainfall in feet)
   function parseSensorValue(rawValue, defaultUnit) {
     if (rawValue == null || rawValue !== rawValue) return { value: NaN, unit: '' };
-
-    // If it's already a number, use the default unit
     if (typeof rawValue === 'number') {
       return { value: rawValue, unit: defaultUnit };
     }
 
-    // Parse string input like "19km/h", "47mph", "22.5C"
     const str = String(rawValue).trim();
     if (!str) return { value: NaN, unit: '' };
 
-    // Robust regex to extract number and unit suffix, handling backslashes before quotes.
-    // Pattern matches: optional sign, digits with optional decimal, optional whitespace,
-    // optional trailing quote (for inches like "0.002\""), then optional unit suffix.
     const match = str.match(/^([+-]?\d+\.?\d*)\s*(?:"|\u0022)?\s*([a-zA-Z\/°]+)?$/);
     if (!match) {
-      // Fallback: try simpler pattern for edge cases
       const simpleMatch = str.match(/^([+-]?\d+\.?\d*)/);
       if (simpleMatch) {
         return { value: parseFloat(simpleMatch[1]), unit: defaultUnit };
@@ -151,86 +124,24 @@
     }
 
     const numVal = parseFloat(match[1]);
-    let suffix = (match[2] || '').toLowerCase();
-
+    const suffix = (match[2] || '').toLowerCase();
     if (!suffix) {
-      // No suffix → use default unit
       return { value: numVal, unit: defaultUnit };
     }
 
-    // Resolve suffix to a standard unit string
     const unitMap = {
-      // Wind speed units
       'km/h': 'km/h', 'kph': 'km/h', 'k': 'km/h',
       'mph': 'mph', 'm': 'mph',
-      // Pressure units
       'hpa': 'hPa',
       'inhg': 'inHg', 'inh': 'inHg', 'in': 'inHg',
-      // Visibility units
-      'mi': 'mi',
-      'km': 'km',
-      // Rainfall units
+      'mi': 'mi', 'km': 'km',
       'mm': 'mm',
       'ft': 'ft', 'feet': 'ft', 'foot': 'ft',
-      // Temperature units
       'c': 'C', '°c': 'C',
       'f': 'F', '°f': 'F',
     };
 
     const resolvedUnit = unitMap[suffix] || suffix;
-
-    // For wind speed, normalize to mph or km/h
-    if (defaultUnit === 'mph') {
-      if (resolvedUnit === 'km/h') {
-        return { value: numVal, unit: 'km/h' };
-      }
-      return { value: numVal, unit: 'mph' };
-    }
-
-    // For pressure, normalize to inHg or hPa
-    if (defaultUnit === 'inHg') {
-      if (resolvedUnit === 'hPa') {
-        return { value: numVal, unit: 'hPa' };
-      }
-      return { value: numVal, unit: 'inHg' };
-    }
-
-    // For visibility, normalize to mi or km
-    if (defaultUnit === 'mi') {
-      if (resolvedUnit === 'km') {
-        return { value: numVal, unit: 'km' };
-      }
-      return { value: numVal, unit: 'mi' };
-    }
-
-    // For rainfall, normalize to in or mm or ft
-    if (defaultUnit === 'in') {
-      if (resolvedUnit === 'mm') {
-        return { value: numVal, unit: 'mm' };
-      }
-      if (resolvedUnit === 'ft') {
-        return { value: numVal, unit: 'ft' };
-      }
-      return { value: numVal, unit: 'in' };
-    }
-
-    // For temperature, normalize to F or C
-    if (defaultUnit === '\u00B0F') {
-      if (resolvedUnit === 'C') {
-        return { value: numVal, unit: 'C' };
-      }
-      return { value: numVal, unit: '\u00B0F' };
-    }
-
-    // For temperature with Celsius default
-    if (defaultUnit === '\u00B0C') {
-      if (resolvedUnit === 'F') {
-        return { value: numVal, unit: 'F' };
-      }
-      return { value: numVal, unit: 'C' };
-    }
-
-    // Fallback: use the resolved unit as-is
     return { value: numVal, unit: resolvedUnit };
   }
 
@@ -379,7 +290,7 @@
       case 'wind-dir': {
         const value = typeof rawValue === 'number' ? rawValue : parseFloat(rawValue);
         if (isNaN(value)) return '\u2014';
-        displayVal = convertWindDir(value, '', '');
+        displayVal = convertWindDir(value);
         break;
       }
 
@@ -640,14 +551,13 @@
       script.type = 'text/javascript';
       script.src = 'weather-local.js?t=' + Date.now();
       
-      // Timeout after 10 seconds to prevent hanging loads
       var timeoutId = setTimeout(function() {
         if (script.parentNode) {
           script.parentNode.removeChild(script);
         }
         _configLoadSuccess = false;
         resolve(false);
-      }, 10000);
+      }, SENSOR_SCRIPT_TIMEOUT_MS);
 
       script.onload = function() {
         clearTimeout(timeoutId);
@@ -700,10 +610,8 @@
       startAutoRefresh();
     } else {
       _retryCount++;
-      const backoffMs = Math.min(1000 * Math.pow(2, _retryCount), 300000); // Cap at 5 min
+      const backoffMs = Math.min(SENSOR_BACKOFF_BASE_MS * Math.pow(2, _retryCount), SENSOR_BACKOFF_MAX_MS);
       console.warn(`[local-sensor] Config load failed (${_retryCount}), retrying in ${backoffMs/1000}s`);
-
-      // Use setTimeout for exponential backoff instead of setInterval
       _refreshIntervalId = setTimeout(refreshConfig, backoffMs);
     }
   }
@@ -746,7 +654,7 @@
       clearInterval(_refreshIntervalId);
       clearTimeout(_refreshIntervalId);
       _refreshIntervalId = null;
-      _hiddenRefreshInterval = setInterval(refreshConfig, 60000); // Every minute when hidden
+      _hiddenRefreshInterval = setInterval(refreshConfig, SENSOR_HIDDEN_REFRESH_MS);
     } else {
       // Restore normal refresh when tab is visible again
       clearInterval(_hiddenRefreshInterval);
@@ -756,19 +664,18 @@
     }
   });
 
-  // === Periodic health check - detect and recover from stuck states ===
   function startHealthCheck() {
     setInterval(function() {
-      if (_configLoadSuccess) return; // Already handling failed state via backoff
+      if (_configLoadSuccess) return;
 
       const timeSinceLastSuccess = Date.now() - _lastSuccessTime;
-      const interval = getConfigInterval() * 1000 || 60000; // Default to 1 min if unknown
+      const interval = getConfigInterval() * 1000 || SENSOR_HIDDEN_REFRESH_MS;
       if (timeSinceLastSuccess > interval * 3) {
-        console.warn('[local-sensor] No config success in ' + Math.round(timeSinceLastSuccess/60000) + ' minutes, forcing refresh');
-        _configLoadSuccess = false; // Force a fresh attempt
+        console.warn('[local-sensor] No config success in ' + Math.round(timeSinceLastSuccess / SENSOR_HIDDEN_REFRESH_MS) + ' minutes, forcing refresh');
+        _configLoadSuccess = false;
         refreshConfig();
       }
-    }, 300000); // Check every 5 minutes
+    }, SENSOR_HEALTH_CHECK_MS);
   }
 
   // === Escape HTML for safe DOM insertion ===

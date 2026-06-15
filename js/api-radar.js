@@ -5,45 +5,61 @@
 
 // ===== ENDPOINTS & CONSTANTS =====
 const RADAR_WMS_BASE = 'https://opengeo.ncep.noaa.gov/geoserver/conus/';
-const RADAR_DEFAULT_LAYER = 'conus_bref_qcd'; // MRMS Base Reflectivity (quality controlled, shows all radar returns)
-const RADAR_IMAGE_SIZE = 512;                  // Image dimension in pixels
-const RADAR_BBOX_RADIUS_KM = 200;              // Area around user location to capture (km)
-const RADAR_TTL = 5 * 60 * 1000;               // 5 minutes (radar updates every ~2 min)
-const RADAR_META_TTL = 30 * 60 * 1000;         // 30 minutes (metadata doesn't change often)
+const RADAR_DEFAULT_LAYER = 'conus_bref_qcd';
+const RADAR_IMAGE_SIZE = 512;
+const RADAR_BBOX_RADIUS_KM = 200;
+const RADAR_TTL = 5 * 60 * 1000;
+const RADAR_META_TTL = 30 * 60 * 1000;
 
 // Available radar layers
 const RADAR_LAYERS = {
-  BASE_REFLECTIVITY: 'conus_bref_qcd',      // Quality Controlled 1km Base Reflectivity (MRMS)
-  COMPOSITE_REFLECTIVITY: 'conus_cref_qcd',  // Composite Reflectivity
-  ECHO_TOPS: 'conus_neet_v18',              // Echo Tops
-  PRECIPITATION_TYPE: 'conus_pcpn_typ',      // Precipitation Type
+  BASE_REFLECTIVITY: 'conus_bref_qcd',
+  COMPOSITE_REFLECTIVITY: 'conus_cref_qcd',
+  ECHO_TOPS: 'conus_neet_v18',
+  PRECIPITATION_TYPE: 'conus_pcpn_typ',
 };
 
 // Cache API constants
 const RADAR_CACHE_NAME = 'hasw-radar-v1';
-// Fake HTTP prefix for cache keys — required because Cache API only accepts http(s) URLs
+// Fake HTTP prefix for cache keys — Cache API only accepts http(s) URLs
 const RADAR_FAKE_BASE = 'https://radar.hasweather.local/';
 const RADAR_FRAME_PREFIX = `${RADAR_FAKE_BASE}frame/`;
 const RADAR_FRAMES_KEY = 'frames';
-const RADAR_MAX_CACHE_BYTES = 250 * 1024 * 1024; // ~250MB total limit
+const RADAR_MAX_CACHE_BYTES = 250 * 1024 * 1024;
+
+// EPSG:3857 / Web Mercator constants
+const WEB_MERCATOR_SEMI_MAJOR_AXIS = 20037508.34;
+const EARTH_RADIUS_KM = 6371;
+
+// UTM constants (WGS84)
+const UTM_SCALE_FACTOR = 0.9996;
+const UTM_EASTING_OFFSET = 500000;
+const UTM_SOUTH_NORTHING_OFFSET = 10000000;
+const UTM_100K_NORTHING_OFFSET = 1000000;
+const UTM_MERIDIAN_ARC_POLE = 4000000;
+const UTM_SEMI_MAJOR_AXIS = 6378137;
+const UTM_ECCENTRICITY_SQUARED = 0.00669437999014;
+
+// WMS fetch settings
+const RADAR_WMS_TIMEOUT_MS = 15000;
+const RADAR_WMS_MAX_RETRIES = 3;
+
+// Base64 encoding chunk size (avoids stack overflow on large arrays)
+const BASE64_CHUNK_SIZE = 8192;
 
 // ===== BBOX CALCULATION =====
-// Convert lon to EPSG:3857 meters
 function lonToX(lon) {
-  return lon * 20037508.34 / 180;
+  return lon * WEB_MERCATOR_SEMI_MAJOR_AXIS / 180;
 }
 
-// Convert lat to EPSG:3857 meters
 function latToY(lat) {
   const y = Math.log(Math.tan((90 + lat) * Math.PI / 360)) / (Math.PI / 180);
-  return y * 20037508.34 / 180;
+  return y * WEB_MERCATOR_SEMI_MAJOR_AXIS / 180;
 }
 
-// Calculate bounding box in EPSG:3857 meters around a lat/lon point
 function latLonToBboxEPSG3857(lat, lon, radiusKm) {
-  const R = 6371; // Earth radius in km
-  const dLat = (radiusKm / R) * (180 / Math.PI);
-  const dLon = (radiusKm / R) * (180 / Math.PI) / Math.cos(lat * Math.PI / 180);
+  const dLat = (radiusKm / EARTH_RADIUS_KM) * (180 / Math.PI);
+  const dLon = (radiusKm / EARTH_RADIUS_KM) * (180 / Math.PI) / Math.cos(lat * Math.PI / 180);
 
   return [
     lonToX(lon - dLon),   // minx in meters
@@ -51,6 +67,17 @@ function latLonToBboxEPSG3857(lat, lon, radiusKm) {
     lonToX(lon + dLon),   // maxx in meters
     latToY(lat + dLat),   // maxy in meters
   ];
+}
+
+// ===== ARRAYBUFFER → BASE64 DATA URL =====
+function arrayBufferToBase64DataURL(arrayBuffer) {
+  const bytes = new Uint8Array(arrayBuffer);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += BASE64_CHUNK_SIZE) {
+    const chunk = bytes.subarray(i, i + BASE64_CHUNK_SIZE);
+    binary += String.fromCharCode(...chunk);
+  }
+  return 'data:image/png;base64,' + btoa(binary);
 }
 
 // ===== WMS URL BUILDER =====
@@ -67,7 +94,6 @@ function buildRadarImageUrl(lat, lon, layer, timestamp) {
 }
 
 // ===== CACHE KEY GENERATION =====
-// Build a fake HTTP URL as the cache key — Cache API only accepts http(s) URLs
 function radarFrameCacheKey(lat, lon, layer, timestamp) {
   return `${RADAR_FRAME_PREFIX}${lat.toFixed(4)}/${lon.toFixed(4)}/${layer}/frame/${timestamp}`;
 }
@@ -81,51 +107,40 @@ function radarLocationPrefix(lat, lon, layer) {
 }
 
 // ===== LATEST RADAR TIMESTAMP CACHE =====
-// Cache the latest radar timestamp to avoid repeated GetCapabilities calls
-let _latestTimestampCache = null; // { timestamp: string, expiresAt: number }
+let _latestTimestampCache = null;
 
 // ===== ALL RADAR TIMESTAMPS CACHE =====
-// Cache all available timestamps from GetCapabilities to populate the timeline
-let _allTimestampsCache = null; // { timestamps: string[], layer: string, expiresAt: number }
+let _allTimestampsCache = null;
 
 // Parse all available timestamps from WMS GetCapabilities response
 function parseRadarTimestamps(capabilitiesText) {
   const timestamps = [];
   
-  // Parse all <Extent> elements with name="time" to find time values
   const extentRegex = /<Extent[^>]+name="time"[^>]*>([^<]+)<\/Extent>/gi;
   let match;
   while ((match = extentRegex.exec(capabilitiesText)) !== null) {
-    // Timestamps can be comma-separated or space-separated
     const timeValues = match[1].split(/[\s,]+/).map(t => t.trim()).filter(Boolean);
     timestamps.push(...timeValues);
   }
   
-  // Also check for default attribute (most recent timestamp)
   const defaultMatch = capabilitiesText.match(/<Extent[^>]+name="time"[^>]*default="([^"]+)"/i);
   if (defaultMatch && defaultMatch[1] && !timestamps.includes(defaultMatch[1])) {
     timestamps.push(defaultMatch[1]);
   }
   
-  // Validate and deduplicate timestamps
   const validTimestamps = [];
   for (const ts of timestamps) {
-    // Validate ISO8601 format
     const date = new Date(ts);
     if (!isNaN(date.getTime())) {
-      // Normalize to consistent ISO8601 format
       validTimestamps.push(date.toISOString().replace(/\.\d+Z$/, 'Z'));
     }
   }
   
-  // Deduplicate
   return [...new Set(validTimestamps)].sort();
 }
 
-// Get ALL available timestamps for a layer (not just the latest)
+// Get ALL available timestamps for a layer
 async function getRadarTimestampsForLayer(layer = RADAR_DEFAULT_LAYER) {
-  const cacheKey = `${layer}`;
-  
   // Return cached timestamps if valid (30 min TTL — metadata rarely changes)
   if (_allTimestampsCache && _allTimestampsCache.layer === layer && Date.now() < _allTimestampsCache.expiresAt) {
     return [..._allTimestampsCache.timestamps];
@@ -155,7 +170,7 @@ async function getRadarTimestampsForLayer(layer = RADAR_DEFAULT_LAYER) {
   }
 }
 
-// Get the latest radar timestamp (convenience wrapper, uses same cache as getRadarTimestampsForLayer)
+// Convenience wrapper — uses same cache as getRadarTimestampsForLayer
 async function getLatestRadarTimestamp() {
   // Return cached timestamp if valid (2 min TTL — matches radar update interval)
   if (_latestTimestampCache && Date.now() < _latestTimestampCache.expiresAt) {
@@ -168,7 +183,6 @@ async function getLatestRadarTimestamp() {
     if (!response.ok) throw new Error(`WMS GetCapabilities failed: ${response.status}`);
 
     const text = await response.text();
-    // Parse the time extent from GetCapabilities response
     const timeMatch = text.match(/<Extent[^>]+name="time"[^>]*default="([^"]+)"/i);
     if (timeMatch && timeMatch[1]) {
       _latestTimestampCache = {
@@ -178,10 +192,8 @@ async function getLatestRadarTimestamp() {
       return timeMatch[1];
     }
 
-    // If no default, parse the available times and use the last one
     const times = parseRadarTimestamps(text);
     if (times.length > 0) {
-      // Sort and use the latest timestamp
       times.sort();
       _latestTimestampCache = {
         timestamp: times[times.length - 1],
@@ -205,7 +217,6 @@ function getRadarMeta(lat, lon, layer) {
     const raw = localStorage.getItem(key);
     if (!raw) return null;
     const meta = JSON.parse(raw);
-    // Check if metadata is stale (older than TTL — use longer TTL for metadata)
     if (Date.now() - meta.lastUpdated > RADAR_META_TTL) {
       localStorage.removeItem(key);
       return null;
@@ -220,10 +231,9 @@ function setRadarMeta(lat, lon, layer, timestamp) {
   try {
     const key = `hasw_cache_radar_meta_${lat.toFixed(4)}_${lon.toFixed(4)}_${layer}`;
     let meta = getRadarMeta(lat, lon, layer) || { timestamps: [], layer, lat, lon, lastUpdated: 0 };
-    // Add timestamp if not already present
     if (!meta.timestamps.includes(timestamp)) {
       meta.timestamps.push(timestamp);
-      // Keep only the last 500 timestamps (about 16 hours of radar data at 2-min intervals)
+      // Keep only the last 500 timestamps (~16 hours at 2-min intervals)
       if (meta.timestamps.length > 500) {
         meta.timestamps = meta.timestamps.slice(-500);
       }
@@ -245,7 +255,6 @@ async function getCache() {
   return await caches.open(RADAR_CACHE_NAME);
 }
 
-// Store a single radar frame as ArrayBuffer
 async function cacheRadarFrame(lat, lon, layer, timestamp, arrayBuffer) {
   try {
     const cache = await getCache();
@@ -279,15 +288,7 @@ async function getCachedRadarFrame(lat, lon, layer, timestamp) {
 // Get cached radar frame as base64 data URL (returns null if not found)
 async function getCachedRadarFrameAsDataURL(lat, lon, layer, timestamp) {
   const arrayBuffer = await getCachedRadarFrame(lat, lon, layer, timestamp);
-  if (!arrayBuffer) return null;
-  
-  // Convert ArrayBuffer to base64
-  const bytes = new Uint8Array(arrayBuffer);
-  let binary = '';
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return 'data:image/png;base64,' + btoa(binary);
+  return arrayBuffer ? arrayBufferToBase64DataURL(arrayBuffer) : null;
 }
 
 // Fetch a range of frames for animation (e.g., last N timestamps in order)
@@ -295,19 +296,13 @@ async function getRadarFramesForClip(lat, lon, layer, count = 10) {
   const meta = getRadarMeta(lat, lon, layer);
   if (!meta || !meta.timestamps.length) return null;
   
-  // Get the last `count` timestamps (oldest first for animation)
   const clipTimestamps = meta.timestamps.slice(-count);
   const frames = [];
   
   for (const ts of clipTimestamps) {
     const arrayBuffer = await getCachedRadarFrame(lat, lon, layer, ts);
     if (arrayBuffer) {
-      // Convert to base64 data URL for display
-      let binary = '';
-      for (let i = 0; i < arrayBuffer.length; i++) {
-        binary += String.fromCharCode(arrayBuffer[i]);
-      }
-      frames.push({ timestamp: ts, dataUrl: 'data:image/png;base64,' + btoa(binary) });
+      frames.push({ timestamp: ts, dataUrl: arrayBufferToBase64DataURL(arrayBuffer) });
     }
   }
   
@@ -405,8 +400,7 @@ async function evictCacheIfNecessary(lat, lon, layer) {
 }
 
 // ===== REQUEST DEDUPLICATION =====
-// Prevent duplicate radar fetches for the same location at the same time
-const _pendingRadarFetches = new Map(); // cacheKey → Promise
+const _pendingRadarFetches = new Map();
 
 function getPendingRadarFetch(cacheKey) {
   if (_pendingRadarFetches.has(cacheKey)) {
@@ -425,10 +419,10 @@ function clearPendingRadarFetch(cacheKey) {
 }
 
 // ===== RADAR IMAGE FETCH =====
-async function fetchRadarImageFromWMS(url, maxRetries = 3) {
+async function fetchRadarImageFromWMS(url, maxRetries = RADAR_WMS_MAX_RETRIES) {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000); // 15s timeout
+    const timeout = setTimeout(() => controller.abort(), RADAR_WMS_TIMEOUT_MS);
 
     try {
       const response = await fetch(url, { signal: controller.signal });
@@ -438,7 +432,6 @@ async function fetchRadarImageFromWMS(url, maxRetries = 3) {
         throw new Error(`WMS GetMap failed: ${response.status}`);
       }
 
-      // Validate content type (should be an image)
       const contentType = response.headers.get('content-type') || '';
       if (!contentType.includes('image/')) {
         throw new Error(`Unexpected content type: ${contentType}`);
@@ -460,10 +453,7 @@ async function fetchRadarImageFromWMS(url, maxRetries = 3) {
 }
 
 // ===== MAIN ORCHESTRATOR =====
-// Fetch radar image for user location and return base64 data URL.
-// Returns { imageUrl: 'data:image/png;base64,...', timestamp: string, cached: boolean } or { error: string } on failure.
 async function fetchRadarImageForLocation(lat, lon, layer = RADAR_DEFAULT_LAYER, timestamp = null) {
-  // Get the latest radar timestamp if none specified
   if (!timestamp) {
     timestamp = await getLatestRadarTimestamp();
   }
@@ -484,21 +474,13 @@ async function fetchRadarImageForLocation(lat, lon, layer = RADAR_DEFAULT_LAYER,
     return pending;
   }
 
-  // Build WMS URL and initiate fetch
   const imageUrl = buildRadarImageUrl(lat, lon, layer, timestamp);
   console.log(`[Radar] Cache MISS: ${cacheKey}, fetching from WMS`);
 
   const fetchPromise = (async () => {
     try {
-      // Fetch the radar image
       const arrayBuffer = await fetchRadarImageFromWMS(imageUrl);
-
-      // Convert to base64 data URL
-      let binary = '';
-      for (let i = 0; i < arrayBuffer.length; i++) {
-        binary += String.fromCharCode(arrayBuffer[i]);
-      }
-      const dataURL = 'data:image/png;base64,' + btoa(binary);
+      const dataURL = arrayBufferToBase64DataURL(arrayBuffer);
 
       // Cache the result in Cache API
       await cacheRadarFrame(lat, lon, layer, timestamp, arrayBuffer);
@@ -512,36 +494,22 @@ async function fetchRadarImageForLocation(lat, lon, layer = RADAR_DEFAULT_LAYER,
     }
   })();
 
-  // Store pending fetch for deduplication
   setPendingRadarFetch(cacheKey, fetchPromise);
   return fetchPromise;
 }
 
 // ===== RADAR CLIP FUNCTIONS =====
-// Fetch radar image for a specific timestamp (for clip playback)
 async function fetchRadarImageForTimestamp(lat, lon, layer, timestamp) {
-  // Check cache first
   const cachedDataURL = await getCachedRadarFrameAsDataURL(lat, lon, layer, timestamp);
   if (cachedDataURL) {
     return { imageUrl: cachedDataURL, timestamp };
   }
 
-  // Fetch from WMS
   const imageUrl = buildRadarImageUrl(lat, lon, layer, timestamp);
   try {
     const arrayBuffer = await fetchRadarImageFromWMS(imageUrl);
-    
-    // Cache the result
     await cacheRadarFrame(lat, lon, layer, timestamp, arrayBuffer);
-
-    // Convert to base64 data URL
-    let binary = '';
-    for (let i = 0; i < arrayBuffer.length; i++) {
-      binary += String.fromCharCode(arrayBuffer[i]);
-    }
-    const dataURL = 'data:image/png;base64,' + btoa(binary);
-
-    return { imageUrl: dataURL, timestamp };
+    return { imageUrl: arrayBufferToBase64DataURL(arrayBuffer), timestamp };
   } catch (e) {
     console.error('[Radar] Failed to fetch radar image:', e);
     return { error: `Failed to load radar: ${e.message}` };
@@ -564,7 +532,6 @@ function invalidateRadarCache(lat, lon) {
 }
 
 // ===== COORDINATE CONVERSION FOR PINS =====
-// Convert lat/lon to pixel position within the radar image (512x512 canvas)
 function latLonToPixel(lat, lon, latCenter, lonCenter, radiusKm) {
   const bbox = latLonToBboxEPSG3857(latCenter, lonCenter, radiusKm);
   const [minx, miny, maxx, maxy] = bbox;
@@ -579,7 +546,6 @@ function latLonToPixel(lat, lon, latCenter, lonCenter, radiusKm) {
   return { x: pixelX, y: pixelY };
 }
 
-// Check if a lat/lon point is within the radar image bounds
 function latLonInBounds(lat, lon, latCenter, lonCenter, radiusKm) {
   const bbox = latLonToBboxEPSG3857(latCenter, lonCenter, radiusKm);
   const [minx, miny, maxx, maxy] = bbox;
@@ -590,8 +556,6 @@ function latLonInBounds(lat, lon, latCenter, lonCenter, radiusKm) {
   return x >= minx && x <= maxx && y >= miny && y <= maxy;
 }
 
-// ===== RADAR CACHE CLEAR =====
-// Clear all radar cache entries (used during manual refresh or storage cleanup)
 async function clearRadarCache() {
   try {
     const cache = await getCache();
@@ -613,7 +577,6 @@ async function clearRadarCache() {
   } catch { /* ignore */ }
 }
 
-// ===== RADAR CACHE SIZE =====
 async function getRadarCacheSize() {
   try {
     const cache = await getCache();
@@ -634,8 +597,6 @@ async function getRadarCacheSize() {
   }
 }
 
-// ===== BATCH PRE-FETCH FOR A RANGE OF FRAMES =====
-// Fetch a contiguous range of frames for the radar player timeline
 async function prefetchFramesInRange(lat, lon, layer, startIdx, endIdx) {
   const meta = getRadarMeta(lat, lon, layer);
   if (!meta || !meta.timestamps.length) return;
@@ -656,8 +617,6 @@ async function prefetchFramesInRange(lat, lon, layer, startIdx, endIdx) {
   return results;
 }
 
-// ===== GET FRAME RANGE FOR PLAYBACK =====
-// Get frames within a time range for the radar player
 async function getFramesInRange(lat, lon, layer, startTimestamp, endTimestamp) {
   const meta = getRadarMeta(lat, lon, layer);
   if (!meta || !meta.timestamps.length) return [];
@@ -676,7 +635,6 @@ async function getFramesInRange(lat, lon, layer, startTimestamp, endTimestamp) {
   return frames;
 }
 
-// ===== CHECK IF ALL FRAMES IN RANGE ARE CACHED =====
 async function areFramesCachedInRange(lat, lon, layer, startIdx, endIdx) {
   const meta = getRadarMeta(lat, lon, layer);
   if (!meta || !meta.timestamps.length) return false;
@@ -698,47 +656,37 @@ const COORD_FORMATS = [
 ];
 
 // ===== MGRS CONVERSION =====
-const MGRS_ZONE_ROWS = 'CDEFGHJKLMNPQRSTUVWX'; // excludes I and O
+const MGRS_ZONE_ROWS = 'CDEFGHJKLMNPQRSTUVWX';
 const MGRS_100K_SQUARES = [
-  'ABCDEFGH', 'JKLMNPQR', 'STUVWXYZ', // 0-2 (even zone, even hemisphere)
-  'BCDEFGH', 'CDEFGH', 'DEFGH',       // shifted for odd zones
+  'ABCDEFGH', 'JKLMNPQR', 'STUVWXYZ',   // even zone, even hemisphere
+  'BCDEFGH', 'CDEFGH', 'DEFGH',         // shifted for odd zones
 ];
 
-// MGRS 100km square lookup by zone and hemisphere
 const MGRS_100K_SQUARES_TABLE = [
-  ['ABCDEFGH', 'JKLMNPQR', 'STUVWXYZ'], // Zone even, Hemisphere N
-  ['BCDEFGH', 'CDEFGH', 'DEFGH'],       // Zone odd, Hemisphere N (shifted)
-  ['JKLMNOPQ', 'RSTUVWXY', 'ABCDEFGH'], // Zone even, Hemisphere S
-  ['KLMNPQR', 'MNOPQR', 'NOPQR'],       // Zone odd, Hemisphere S (shifted)
+  ['ABCDEFGH', 'JKLMNPQR', 'STUVWXYZ'],   // Zone even, Hemisphere N
+  ['BCDEFGH', 'CDEFGH', 'DEFGH'],         // Zone odd, Hemisphere N (shifted)
+  ['JKLMNOPQ', 'RSTUVWXY', 'ABCDEFGH'],   // Zone even, Hemisphere S
+  ['KLMNPQR', 'MNOPQR', 'NOPQR'],         // Zone odd, Hemisphere S (shifted)
 ];
 
-// MGRS column letter by 100km index
-const MGRS_COL_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'; // skips I
+const MGRS_COL_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
 function latLonToMGRS(lat, lon) {
   const zone = getUTMZone(lat, lon);
   const hemisphere = lat >= 0 ? 'N' : 'S';
   
-  // Get UTM easting and northing
   const utm = latLonToUTMLatLon(lat, lon);
   const [easting, northing] = utm;
   
-  // Determine 100km square
-  const zoneOdd = (zone % 2) !== 0;
   const colIndex = Math.floor((easting % 5000000) / 100000);
-  const rowIndex = Math.floor(((hemisphere === 'N' ? northing : northing - 1000000) % 4000000) / 100000);
+  const rowIndex = Math.floor(((hemisphere === 'N' ? northing : northing - UTM_100K_NORTHING_OFFSET) % UTM_MERIDIAN_ARC_POLE) / 100000);
   
-  // Get column letter (A-Z excluding I)
   const colLetter = MGRS_COL_LETTERS[colIndex];
+  const rowLetter = 'ABCDEFGH'[rowIndex % 8];
   
-  // Get row letter (A-H, excluding I)
-  const rowLetters = 'ABCDEFGH';
-  const rowLetter = rowLetters[rowIndex % 8];
-  
-  // 100km square identifier
   const hundredKmSquare = `${colLetter}${rowLetter}`;
   
-  // Determine precision (5 digits = ~1m accuracy)
+  // 5 digits = ~1m accuracy
   const precisionDigits = 5;
   const precisionFactor = Math.pow(10, precisionDigits);
   
@@ -749,7 +697,6 @@ function latLonToMGRS(lat, lon) {
 }
 
 function getUTMZone(lat, lon) {
-  // Zone number: (floor((lon + 180) / 6)) + 1
   const zoneNum = Math.floor((lon + 180) / 6) + 1;
   
   // Special cases for Norway and Svalbard
@@ -769,42 +716,33 @@ function latLonToUTMLatLon(lat, lon) {
   const zone = getUTMZone(lat, lon);
   const hemisphere = lat >= 0 ? 'N' : 'S';
   
-  // UTM constants
-  const k0 = 0.9996; // scale factor
-  const a = 6378137; // semi-major axis (WGS84)
-  const e2 = 0.00669437999014; // eccentricity squared
-  
-  // Central meridian of zone
   const lonOrigin = (zone - 1) * 6 - 180 + 3;
   
-  // Convert to radians
   const phi = lat * Math.PI / 180;
   const lam = (lon - lonOrigin) * Math.PI / 180;
   
-  // Radius of curvature
-  const N = a / Math.sqrt(1 - e2 * Math.sin(phi) * Math.sin(phi));
+  const N = UTM_SEMI_MAJOR_AXIS / Math.sqrt(1 - UTM_ECCENTRICITY_SQUARED * Math.sin(phi) * Math.sin(phi));
   
-  // Northing and easting
   const A = lam * Math.cos(phi);
   
-  const M = a * (
-    (1 - e2/4 - 3*e2*e2/64 - 5*e2*e2*e2/256) * phi
-    - (3*e2/8 + 3*e2*e2/32 + 45*e2*e2*e2/1024) * Math.sin(2*phi)
-    + (15*e2*e2/256 + 45*e2*e2*e2/1024) * Math.sin(4*phi)
-    - (35*e2*e2*e2/3072) * Math.sin(6*phi)
+  const M = UTM_SEMI_MAJOR_AXIS * (
+    (1 - UTM_ECCENTRICITY_SQUARED/4 - 3*UTM_ECCENTRICITY_SQUARED*UTM_ECCENTRICITY_SQUARED/64 - 5*UTM_ECCENTRICITY_SQUARED**3/256) * phi
+    - (3*UTM_ECCENTRICITY_SQUARED/8 + 3*UTM_ECCENTRICITY_SQUARED**2/32 + 45*UTM_ECCENTRICITY_SQUARED**3/1024) * Math.sin(2*phi)
+    + (15*UTM_ECCENTRICITY_SQUARED**2/256 + 45*UTM_ECCENTRICITY_SQUARED**3/1024) * Math.sin(4*phi)
+    - (35*UTM_ECCENTRICITY_SQUARED**3/3072) * Math.sin(6*phi)
   );
   
   const T = Math.tan(phi) * Math.tan(phi);
-  const C = e2 / (1 - e2) * Math.cos(phi) * Math.cos(phi);
-  const R = a * (1 - e2) / Math.pow(1 - e2 * Math.sin(phi) * Math.sin(phi), 1.5);
+  const C = UTM_ECCENTRICITY_SQUARED / (1 - UTM_ECCENTRICITY_SQUARED) * Math.cos(phi) * Math.cos(phi);
+  const R = UTM_SEMI_MAJOR_AXIS * (1 - UTM_ECCENTRICITY_SQUARED) / Math.pow(1 - UTM_ECCENTRICITY_SQUARED * Math.sin(phi) * Math.sin(phi), 1.5);
   
-  let easting = k0 * N * (A + (1 - T + C) * A*A*A/6 + (5 - 18*T + T*T + 72*C - 58*e2/(1-e2)) * A*A*A*A*A/120) + 500000;
+  let easting = UTM_SCALE_FACTOR * N * (A + (1 - T + C) * A**3/6 + (5 - 18*T + T**2 + 72*C - 58*UTM_ECCENTRICITY_SQUARED/(1-UTM_ECCENTRICITY_SQUARED)) * A**5/120) + UTM_EASTING_OFFSET;
   
   let northing;
   if (hemisphere === 'N') {
-    northing = k0 * (M + N * Math.tan(phi) * (A*A/2 + (5 - T + 9*C + 4*C*C) * A*A*A*A/24 + (61 - 58*T + T*T + 600*C - 330*e2/(1-e2)) * A*A*A*A*A*A/720));
+    northing = UTM_SCALE_FACTOR * (M + N * Math.tan(phi) * (A**2/2 + (5 - T + 9*C + 4*C**2) * A**4/24 + (61 - 58*T + T**2 + 600*C - 330*UTM_ECCENTRICITY_SQUARED/(1-UTM_ECCENTRICITY_SQUARED)) * A**6/720));
   } else {
-    northing = k0 * (M + N * Math.tan(phi) * (A*A/2 + (5 - T + 9*C + 4*C*C) * A*A*A*A/24 + (61 - 58*T + T*T + 600*C - 330*e2/(1-e2)) * A*A*A*A*A*A/720)) + 10000000;
+    northing = UTM_SCALE_FACTOR * (M + N * Math.tan(phi) * (A**2/2 + (5 - T + 9*C + 4*C**2) * A**4/24 + (61 - 58*T + T**2 + 600*C - 330*UTM_ECCENTRICITY_SQUARED/(1-UTM_ECCENTRICITY_SQUARED)) * A**6/720)) + UTM_SOUTH_NORTHING_OFFSET;
   }
   
   return [easting, northing];
@@ -812,9 +750,7 @@ function latLonToUTMLatLon(lat, lon) {
 
 // ===== DMS CONVERSION =====
 function latLngToDMS(lat, lng) {
-  const latDMS = toDMSType(lat, 'lat');
-  const lngDMS = toDMSType(lng, 'lng');
-  return `${latDMS}, ${lngDMS}`;
+  return `${toDMSType(lat, 'lat')}, ${toDMSType(lng, 'lng')}`;
 }
 
 function toDMSType(value, type) {

@@ -454,6 +454,36 @@
   animation: milestoneFlash 0.3s ease-out;
 }
 
+/* Dumb Luck flash text overlay */
+.donkey-dumb-luck {
+  position: absolute;
+  top: 35%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 1.2rem;
+  font-weight: 900;
+  font-family: 'Courier New', monospace;
+  letter-spacing: 0.2em;
+  color: #FFD700;
+  text-shadow: 0 0 15px rgba(255, 215, 0, 0.8), 0 0 30px rgba(255, 215, 0, 0.5), 0 0 45px rgba(255, 215, 0, 0.3);
+  z-index: 8;
+  pointer-events: none;
+  opacity: 0;
+  transition: none;
+}
+
+.donkey-dumb-luck.flash {
+  animation: dumbLuckFlash 0.8s ease-out forwards;
+}
+
+@keyframes dumbLuckFlash {
+  0% { opacity: 1; transform: translate(-50%, -50%) scale(0.5); }
+  15% { opacity: 1; transform: translate(-50%, -50%) scale(1.4); }
+  30% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  60% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -70%) scale(0.8); }
+}
+
 /* Near-miss flash text overlay */
 .donkey-near-miss {
   position: absolute;
@@ -698,6 +728,11 @@
 .donkey-snarky-message.snarky-orange {
   color: #fb923c;
   text-shadow: 0 0 12px rgba(251, 146, 60, 0.6), 0 0 24px rgba(251, 146, 60, 0.3);
+}
+
+.donkey-snarky-message.snarky-gold {
+  color: #FFD700;
+  text-shadow: 0 0 12px rgba(255, 215, 0, 0.6), 0 0 24px rgba(255, 215, 0, 0.3);
 }
 
 /* ===== FULLSCREEN MODE ===== */

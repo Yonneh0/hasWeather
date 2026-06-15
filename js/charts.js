@@ -1,3 +1,75 @@
+// ===== CHART CONSTANTS =====
+const CHART_PAD_MERGED = { top: 6, right: 0, bottom: 6, left: 0 };
+const CHART_PAD_COMBINED = { top: 10, right: 10, bottom: 10, left: 10 };
+
+// Grid and layout
+const GRID_LINE_COUNT = 3;
+const TEMP_LABEL_OFFSET_X = 17;
+const TEMP_LABEL_OFFSET_Y = 3;
+
+// Bar dimensions
+const BAR_WIDTH_MIN = 2;
+const BAR_WIDTH_RATIO = 0.5;
+const RAINFOALL_HEIGHT_RATIO = 0.25;
+const COMBINED_RAIN_HEIGHT_RATIO = 0.2;
+
+// Line widths
+const LINE_WIDTH_GRID = 0.5;
+const LINE_WIDTH_TEMP = 2;
+const LINE_WIDTH_WIND = 1;
+const LINE_WIDTH_HUMIDITY = 1.5;
+
+// Dot radii
+const DOT_RADIUS_TEMP = 2.5;
+const DOT_RADIUS_WIND = 1.5;
+
+// Wind height ratios
+const WIND_HEIGHT_RATIO_MERGED = 0.15;
+const WIND_HEIGHT_RATIO_COMBINED = 1.0;
+
+// Humidity scale
+const HUMIDITY_SCALE = 100;
+
+// Particle dimensions
+const PARTICLE_RADIUS_MIN = 0.5;
+const PARTICLE_RADIUS_MAX = 1.5;
+const PARTICLE_SPEED_MIN = 0.1;
+const PARTICLE_SPEED_MAX = 0.3;
+const PARTICLE_OPACITY_MIN = 0.05;
+const PARTICLE_OPACITY_MAX = 0.1;
+const PARTICLE_PAUSE_Y = -10;
+const PARTICLE_RESUME_Y = 10;
+
+// ===== CANVAS SETUP HELPER =====
+function setupCanvas(canvasId, pad) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return null;
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  ctx.scale(dpr, dpr);
+  const w = rect.width;
+  const h = rect.height;
+  const plotW = w - pad.left - pad.right;
+  const plotH = h - pad.top - pad.bottom;
+  return { ctx, canvas, w, h, pad, plotW, plotH };
+}
+
+// ===== GRID DRAWING HELPER =====
+function drawGrid(ctx, pad, plotW, plotH, color) {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = LINE_WIDTH_GRID;
+  for (let i = 0; i <= GRID_LINE_COUNT; i++) {
+    const y = pad.top + (plotH / GRID_LINE_COUNT) * i;
+    ctx.beginPath();
+    ctx.moveTo(pad.left, y);
+    ctx.lineTo(pad.left + plotW, y);
+    ctx.stroke();
+  }
+}
+
 // ===== CLEAN CANVAS CHART =====
 function drawMergedChart(canvasId, cityData, dayHigh, dayLow) {
   const canvas = document.getElementById(canvasId);
@@ -10,9 +82,7 @@ function drawMergedChart(canvasId, cityData, dayHigh, dayLow) {
   ctx.scale(dpr, dpr);
   const w = rect.width;
   const h = rect.height;
-  const pad = { top: 6, right: 0, bottom: 6, left: 0 };
-  const plotW = w - pad.left - pad.right;
-  const plotH = h - pad.top - pad.bottom;
+  const pad = CHART_PAD_MERGED;
 
   ctx.clearRect(0, 0, w, h);
 
@@ -25,7 +95,7 @@ function drawMergedChart(canvasId, cityData, dayHigh, dayLow) {
   if (temps.length === 0) return;
 
   const n = temps.length;
-  const stepX = plotW / (n - 1 || 1);
+  const stepX = w / (n - 1 || 1);
 
   // Temp range - use day high/low when available
   const tempMin = (dayLow != null ? dayLow : Math.min(...temps)) - 2;
@@ -39,29 +109,21 @@ function drawMergedChart(canvasId, cityData, dayHigh, dayLow) {
   const windMax = Math.max(...wind, 1);
 
   // Draw grid lines
-  ctx.strokeStyle = 'rgba(255,255,255,0.04)';
-  ctx.lineWidth = 0.5;
-  for (let i = 0; i <= 3; i++) {
-    const y = pad.top + (plotH / 3) * i;
-    ctx.beginPath();
-    ctx.moveTo(pad.left, y);
-    ctx.lineTo(pad.left + plotW, y);
-    ctx.stroke();
-  }
+  drawGrid(ctx, pad, w, h, 'rgba(255,255,255,0.04)');
 
   // Temperature area fill
-  const tempFillGrad = ctx.createLinearGradient(0, pad.top, 0, pad.top + plotH);
+  const tempFillGrad = ctx.createLinearGradient(0, pad.top, 0, pad.top + h);
   tempFillGrad.addColorStop(0, 'rgba(255,140,66,0.25)');
   tempFillGrad.addColorStop(1, 'rgba(255,140,66,0.02)');
 
   ctx.beginPath();
   temps.forEach((v, i) => {
     const x = pad.left + i * stepX;
-    const y = pad.top + (1 - (v - tempMin) / tempRange) * plotH;
+    const y = pad.top + (1 - (v - tempMin) / tempRange) * h;
     i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
   });
-  ctx.lineTo(pad.left + (n - 1) * stepX, pad.top + plotH);
-  ctx.lineTo(pad.left, pad.top + plotH);
+  ctx.lineTo(pad.left + (n - 1) * stepX, pad.top + h);
+  ctx.lineTo(pad.left, pad.top + h);
   ctx.closePath();
   ctx.fillStyle = tempFillGrad;
   ctx.fill();
@@ -70,11 +132,11 @@ function drawMergedChart(canvasId, cityData, dayHigh, dayLow) {
   ctx.beginPath();
   temps.forEach((v, i) => {
     const x = pad.left + i * stepX;
-    const y = pad.top + (1 - (v - tempMin) / tempRange) * plotH;
+    const y = pad.top + (1 - (v - tempMin) / tempRange) * h;
     i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
   });
   ctx.strokeStyle = '#ff8c42';
-  ctx.lineWidth = 2;
+  ctx.lineWidth = LINE_WIDTH_TEMP;
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
   ctx.stroke();
@@ -82,20 +144,20 @@ function drawMergedChart(canvasId, cityData, dayHigh, dayLow) {
   // Temperature dots
   temps.forEach((v, i) => {
     const x = pad.left + i * stepX;
-    const y = pad.top + (1 - (v - tempMin) / tempRange) * plotH;
+    const y = pad.top + (1 - (v - tempMin) / tempRange) * h;
     ctx.beginPath();
-    ctx.arc(x, y, 2.5, 0, Math.PI * 2);
+    ctx.arc(x, y, DOT_RADIUS_TEMP, 0, Math.PI * 2);
     ctx.fillStyle = '#ff8c42';
     ctx.fill();
     ctx.strokeStyle = '#000';
-    ctx.lineWidth = 1;
+    ctx.lineWidth = LINE_WIDTH_WIND;
     ctx.stroke();
   });
 
   // Rain bars (bottom)
-  const rainH = plotH * 0.25;
-  const rainY = pad.top + plotH - rainH;
-  const barW = Math.max(2, stepX * 0.5);
+  const rainH = h * RAINFOALL_HEIGHT_RATIO;
+  const rainY = pad.top + h - rainH;
+  const barW = Math.max(BAR_WIDTH_MIN, stepX * BAR_WIDTH_RATIO);
   rain.forEach((v, i) => {
     const x = pad.left + i * stepX + (stepX - barW) / 2;
     const barH = (v / rainMax) * rainH;
@@ -107,11 +169,11 @@ function drawMergedChart(canvasId, cityData, dayHigh, dayLow) {
   ctx.beginPath();
   wind.forEach((v, i) => {
     const x = pad.left + i * stepX;
-    const y = pad.top + plotH - (v / windMax) * (plotH * 0.15);
+    const y = pad.top + h - (v / windMax) * (h * WIND_HEIGHT_RATIO_MERGED);
     i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
   });
   ctx.strokeStyle = 'rgba(125,217,160,0.3)';
-  ctx.lineWidth = 1;
+  ctx.lineWidth = LINE_WIDTH_WIND;
   ctx.lineJoin = 'round';
   ctx.stroke();
 
@@ -119,10 +181,10 @@ function drawMergedChart(canvasId, cityData, dayHigh, dayLow) {
   ctx.fillStyle = 'rgba(255,255,255,0.5)';
   ctx.font = '9px -apple-system, sans-serif';
   ctx.textAlign = 'right';
-  for (let i = 0; i <= 3; i++) {
-    const val = tempMax - (tempRange / 3) * i;
-    const y = pad.top + (plotH / 3) * i;
-    ctx.fillText(Math.round(val) + '°', pad.left + 17, y + 3);
+  for (let i = 0; i <= GRID_LINE_COUNT; i++) {
+    const val = tempMax - (tempRange / GRID_LINE_COUNT) * i;
+    const y = pad.top + (h / GRID_LINE_COUNT) * i;
+    ctx.fillText(Math.round(val) + '°', pad.left + TEMP_LABEL_OFFSET_X, y + TEMP_LABEL_OFFSET_Y);
   }
 
 }
@@ -139,9 +201,7 @@ function drawGhostMergedChart(canvasId, cityData, dayHigh, dayLow, currentIdx = 
   ctx.scale(dpr, dpr);
   const w = rect.width;
   const h = rect.height;
-  const pad = { top: 6, right: 0, bottom: 6, left: 0 };
-  const plotW = w - pad.left - pad.right;
-  const plotH = h - pad.top - pad.bottom;
+  const pad = CHART_PAD_MERGED;
 
   ctx.clearRect(0, 0, w, h);
 
@@ -154,7 +214,7 @@ function drawGhostMergedChart(canvasId, cityData, dayHigh, dayLow, currentIdx = 
   if (temps.length === 0) return;
 
   const n = temps.length;
-  const stepX = plotW / (n - 1 || 1);
+  const stepX = w / (n - 1 || 1);
 
   // Temp range - use day high/low when available
   const tempMin = (dayLow != null ? dayLow : Math.min(...temps)) - 2;
@@ -168,29 +228,21 @@ function drawGhostMergedChart(canvasId, cityData, dayHigh, dayLow, currentIdx = 
   const windMax = Math.max(...wind, 1);
 
   // Draw grid lines (ghost)
-  ctx.strokeStyle = 'rgba(0,48,135,0.06)';
-  ctx.lineWidth = 0.5;
-  for (let i = 0; i <= 3; i++) {
-    const y = pad.top + (plotH / 3) * i;
-    ctx.beginPath();
-    ctx.moveTo(pad.left, y);
-    ctx.lineTo(pad.left + plotW, y);
-    ctx.stroke();
-  }
+  drawGrid(ctx, pad, w, h, 'rgba(0,48,135,0.06)');
 
   // Temperature area fill (ghost - blue tones)
-  const tempFillGrad = ctx.createLinearGradient(0, pad.top, 0, pad.top + plotH);
+  const tempFillGrad = ctx.createLinearGradient(0, pad.top, 0, pad.top + h);
   tempFillGrad.addColorStop(0, 'rgba(0,48,135,0.15)');
   tempFillGrad.addColorStop(1, 'rgba(0,48,135,0.02)');
 
   ctx.beginPath();
   temps.forEach((v, i) => {
     const x = pad.left + i * stepX;
-    const y = pad.top + (1 - (v - tempMin) / tempRange) * plotH;
+    const y = pad.top + (1 - (v - tempMin) / tempRange) * h;
     i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
   });
-  ctx.lineTo(pad.left + (n - 1) * stepX, pad.top + plotH);
-  ctx.lineTo(pad.left, pad.top + plotH);
+  ctx.lineTo(pad.left + (n - 1) * stepX, pad.top + h);
+  ctx.lineTo(pad.left, pad.top + h);
   ctx.closePath();
   ctx.fillStyle = tempFillGrad;
   ctx.fill();
@@ -199,11 +251,11 @@ function drawGhostMergedChart(canvasId, cityData, dayHigh, dayLow, currentIdx = 
   ctx.beginPath();
   temps.forEach((v, i) => {
     const x = pad.left + i * stepX;
-    const y = pad.top + (1 - (v - tempMin) / tempRange) * plotH;
+    const y = pad.top + (1 - (v - tempMin) / tempRange) * h;
     i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
   });
   ctx.strokeStyle = 'rgba(0,48,135,0.35)';
-  ctx.lineWidth = 2;
+  ctx.lineWidth = LINE_WIDTH_TEMP;
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
   ctx.stroke();
@@ -211,20 +263,20 @@ function drawGhostMergedChart(canvasId, cityData, dayHigh, dayLow, currentIdx = 
   // Temperature dots (ghost - blue tones)
   temps.forEach((v, i) => {
     const x = pad.left + i * stepX;
-    const y = pad.top + (1 - (v - tempMin) / tempRange) * plotH;
+    const y = pad.top + (1 - (v - tempMin) / tempRange) * h;
     ctx.beginPath();
-    ctx.arc(x, y, 2.5, 0, Math.PI * 2);
+    ctx.arc(x, y, DOT_RADIUS_TEMP, 0, Math.PI * 2);
     ctx.fillStyle = 'rgba(0,48,135,0.35)';
     ctx.fill();
     ctx.strokeStyle = 'rgba(0,48,135,0.6)';
-    ctx.lineWidth = 1;
+    ctx.lineWidth = LINE_WIDTH_WIND;
     ctx.stroke();
   });
 
   // Rain bars (ghost - blue tones)
-  const rainH = plotH * 0.25;
-  const rainY = pad.top + plotH - rainH;
-  const barW = Math.max(2, stepX * 0.5);
+  const rainH = h * RAINFOALL_HEIGHT_RATIO;
+  const rainY = pad.top + h - rainH;
+  const barW = Math.max(BAR_WIDTH_MIN, stepX * BAR_WIDTH_RATIO);
   rain.forEach((v, i) => {
     const x = pad.left + i * stepX + (stepX - barW) / 2;
     const barH = (v / rainMax) * rainH;
@@ -236,11 +288,11 @@ function drawGhostMergedChart(canvasId, cityData, dayHigh, dayLow, currentIdx = 
   ctx.beginPath();
   wind.forEach((v, i) => {
     const x = pad.left + i * stepX;
-    const y = pad.top + plotH - (v / windMax) * (plotH * 0.15);
+    const y = pad.top + h - (v / windMax) * (h * WIND_HEIGHT_RATIO_MERGED);
     i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
   });
   ctx.strokeStyle = 'rgba(125,217,160,0.2)';
-  ctx.lineWidth = 1;
+  ctx.lineWidth = LINE_WIDTH_WIND;
   ctx.lineJoin = 'round';
   ctx.stroke();
 
@@ -248,10 +300,10 @@ function drawGhostMergedChart(canvasId, cityData, dayHigh, dayLow, currentIdx = 
   ctx.fillStyle = 'rgba(0,48,135,0.4)';
   ctx.font = '9px -apple-system, sans-serif';
   ctx.textAlign = 'right';
-  for (let i = 0; i <= 3; i++) {
-    const val = tempMax - (tempRange / 3) * i;
-    const y = pad.top + (plotH / 3) * i;
-    ctx.fillText(Math.round(val) + '°', pad.left + 17, y + 3);
+  for (let i = 0; i <= GRID_LINE_COUNT; i++) {
+    const val = tempMax - (tempRange / GRID_LINE_COUNT) * i;
+    const y = pad.top + (h / GRID_LINE_COUNT) * i;
+    ctx.fillText(Math.round(val) + '°', pad.left + TEMP_LABEL_OFFSET_X, y + TEMP_LABEL_OFFSET_Y);
   }
 
 }
@@ -268,9 +320,7 @@ function drawCombinedChart(canvasId, cityData) {
   ctx.scale(dpr, dpr);
   const w = rect.width;
   const h = rect.height;
-  const pad = { top: 10, right: 10, bottom: 10, left: 10 };
-  const plotW = w - pad.left - pad.right;
-  const plotH = h - pad.top - pad.bottom;
+  const pad = CHART_PAD_COMBINED;
 
   ctx.clearRect(0, 0, w, h);
 
@@ -283,22 +333,22 @@ function drawCombinedChart(canvasId, cityData) {
   if (hum.length === 0) return;
 
   const n = hum.length;
-  const stepX = plotW / (n - 1 || 1);
+  const stepX = w / (n - 1 || 1);
   const windMax = Math.max(...wind, 1);
   const rainMax = Math.max(...rain, 0.5);
 
   // Humidity gradient fill
-  const humGrad = ctx.createLinearGradient(0, pad.top, 0, pad.top + plotH);
+  const humGrad = ctx.createLinearGradient(0, pad.top, 0, pad.top + h);
   humGrad.addColorStop(0, 'rgba(77,166,255,0.05)');
   humGrad.addColorStop(1, 'rgba(77,166,255,0.3)');
   ctx.beginPath();
   hum.forEach((v, i) => {
     const x = pad.left + i * stepX;
-    const y = pad.top + plotH - (v / 100) * plotH;
+    const y = pad.top + h - (v / HUMIDITY_SCALE) * h;
     i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
   });
-  ctx.lineTo(pad.left + (n - 1) * stepX, pad.top + plotH);
-  ctx.lineTo(pad.left, pad.top + plotH);
+  ctx.lineTo(pad.left + (n - 1) * stepX, pad.top + h);
+  ctx.lineTo(pad.left, pad.top + h);
   ctx.closePath();
   ctx.fillStyle = humGrad;
   ctx.fill();
@@ -307,11 +357,11 @@ function drawCombinedChart(canvasId, cityData) {
   ctx.beginPath();
   hum.forEach((v, i) => {
     const x = pad.left + i * stepX;
-    const y = pad.top + plotH - (v / 100) * plotH;
+    const y = pad.top + h - (v / HUMIDITY_SCALE) * h;
     i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
   });
   ctx.strokeStyle = 'rgba(77,166,255,0.7)';
-  ctx.lineWidth = 1.5;
+  ctx.lineWidth = LINE_WIDTH_HUMIDITY;
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
   ctx.stroke();
@@ -320,11 +370,11 @@ function drawCombinedChart(canvasId, cityData) {
   ctx.beginPath();
   wind.forEach((v, i) => {
     const x = pad.left + i * stepX;
-    const y = pad.top + plotH - (v / windMax) * plotH;
+    const y = pad.top + h - (v / windMax) * (h * WIND_HEIGHT_RATIO_COMBINED);
     i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
   });
   ctx.strokeStyle = 'rgba(125,217,160,0.6)';
-  ctx.lineWidth = 1.5;
+  ctx.lineWidth = LINE_WIDTH_HUMIDITY;
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
   ctx.stroke();
@@ -332,17 +382,17 @@ function drawCombinedChart(canvasId, cityData) {
   // Wind dots
   wind.forEach((v, i) => {
     const x = pad.left + i * stepX;
-    const y = pad.top + plotH - (v / windMax) * plotH;
+    const y = pad.top + h - (v / windMax) * (h * WIND_HEIGHT_RATIO_COMBINED);
     ctx.beginPath();
-    ctx.arc(x, y, 1.5, 0, Math.PI * 2);
+    ctx.arc(x, y, DOT_RADIUS_WIND, 0, Math.PI * 2);
     ctx.fillStyle = 'rgba(125,217,160,0.8)';
     ctx.fill();
   });
 
   // Rain bars (bottom)
-  const rainH = plotH * 0.2;
-  const rainY = pad.top + plotH - rainH;
-  const barW = Math.max(2, stepX * 0.5);
+  const rainH = h * COMBINED_RAIN_HEIGHT_RATIO;
+  const rainY = pad.top + h - rainH;
+  const barW = Math.max(BAR_WIDTH_MIN, stepX * BAR_WIDTH_RATIO);
   rain.forEach((v, i) => {
     const x = pad.left + i * stepX + (stepX - barW) / 2;
     const barH = (v / rainMax) * rainH;
@@ -355,8 +405,8 @@ function drawCombinedChart(canvasId, cityData) {
   ctx.font = '9px -apple-system, sans-serif';
   ctx.textAlign = 'left';
   ctx.fillText('100%', pad.left + 2, pad.top + 4);
-  ctx.fillText('0%', pad.left + 2, pad.top + plotH);
-  ctx.fillText(Math.round(windMax) + ' km/h', pad.left + 2, pad.top + plotH - 2);
+  ctx.fillText('0%', pad.left + 2, pad.top + h);
+  ctx.fillText(Math.round(windMax) + ' km/h', pad.left + 2, pad.top + h - 2);
 }
 
 // ===== CANVAS CHARTS =====
@@ -390,9 +440,9 @@ function initParticles() {
     particles.push({
       x: Math.random() * canvas.width,
       y: Math.random() * canvas.height,
-      r: Math.random() * 1.5 + 0.5,
-      speed: Math.random() * 0.3 + 0.1,
-      opacity: Math.random() * 0.1 + 0.05,
+      r: Math.random() * (PARTICLE_RADIUS_MAX - PARTICLE_RADIUS_MIN) + PARTICLE_RADIUS_MIN,
+      speed: Math.random() * (PARTICLE_SPEED_MAX - PARTICLE_SPEED_MIN) + PARTICLE_SPEED_MIN,
+      opacity: Math.random() * (PARTICLE_OPACITY_MAX - PARTICLE_OPACITY_MIN) + PARTICLE_OPACITY_MIN,
     });
   }
 
@@ -412,7 +462,7 @@ function initParticles() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         particles.forEach(p => {
           p.y -= p.speed;
-          if (p.y < -10) { p.y = canvas.height + 10; p.x = Math.random() * canvas.width; }
+          if (p.y < PARTICLE_PAUSE_Y) { p.y = canvas.height + PARTICLE_RESUME_Y; p.x = Math.random() * canvas.width; }
           ctx.beginPath();
           ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
           ctx.fillStyle = `rgba(255,255,255,${p.opacity})`;

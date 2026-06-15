@@ -1,5 +1,4 @@
-// ===== OPENSTREETMAP / NOMINATIM API CLIENT =====
-// Fetches nearby city data from Nominatim/OSM.
+// OpenStreetMap / Nominatim API client — fetches nearby city data from Nominatim/OSM.
 
 // ===== ENDPOINT =====
 const NOMINATIM = 'https://nominatim.openstreetmap.org/search';
@@ -8,7 +7,17 @@ const NOMINATIM = 'https://nominatim.openstreetmap.org/search';
 const NOMINATIM_CLOSE_RADIUS = 0.45;
 const NOMINATIM_WIDE_RADIUS = 1.0;
 
-// ===== HELPER: Scale viewbox for Nominatim =====
+// ===== FETCH LIMITS =====
+const NOMINATIM_CLOSE_LIMIT = 30;
+const NOMINATIM_WIDE_LIMIT = 50;
+
+// ===== BEARING =====
+const BEARING_WRAP_AROUND = 180;
+
+// ===== DEDUPLICATION =====
+const DEDUP_COORD_TOLERANCE = 0.01;
+const BOUNDARY_RANK_THRESHOLD = 4;
+
 function scaleViewbox(lat, lon, radiusDeg) {
   const south = (lat - radiusDeg).toFixed(4);
   const north = (lat + radiusDeg).toFixed(4);
@@ -17,9 +26,7 @@ function scaleViewbox(lat, lon, radiusDeg) {
   return `${west},${north},${east},${south}`;
 }
 
-// ===== FIND NEARBY CITIES =====
 async function findNearbyCities(lat, lon) {
-  // Handle _maxCities === 0
   if (_maxCities === 0) return [];
 
   // Check in-memory cache first
@@ -27,7 +34,6 @@ async function findNearbyCities(lat, lon) {
     return _nearbyCache;
   }
 
-  // Check localStorage cache
   const cacheKey = `nearby_${DataCache._roundCoord(lat)}_${DataCache._roundCoord(lon)}`;
   const cached = DataCache.get(cacheKey, 'nearby');
   if (cached) {
@@ -38,7 +44,7 @@ async function findNearbyCities(lat, lon) {
 
   // Fetch a larger set first so we can filter and still have enough
   let viewbox = scaleViewbox(lat, lon, NOMINATIM_CLOSE_RADIUS);
-  let url = `${NOMINATIM}?q=city&format=jsonv2&viewbox=${viewbox}&bounded=1&limit=30&addressdetails=1`;
+  let url = `${NOMINATIM}?q=city&format=jsonv2&viewbox=${viewbox}&bounded=1&limit=${NOMINATIM_CLOSE_LIMIT}&addressdetails=1`;
 
   let results;
   try {
@@ -55,20 +61,17 @@ async function findNearbyCities(lat, lon) {
     results = results.filter(r => {
       const type = (r.type || '').toLowerCase();
       const cls = (r.class || '').toLowerCase();
-      // Reject known non-city types
-      if (cls === 'boundary' && r.place_rank >= 4) return false;
+      if (cls === 'boundary' && r.place_rank >= BOUNDARY_RANK_THRESHOLD) return false;
       if (type === 'country' || type === 'state' || type === 'administrative') return false;
       if (type === 'fuel' || type === 'street' || type === 'residential') return false;
-      // Accept if rank 10-16 (typical city/town/village)
       if (r.place_rank >= 10 && r.place_rank <= 16) return true;
-      // Accept if type looks like a populated place
       return acceptableTypes.includes(type);
     });
   }
 
   if (results.length < _maxCities) {
     viewbox = scaleViewbox(lat, lon, NOMINATIM_WIDE_RADIUS);
-    url = `${NOMINATIM}?q=city&format=jsonv2&viewbox=${viewbox}&bounded=1&limit=50&addressdetails=1`;
+    url = `${NOMINATIM}?q=city&format=jsonv2&viewbox=${viewbox}&bounded=1&limit=${NOMINATIM_WIDE_LIMIT}&addressdetails=1`;
     try {
       const resp = await fetch(url);
       if (resp.ok) {
@@ -78,12 +81,12 @@ async function findNearbyCities(lat, lon) {
         extra.forEach(r => {
           // Skip if same place_id OR same name at same coordinates (dedup by name+coords)
           if (existingIds.has(r.place_id)) return;
-          const latMatch = Math.abs(parseFloat(r.lat) - parseFloat(results[0]?.lat || 0)) < 0.01;
+          const latMatch = Math.abs(parseFloat(r.lat) - parseFloat(results[0]?.lat || 0)) < DEDUP_COORD_TOLERANCE;
           const sameName = existingNames.has((r.name || '').toLowerCase().trim()) && latMatch;
           if (sameName) return;
           const type = (r.type || '').toLowerCase();
           const cls = (r.class || '').toLowerCase();
-          if (cls === 'boundary' && r.place_rank >= 4) return;
+          if (cls === 'boundary' && r.place_rank >= BOUNDARY_RANK_THRESHOLD) return;
           if (type === 'country' || type === 'state' || type === 'administrative') return;
           if (type === 'fuel' || type === 'street' || type === 'residential') return;
           if (r.place_rank >= 10 && r.place_rank <= 16) {
@@ -123,11 +126,10 @@ async function findNearbyCities(lat, lon) {
     };
   });
 
-  // Deduplicate by place_id AND by name+coordinate proximity
+  // Deduplicate by place_id AND by name+coordinate proximity (within DEDUP_COORD_TOLERANCE ≈ 1km)
   const seen = new Set();
   const deduped = cities.filter(c => {
     if (seen.has(c.place_id)) return false;
-    // Also check by name + coordinates (within 0.01° ≈ 1km)
     const nameKey = c.name.toLowerCase().trim();
     const coordKey = `${DataCache._roundCoord(c.latitude)},${DataCache._roundCoord(c.longitude)}`;
     for (const existing of seen) {
@@ -135,7 +137,7 @@ async function findNearbyCities(lat, lon) {
         return false;
       }
     }
-    seen.add({ name: nameKey, coordKey, place_id: c.place_id });
+    seen.add({ name: nameKey, coordKey });
     return true;
   });
 
@@ -148,26 +150,20 @@ async function findNearbyCities(lat, lon) {
   remaining.sort((a, b) => {
     const aMinDiff = Math.min(...selected.map(s => {
       let diff = Math.abs(a.bearing - s.bearing);
-      return diff > 180 ? 360 - diff : diff;
+      return diff > BEARING_WRAP_AROUND ? 360 - diff : diff;
     }));
     const bMinDiff = Math.min(...selected.map(s => {
       let diff = Math.abs(b.bearing - s.bearing);
-      return diff > 180 ? 360 - diff : diff;
+      return diff > BEARING_WRAP_AROUND ? 360 - diff : diff;
     }));
     return bMinDiff - aMinDiff;
   });
 
   for (const city of remaining) {
     if (selected.length >= _maxCities) break;
-    let tooClose = false;
-    for (const sel of selected) {
-      const dist = haversine(city.latitude, city.longitude, sel.latitude, sel.longitude);
-      if (dist < MIN_CITY_DISTANCE_MI) { tooClose = true; break; }
-    }
-    if (!tooClose) {
-      selected.push(city);
-      used.add(deduped.indexOf(city));
-    }
+    if (selected.some(sel => haversine(city.latitude, city.longitude, sel.latitude, sel.longitude) < MIN_CITY_DISTANCE_MI)) continue;
+    selected.push(city);
+    used.add(deduped.indexOf(city));
   }
 
   // Fill remaining slots if we still need more

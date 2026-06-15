@@ -1,12 +1,23 @@
 // ===== OPEN-METEO API CLIENT =====
 // Fetches weather data and air quality from Open-Meteo APIs.
 
+// ===== CONSTANTS =====
+const MAX_RETRIES = 3;
+const BASE_RETRY_DELAY_MS = 1000;
+const BURST_POLL_INTERVAL_MS = 50;
+const DEFAULT_FORECAST_DAYS = 2;
+
 // ===== ENDPOINTS =====
 const WEATHER_API = 'https://api.open-meteo.com/v1/forecast';
 const AIR_QUALITY_API = 'https://air-quality-api.open-meteo.com/v1/air-quality';
 
+// ===== URL QUERY PARAMETERS =====
+const WEATHER_CURRENT_PARAMS = 'current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m,surface_pressure,uv_index,visibility';
+const WEATHER_HOURLY_PARAMS = 'hourly=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m';
+const WEATHER_OPTIONS_PARAMS = `forecast_days=${DEFAULT_FORECAST_DAYS}&temperature_unit=celsius&wind_speed_unit=kmh&precipitation_unit=mm&timezone=auto`;
+const AQI_CURRENT_PARAMS = 'current=us_aqi,pm2_5,european_aqi';
+
 // ===== AIR QUALITY RATE LIMITER =====
-// The AQI API has strict rate limits (likely similar to NWS: 1 req/sec, burst of 3)
 const _aqiRateLimiter = {
   lastRequestTime: 0,
   burstCount: 0,
@@ -28,7 +39,7 @@ const _aqiRateLimiter = {
     return new Promise(resolve => {
       const check = () => {
         if (this._checkBurst()) resolve();
-        else setTimeout(check, 50);
+        else setTimeout(check, BURST_POLL_INTERVAL_MS);
       };
       check();
     });
@@ -38,12 +49,10 @@ const _aqiRateLimiter = {
     const now = Date.now();
     const timeSinceLast = now - this.lastRequestTime;
 
-    // If we're within the burst window and at max burst, wait
     if (timeSinceLast < this.burstWindowMs && !this._checkBurst()) {
       await this._waitForBurst();
     }
 
-    // Ensure minimum interval between requests
     if (timeSinceLast < this.minIntervalMs) {
       await new Promise(r => setTimeout(r, this.minIntervalMs - timeSinceLast));
     }
@@ -55,15 +64,12 @@ const _aqiRateLimiter = {
 };
 
 // ===== CROSS-SOURCE LOOKUP FUNCTIONS =====
-// Simplified: only look up weather data from NWS when OM is missing.
-// AQI cross-source lookup removed — NWS doesn't provide AQI, and OM handles it.
+// Check NWS cache keys for weather data (NWS doesn't provide AQI).
 
 function crossSourceGetWeather(lat, lon) {
-  // Try NWS point cache key (which contains full weather object)
   const nwsPoint = DataCache.get(nwsPointCacheKey(lat, lon), 'nwsPoint');
   if (nwsPoint && nwsPoint.weather) return { data: nwsPoint, source: 'nws' };
 
-  // Try NWS city data key (which contains full weather object)
   const nwsCityData = DataCache.get(nwsCacheKey(lat, lon), 'nwsCityData');
   if (nwsCityData && nwsCityData.weather) return { data: nwsCityData, source: 'nws' };
 
@@ -87,7 +93,7 @@ function aqiCacheKey(lat, lon) {
 
 // ===== RETRY HELPER =====
 // Retry a fetch with exponential backoff. Handles HTTP 429 (rate limit) specially.
-async function retryWithBackoff(fn, maxRetries = 3, baseDelay = 1000) {
+async function retryWithBackoff(fn, maxRetries = MAX_RETRIES, baseDelay = BASE_RETRY_DELAY_MS) {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       const result = await fn();
@@ -110,6 +116,16 @@ async function retryWithBackoff(fn, maxRetries = 3, baseDelay = 1000) {
 }
 
 // ===== OPEN-METEO SPECIFIC HELPERS =====
+
+// Parse AQI fields from a response object, handling both flat and nested (current) formats.
+function parseAqiFields(raw) {
+  return {
+    us_aqi: raw?.current?.us_aqi ?? raw?.us_aqi ?? null,
+    pm2_5: raw?.current?.pm2_5 ?? raw?.pm2_5 ?? null,
+    european_aqi: raw?.current?.european_aqi ?? raw?.european_aqi ?? null,
+  };
+}
+
 // Known keys that are NOT hourly variable data
 const KNOWN_NON_HOURLY_KEYS = new Set([
   'latitude', 'longitude', 'elevation',
@@ -129,8 +145,7 @@ function extractHourlyKeys(raw) {
 }
 
 // ===== DEDUPLICATION =====
-// Deduplicate city results by coordinate pair (keep first entry per coordinate pair)
-// Prefer entries with a non-null place_id when there's a tie
+
 function deduplicateResults(results) {
   const seenCoords = new Map();
   const deduped = [];
@@ -142,21 +157,15 @@ function deduplicateResults(results) {
       continue;
     }
     const coordKey = `${lat},${lon}`;
-    let isDup = false;
-    for (const [existingKey, existingEntry] of seenCoords) {
-      const [exLat, exLon] = existingKey.split(',').map(Number);
-      if (Math.abs(lat - exLat) < 0.01 && Math.abs(lon - exLon) < 0.01) {
-        isDup = true;
-        // Prefer the entry with a non-null place_id
-        if (!existingEntry.place_id && entry.place_id) {
-          seenCoords.set(existingKey, entry);
-          const dupIdx = deduped.findIndex(d => d === existingEntry);
-          if (dupIdx !== -1) deduped[dupIdx] = entry;
-        }
-        break;
+    if (seenCoords.has(coordKey)) {
+      // Prefer the entry with a non-null place_id
+      const existingEntry = seenCoords.get(coordKey);
+      if (!existingEntry.place_id && entry.place_id) {
+        const dupIdx = deduped.findIndex(d => d === existingEntry);
+        if (dupIdx !== -1) deduped[dupIdx] = entry;
+        seenCoords.set(coordKey, entry);
       }
-    }
-    if (!isDup) {
+    } else {
       seenCoords.set(coordKey, entry);
       deduped.push(entry);
     }
@@ -164,7 +173,7 @@ function deduplicateResults(results) {
   return deduped;
 }
 
-// Deduplicate cities by coordinate pair (for deduplication BEFORE the API call)
+// Deduplicate cities by coordinate pair (before the API call).
 function deduplicateCities(cities) {
   const seenCoords = new Set();
   const deduped = [];
@@ -185,8 +194,8 @@ function deduplicateCities(cities) {
 }
 
 // ===== REQUEST DEDUPLICATION =====
-// Prevent duplicate bulk fetches for the same city set
-const _pendingWeatherFetch = new Map(); // key (sorted lat,lon pairs) → Promise
+// Prevent duplicate bulk fetches for the same city set.
+const _pendingWeatherFetch = new Map();
 
 function getPendingWeatherFetch(cities) {
   const key = cities.map(c => `${DataCache._roundCoord(c.latitude)},${DataCache._roundCoord(c.longitude)}`).sort().join('|');
@@ -207,55 +216,34 @@ function clearPendingWeatherFetch(key) {
 
 // ===== PER-CITY WEATHER FETCH (for incremental updates) =====
 async function fetchWeatherForCity(city) {
-  // Check consolidated cache first
   const cacheKey = weatherAqiCacheKey(city.latitude, city.longitude);
-  
   const cached = DataCache.get(cacheKey, 'weatherAqi');
   if (cached) {
     return { ...city, source: 'open-meteo', weather: cached.weather, aqi: cached.aqi };
   }
-  
-  // Check cross-source: NWS data can serve as OM weather data
   const crossSource = crossSourceGetWeather(city.latitude, city.longitude);
   if (crossSource && crossSource.data.weather) {
     return { ...city, source: crossSource.source, weather: crossSource.data.weather, aqi: {} };
   }
-  
-  // Fetch weather for single city (with AQI rate limiting)
   try {
     await _aqiRateLimiter.waitForSlot();
-    
-    const weatherUrl = `${WEATHER_API}?latitude=${city.latitude}&longitude=${city.longitude}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m,surface_pressure,uv_index,visibility&hourly=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m&forecast_days=2&temperature_unit=celsius&wind_speed_unit=kmh&precipitation_unit=mm&timezone=auto`;
-    
+    const weatherUrl = `${WEATHER_API}?latitude=${city.latitude}&longitude=${city.longitude}&${WEATHER_CURRENT_PARAMS}&${WEATHER_HOURLY_PARAMS}&${WEATHER_OPTIONS_PARAMS}`;
     const weatherRes = await retryWithBackoff(() => fetch(weatherUrl));
     if (!weatherRes.ok) {
       return { ...city, source: 'open-meteo', weather: null, aqi: {} };
     }
-    
     const weatherAll = await weatherRes.json();
-    
-    // Parse single-city weather response (flat object, no results array)
     const cityWeather = {
       current: weatherAll.current || {},
       hourly: weatherAll.hourly || { time: [] },
     };
-    
-    // Fetch AQI for single city (with rate limiting)
     await _aqiRateLimiter.waitForSlot();
-    const aqiUrl = `${AIR_QUALITY_API}?latitude=${city.latitude}&longitude=${city.longitude}&current=us_aqi,pm2_5,european_aqi&timezone=auto`;
+    const aqiUrl = `${AIR_QUALITY_API}?latitude=${city.latitude}&longitude=${city.longitude}&${AQI_CURRENT_PARAMS}&timezone=auto`;
     const aqiRes = await retryWithBackoff(() => fetch(aqiUrl));
     const aqiData = await aqiRes.json();
-    
-    // Parse single-city AQI response (flat object, no results array)
-    const cityAqi = {
-      us_aqi: aqiData.current?.us_aqi ?? aqiData.us_aqi ?? null,
-      pm2_5: aqiData.current?.pm2_5 ?? aqiData.pm2_5 ?? null,
-      european_aqi: aqiData.current?.european_aqi ?? aqiData.european_aqi ?? null,
-    };
-    
-    // Store consolidated cache
+
+    const cityAqi = parseAqiFields(aqiData);
     DataCache.set(cacheKey, { weather: cityWeather, aqi: cityAqi }, 'weatherAqi');
-    
     return { ...city, source: 'open-meteo', weather: cityWeather, aqi: cityAqi };
   } catch (err) {
     console.error(`[fetchWeatherForCity] Failed for ${city.name}:`, err);
@@ -311,7 +299,7 @@ async function fetchWeatherForCities(cities) {
 
   // Build combined weather + AQI URL for deduplicated uncached cities only
   try {
-    const weatherUrl = `${WEATHER_API}?latitude=${dedupedUncached.map(c => c.latitude).join(',')}&longitude=${dedupedUncached.map(c => c.longitude).join(',')}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m,surface_pressure,uv_index,visibility&hourly=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m&forecast_days=2&temperature_unit=celsius&wind_speed_unit=kmh&precipitation_unit=mm&timezone=auto`;
+    const weatherUrl = `${WEATHER_API}?latitude=${dedupedUncached.map(c => c.latitude).join(',')}&longitude=${dedupedUncached.map(c => c.longitude).join(',')}&${WEATHER_CURRENT_PARAMS}&${WEATHER_HOURLY_PARAMS}&${WEATHER_OPTIONS_PARAMS}`;
 
     // Retry logic for weather API (handles 429)
     const weatherRes = await retryWithBackoff(() => fetch(weatherUrl));
@@ -328,7 +316,7 @@ async function fetchWeatherForCities(cities) {
 
     // Rate-limit the AQI request too
     await _aqiRateLimiter.waitForSlot();
-    const aqiUrl = `${AIR_QUALITY_API}?latitude=${dedupedUncached.map(c => c.latitude).join(',')}&longitude=${dedupedUncached.map(c => c.longitude).join(',')}&current=us_aqi,pm2_5,european_aqi&timezone=auto`;
+    const aqiUrl = `${AIR_QUALITY_API}?latitude=${dedupedUncached.map(c => c.latitude).join(',')}&longitude=${dedupedUncached.map(c => c.longitude).join(',')}&${AQI_CURRENT_PARAMS}&timezone=auto`;
     const aqiRes = await retryWithBackoff(() => fetch(aqiUrl));
     const aqiData = await aqiRes.json();
 
@@ -377,11 +365,7 @@ async function fetchWeatherForCities(cities) {
         // AQI from results array
         if (hasAqiResultsArray) {
           const aqiRaw = aqiData.results[wIdx] || {};
-          aqiResult = {
-            us_aqi: aqiRaw.current?.us_aqi ?? aqiRaw.us_aqi ?? null,
-            pm2_5: aqiRaw.current?.pm2_5 ?? aqiRaw.pm2_5 ?? null,
-            european_aqi: aqiRaw.current?.european_aqi ?? aqiRaw.european_aqi ?? null,
-          };
+          aqiResult = parseAqiFields(aqiRaw);
         } else {
           aqiResult = { us_aqi: null, pm2_5: null, european_aqi: null };
         }
@@ -396,11 +380,7 @@ async function fetchWeatherForCities(cities) {
         };
         if (Array.isArray(aqiData)) {
           const aqiRaw = aqiData[i] || {};
-          aqiResult = {
-            us_aqi: aqiRaw.current?.us_aqi ?? aqiRaw.us_aqi ?? null,
-            pm2_5: aqiRaw.current?.pm2_5 ?? aqiRaw.pm2_5 ?? null,
-            european_aqi: aqiRaw.current?.european_aqi ?? aqiRaw.european_aqi ?? null,
-          };
+          aqiResult = parseAqiFields(aqiRaw);
         } else {
           aqiResult = { us_aqi: null, pm2_5: null, european_aqi: null };
         }
@@ -412,11 +392,7 @@ async function fetchWeatherForCities(cities) {
           hourly: raw.hourly || { time: [] },
         };
         if (aqiData && !hasAqiResultsArray) {
-          aqiResult = {
-            us_aqi: aqiData.current?.us_aqi ?? aqiData.us_aqi ?? null,
-            pm2_5: aqiData.current?.pm2_5 ?? aqiData.pm2_5 ?? null,
-            european_aqi: aqiData.current?.european_aqi ?? aqiData.european_aqi ?? null,
-          };
+          aqiResult = parseAqiFields(aqiData);
         } else {
           aqiResult = { us_aqi: null, pm2_5: null, european_aqi: null };
         }
