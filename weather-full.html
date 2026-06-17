@@ -120,6 +120,51 @@ body {
   background: rgba(70, 130, 255, 0.3);
 }
 
+/* ===== DEBUG LOCATION SELECT ===== */
+#debug-location-select {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.12);
+  color: #fff;
+  padding: 0.3rem 1.2rem 0.3rem 0.6rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-family: inherit;
+  transition: background 0.2s, transform 0.1s, border-color 0.2s;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23ffffff' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 6px center;
+  background-size: 10px;
+  min-width: auto;
+}
+
+#debug-location-select:hover {
+  background-color: rgba(255,255,255,0.15);
+}
+
+#debug-location-select:active {
+  transform: scale(0.96);
+}
+
+#debug-location-select:focus {
+  outline: none;
+  border-color: rgba(70,130,255,0.6);
+  box-shadow: 0 0 0 2px rgba(70,130,255,0.2);
+}
+
+#debug-location-select option {
+  background: rgba(20, 25, 40, 0.95);
+  color: #fff;
+  padding: 0.4rem 0.6rem;
+}
+
+#debug-location-select option:checked {
+  background: rgba(70, 130, 255, 0.3);
+}
+
 .location-display {
   margin-left: auto;
   font-size: 0.85rem;
@@ -2207,15 +2252,15 @@ body.donkey-fullscreen .donkey-panel.donkey-hidden {
    <button id="game-btn" class="btn btn-small" title="Donkey Runner Minigame">🫏</button>
    <button id="fullscreen-btn" class="btn btn-small" title="Toggle fullscreen" style="display:none;">⛶</button>
   <span id="user-location" class="location-display"></span>
-  <div id="debug-locations" style="display:flex;gap:4px;align-items:center;">
-    <span style="font-size:0.65rem;color:rgba(255,255,255,0.3);margin-right:2px;">Test:</span>
-    <button class="btn btn-small debug-loc-btn" data-lat="25.2854" data-lon="51.5310" data-name="Qatar" title="Qatar">Qatar</button>
-    <button class="btn btn-small debug-loc-btn" data-lat="24.4539" data-lon="54.3773" data-name="Abu Dhabi" title="Abu Dhabi">Abu Dhabi</button>
-    <button class="btn btn-small debug-loc-btn" data-lat="50.1109" data-lon="8.6821" data-name="Frankfurt" title="Frankfurt">Frankfurt</button>
-    <button class="btn btn-small debug-loc-btn" data-lat="33.4709" data-lon="-81.9648" data-name="Augusta" title="Augusta, GA">Augusta</button>
-    <button class="btn btn-small debug-loc-btn" data-lat="42.3601" data-lon="-71.0589" data-name="Boston" title="Boston, MA">Boston</button>
-    <button class="btn btn-small debug-loc-btn" data-lat="35.2271" data-lon="-80.8431" data-name="Charlotte" title="Charlotte, NC">Charlotte</button>
-  </div>
+  <select id="debug-location-select" class="btn btn-small debug-location-select" title="Select test location">
+    <option value="local">Local</option>
+    <option value="25.2854:51.5310">Qatar</option>
+    <option value="24.4539:54.3773">Abu Dhabi</option>
+    <option value="50.1109:8.6821">Frankfurt</option>
+    <option value="33.4709:-81.9648">Augusta, GA</option>
+    <option value="42.3601:-71.0589">Boston, MA</option>
+    <option value="35.2271:-80.8431">Charlotte, NC</option>
+  </select>
 </header>
 
 <!-- Local sensor bar (populated by js/local-sensor.js) -->
@@ -9792,25 +9837,25 @@ document.addEventListener('DOMContentLoaded', () => {
     }, CHART_RESIZE_DEBOUNCE_MS);
   });
 
-   // Debug location preset buttons
-   document.querySelectorAll('.debug-loc-btn').forEach(btn => {
-     btn.addEventListener('click', async () => {
-       const lat = parseFloat(btn.dataset.lat);
-       const lon = parseFloat(btn.dataset.lon);
-       const name = btn.dataset.name;
-       userLocation = { lat, lon };
-       const locEl = document.getElementById('user-location');
-       if (locEl) {
-         const latDir = lat >= 0 ? 'N' : 'S';
-         const lonDir = lon >= 0 ? 'E' : 'W';
-         locEl.textContent = `\u{1F4CD} ${Math.abs(lat).toFixed(2)}\u00B0${latDir}, ${Math.abs(lon).toFixed(2)}\u00B0${lonDir} (${name})`;
+   // Debug location select
+   const debugSel = document.getElementById('debug-location-select');
+   if (debugSel) {
+     debugSel.addEventListener('change', async () => {
+       const val = debugSel.value;
+
+       if (val === 'local') {
+         // Clear cached userLocation so getLocation() re-fetches fresh browser geolocation
+         userLocation = null;
+       } else {
+         const [lat, lon] = val.split(':').map(Number);
+         userLocation = { lat, lon };
        }
-       // Clear nearby cache so fresh results are fetched for new location
+
        _nearbyCache = null;
        _nearbyCacheTime = 0;
        await run();
      });
-   });
+   }
 
    // Toggle network outage retry when pressing the refresh button while offline
    // (already handled above in checkNetwork)
