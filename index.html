@@ -6,9 +6,11 @@
 <title>hasWeather</title>
 <link rel="icon" href="hasWeather-low.png" type="image/png">
 <link rel="stylesheet" href="css/main.css">
-<link rel="stylesheet" href="css/radar-player.css">
 </head>
 <body translate="no">
+
+<!-- Radar background (fixed, behind everything) -->
+<div id="radar-background"></div>
 
 <canvas id="particle-canvas"></canvas>
 
@@ -37,8 +39,6 @@
   <!-- City cards injected here -->
 </main>
 
-<!-- Radar card container (outside city grid, centered) -->
-<div id="radar-card-container" class="radar-card-wrapper"></div>
 
 <script src="weather-local.js"></script>
 <script src="js/constants.js"></script>
@@ -49,7 +49,6 @@
 <script src="js/api-openstreetmap.js"></script>
 <script src="js/api-nws.js"></script>
 <script src="js/api-radar.js"></script>
-<script src="js/radar-player.js"></script>
 <script src="js/render.js"></script>
 <script src="js/charts.js"></script>
   <script src="js/network-monitor.js"></script>

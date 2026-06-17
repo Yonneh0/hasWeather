@@ -85,10 +85,10 @@ async function run() {
   // Render placeholder cards while requests are in flight
   renderPlaceholderCards(allCities);
   
-  // Start radar card loading as soon as location is known
-  if (userLocation) {
-    loadRadarCard(userLocation.lat, userLocation.lon);
-  }
+   // Load radar image as page background
+   if (userLocation) {
+     loadRadarBackground(userLocation.lat, userLocation.lon);
+   }
 
   // Fetch OM weather data
   const omResults = await Promise.allSettled(
@@ -152,212 +152,51 @@ async function run() {
 
 }
 
-// ===== RADAR PLAYER =====
-async function loadRadarCard(lat, lon) {
-  const container = document.getElementById('radar-card-container');
-  if (!container) return;
+// ===== RADAR BACKGROUND =====
+async function loadRadarBackground(lat, lon) {
+  const bg = document.getElementById('radar-background');
+  if (!bg) return;
 
-  // Build radar player HTML
-  const layerOptions = Object.entries(RADAR_LAYERS).map(([key, value]) => 
-    `<option value="${value}" ${value === RADAR_DEFAULT_LAYER ? 'selected' : ''}>${key.replace('_', ' ')}</option>`
-  ).join('');
-
-  const speedOptions = (window.SPEED_OPTIONS || [0.5, 1, 2, 4, 8]).map((speed, idx) => 
-    `<option value="${speed}" ${idx === 1 ? 'selected' : ''}>${speed}x</option>`
-  ).join('');
-
-  container.innerHTML = `
-    <div id="radar-player-card" class="radar-fade-in">
-      <!-- Titlebar -->
-      <div class="radar-player-header">
-        <!-- Left: Title + Timestamp -->
-        <div class="radar-header-section radar-header-left">
-          <span class="radar-player-title">Radar</span>
-          <span class="radar-timestamp" id="radar-timestamp">--:--</span>
-        </div>
-        
-        <!-- Center: Layer + Speed -->
-        <div class="radar-header-section radar-header-center">
-          <select class="radar-layer-select" id="radar-layer-select" title="Radar layer">${layerOptions}</select>
-          <select class="radar-speed-select" id="radar-speed-select" title="Playback speed">${speedOptions}</select>
-        </div>
-        
-        <!-- Right: Tools -->
-        <div class="radar-header-section radar-header-right">
-          <button class="radar-btn radar-btn-pins radar-tooltip" id="radar-pins-btn" data-tooltip="Toggle location pins" title="Pins">📌</button>
-          <button class="radar-btn radar-fullscreen-btn radar-tooltip" id="radar-fullscreen-btn" data-tooltip="Toggle fullscreen">⛶</button>
-        </div>
-        
-        <!-- Coordinate readout section (injected by JS) -->
-        <div id="radar-coord-readout-section" class="radar-header-section"></div>
-      </div>
-      
-      <!-- Canvas Display -->
-      <div id="radar-canvas-container" class="radar-canvas-container">
-        <canvas id="radar-canvas"></canvas>
-        <div class="radar-loading-overlay" id="radar-loading-overlay">
-          <div class="radar-spinner"></div>
-          <span class="radar-loading-text" id="radar-loading-text">Loading radar...</span>
-        </div>
-      </div>
-      
-      <!-- Bottom Controls: Prefetch + Playback + Timeline -->
-      <div class="radar-bottom-controls">
-        <!-- Prefetch bar -->
-        <div class="radar-prefetch-row">
-          <div class="radar-prefetch-bar">
-            <div class="radar-prefetch-progress" id="radar-prefetch-progress" style="width: 0%"></div>
-          </div>
-          <span class="radar-prefetch-text" id="radar-frame-count-text">0/0 frames</span>
-        </div>
-        
-        <!-- Playback row -->
-        <div class="radar-playback-row">
-          <button class="radar-btn radar-btn-play radar-tooltip" id="radar-play-btn" data-tooltip="Play/Pause (Space)">▶</button>
-          <button class="radar-btn radar-zoom-level-btn radar-tooltip" id="radar-zoom-out-btn" data-tooltip="Zoom out (-)">−</button>
-          <span class="radar-zoom-text" id="radar-zoom-text">100%</span>
-          <button class="radar-btn radar-zoom-level-btn radar-tooltip" id="radar-zoom-in-btn" data-tooltip="Zoom in (+)">+</button>
-          <button class="radar-btn radar-tooltip" id="radar-reset-btn" data-tooltip="Reset view (0)">⟲</button>
-          <button class="radar-btn radar-load-all-btn radar-tooltip" id="radar-load-all-btn" data-tooltip="Load all cached frames">Load All Frames</button>
-          <div class="radar-playback-spacer"></div>
-          <span class="radar-time-range" id="radar-time-range">--:-- — --:--</span>
-        </div>
-        
-        <!-- Timeline scrubber -->
-        <div class="radar-timeline-progress-bar" id="radar-timeline-progress-bar">
-          <div class="radar-timeline-progress" id="radar-timeline-progress" style="width: 0%"></div>
-        </div>
-        
-        <!-- Timeline dots -->
-        <div class="radar-timeline-track">
-          <div class="radar-timeline" id="radar-timeline"></div>
-        </div>
-      </div>
-    </div>`;
-
-  // Bind events
-  bindRadarPlayerEvents();
-
-  // Initialize radar player engine
-  if (window.RADAR_PLAYER) {
-    window.RADAR_PLAYER.init(lat, lon);
+  // Fetch image (uses cache if available)
+  const dataUrl = await window.fetchCurrentRadarImage(lat, lon);
+  if (!dataUrl) {
+    console.warn('[Radar] No background image loaded');
+    return;
   }
+
+  // Replace white pixels with transparency on a canvas, then set as background
+  makeWhiteTransparent(dataUrl, (transparentUrl) => {
+    bg.style.backgroundImage = `url(${transparentUrl})`;
+    bg.style.backgroundSize = 'cover';
+    bg.style.backgroundPosition = 'center';
+    bg.style.backgroundRepeat = 'no-repeat';
+  });
 }
 
-function bindRadarPlayerEvents() {
-  const container = document.getElementById('radar-card-container');
-  if (!container) return;
+// Process image to replace white pixels with transparency
+function makeWhiteTransparent(dataUrl, callback) {
+  const img = new Image();
+  img.onload = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0);
 
-  // Play/Pause button
-  const playBtn = document.getElementById('radar-play-btn');
-  if (playBtn) {
-    playBtn.addEventListener('click', () => {
-      if (window.RADAR_PLAYER) window.RADAR_PLAYER.togglePlayback();
-    });
-  }
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
 
-  // Speed selector
-  const speedSelect = document.getElementById('radar-speed-select');
-  if (speedSelect) {
-    speedSelect.addEventListener('change', (e) => {
-      e.stopPropagation();
-      if (!window.RADAR_PLAYER) return;
-      const state = window.RADAR_PLAYER.getState();
-      state.speed = parseFloat(e.target.value);
-      // If playing, restart the playback loop with new speed
-      if (state.isPlaying) {
-        window.RADAR_PLAYER.stopPlayback();
-        window.RADAR_PLAYER.togglePlayback();
+    // Replace white pixels (R,G,B > 240) with full transparency
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i] > 240 && data[i + 1] > 240 && data[i + 2] > 240) {
+        data[i + 3] = 0; // alpha = 0
       }
-    });
-  }
-
-  // Zoom in button
-  const zoomInBtn = document.getElementById('radar-zoom-in-btn');
-  if (zoomInBtn) {
-    zoomInBtn.addEventListener('click', () => {
-      if (window.RADAR_PLAYER) window.RADAR_PLAYER.zoomIn();
-    });
-  }
-
-  // Zoom out button
-  const zoomOutBtn = document.getElementById('radar-zoom-out-btn');
-  if (zoomOutBtn) {
-    zoomOutBtn.addEventListener('click', () => {
-      if (window.RADAR_PLAYER) window.RADAR_PLAYER.zoomOut();
-    });
-  }
-
-  // Reset view button
-  const resetBtn = document.getElementById('radar-reset-btn');
-  if (resetBtn) {
-    resetBtn.addEventListener('click', () => {
-      if (window.RADAR_PLAYER) window.RADAR_PLAYER.resetView();
-    });
-  }
-
-  // Layer selector
-  const layerSelect = document.getElementById('radar-layer-select');
-  if (layerSelect) {
-    layerSelect.addEventListener('change', async (e) => {
-      e.stopPropagation();
-      if (!window.RADAR_PLAYER) return;
-      await window.RADAR_PLAYER.switchLayer(e.target.value);
-    });
-  }
-
-  // Load all frames button
-  const loadAllBtn = document.getElementById('radar-load-all-btn');
-  if (loadAllBtn) {
-    loadAllBtn.addEventListener('click', async () => {
-      if (!window.RADAR_PLAYER) return;
-      const state = window.RADAR_PLAYER.getState();
-      // Pre-fetch all remaining frames
-      for (let i = 0; i < state.allTimestamps.length; i++) {
-        const timestamp = state.allTimestamps[i];
-        const cached = await getCachedRadarFrameAsDataURL(state.lat, state.lon, state.layer, timestamp);
-        if (!cached) {
-          await fetchRadarImageForTimestamp(state.lat, state.lon, state.layer, timestamp);
-        }
-      }
-    });
-  }
-
-  // Fullscreen button
-  const fullscreenBtn = document.getElementById('radar-fullscreen-btn');
-  if (fullscreenBtn) {
-    fullscreenBtn.addEventListener('click', () => {
-      if (window.RADAR_PLAYER) window.RADAR_PLAYER.toggleFullscreen();
-    });
-  }
-
-  // Pin toggle button
-  const pinsBtn = document.getElementById('radar-pins-btn');
-  if (pinsBtn) {
-    pinsBtn.addEventListener('click', () => {
-      if (window.RADAR_PLAYER) window.RADAR_PLAYER.togglePins();
-    });
-  }
-
-  // Update pins when weather data changes
-  const updatePinsObserver = new MutationObserver(() => {
-    if (weatherData.length > 0 && userLocation && window.RADAR_PLAYER) {
-      window.RADAR_PLAYER.updatePins(weatherData, userLocation);
     }
-  });
-  
-  // Observe city-grid for changes to trigger pin updates
-  const cityGrid = document.getElementById('city-grid');
-  if (cityGrid) {
-    updatePinsObserver.observe(cityGrid, { childList: true, subtree: true });
-  }
-  
-  // Also update pins after weather data loads
-  if (weatherData.length > 0 && userLocation && window.RADAR_PLAYER) {
-    setTimeout(() => {
-      window.RADAR_PLAYER.updatePins(weatherData, userLocation);
-    }, 500);
-  }
+
+    ctx.putImageData(imageData, 0, 0);
+    callback(canvas.toDataURL('image/png'));
+  };
+  img.src = dataUrl;
 }
 
 // ===== GAME TOGGLE =====

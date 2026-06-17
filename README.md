@@ -7,7 +7,7 @@ completely self-contained single file weather app, that uses public sources, wit
 - Multiple city monitoring in a responsive grid layout (configurable up to 6 cities)
 - Dual data source architecture: Open-Meteo as base for all cities, NWS as supplemental where available (enhanced mode)
 - Weather data from Open-Meteo API (temperature, humidity, wind, precipitation, UV index, visibility, surface pressure, air quality, 24-hour hourly forecast) + NWS API (current conditions, hourly forecast, alerts)
-- Radar imagery from NOAA/NCEP GeoServer WMS — MRMS composite radar data with enhanced player (Base Reflectivity, Composite Reflectivity, Echo Tops, Precipitation Type) including timeline scrubbing, zoom-to-point, keyboard shortcuts, and Cache API storage
+- Radar imagery from NOAA/NCEP GeoServer WMS — current MRMS base reflectivity image displayed as a page background with white-to-transparent processing
 - localStorage-based caching with configurable TTLs per data type (15 min for weather/AQI, 24h for geocoding/IP, 10 min for nearby cities) and LRU eviction (default: 500 entries per type)
 - Nearby city discovery via Nominatim with bearing-based diversity selection and automatic display of up to 6 nearest cities
 - °F/°C unit toggle with debouncing
@@ -23,7 +23,6 @@ completely self-contained single file weather app, that uses public sources, wit
 - Particle canvas background animation
 - Network outage detection on initial load with comical animated error panel, progress bar, and auto-retry cycle
 - **Local Sensor Bar** — Real-time local weather station data display (temperature, feels-like, dewpoint, wind speed/gust/direction, humidity, pressure, GPS coordinates, UV index, visibility, rainfall, solar radiation, soil moisture) with auto-refresh and TTL expiry
-- **Enhanced Radar Player** — Timeline scrubbing (mouse/touch), zoom-to-point (scroll wheel), keyboard shortcuts (Space/play, +/-/zoom, 0/reset, arrows/frame), fullscreen mode, double-click reset, prefetch progress bar, "Load All Frames" button
 - **Ghost Chart Overlay** — When NWS data is available, parallel NWS data shown as blue-tinted ghost elements: ghost temperature, ghost weather icon, ghost details grid values, ghost hourly forecast, and ghost merged chart canvas
 - **Cross-source Data Model** — Three states: `open-meteo` (OM-only), `nws` (NWS-only), `enhanced` (OM base + NWS supplemental). Field-level merging where missing OM fields are filled from NWS cache and vice versa
 - **Donkey Runner Minigame** — Chrome dinosaur-style endless runner with extensive features: animated donkey character, backflip on rare jumps, double-jump with fart sound effect, stumble mechanic (donkey trips for 2 seconds), property damage bonus (+100 points when knocking obstacles while stumbling), near-miss detection (+50 points), snarky message system (50+ messages across 20 event types), procedural sound effects (jump, double-jump/fart, game over, milestone, near-miss, land, ceiling), day/night cycle, air-based obstacles (jet, falling rock, drone), obstacle count tracking on game over screen with SVG icons, post-game stats breakdown (run time, air time, jump stats), corner stat blocks, fullscreen mode, sound toggle with localStorage persistence
@@ -89,21 +88,19 @@ css/
   card-components.css  436 lines — card display components (city card, hourly forecast, canvas charts)
    interactive.css      410 lines — interactive elements (SVG weather icons, network outage panel)
   donkey-runner.css    740 lines — minigame panel styling & animations
-  radar-player.css     350+ lines — radar player UI with zoom, pan, timeline, playback controls
 js/
   api-nws.js          824 lines — NWS API client (gridpoint data, observation stations, alerts, snowfall/ice accumulation parsing, sky cover, cross-source lookup) with rate limiting and exponential backoff for 429 responses
   api-openmeteo.js     428 lines — Open-Meteo weather/AQI API client with consolidated cache keys, per-city incremental fetch, request deduplication, and cross-source NWS fallback
   api-openstreetmap.js 181 lines — Nominatim/OSM nearby city discovery with bearing-based diversity selection
-  api-radar.js         856 lines — NOAA/NCEP GeoServer WMS radar API client (MRMS composite imagery, Cache API storage, request deduplication, MGRS/UTM/DMS/geohash coordinate conversion)
+   api-radar.js          140 lines — NOAA/NCEP GeoServer WMS radar API client (single-image fetch with localStorage caching, white-to-transparent processing)
   cache.js             247 lines — DataCache (localStorage caching with configurable TTLs per type and LRU eviction, NWS toggle state persistence)
    charts.js            481 lines — canvas chart rendering (merged chart, combined chart, ghost NWS overlay charts, particles) with named constants and shared helpers
   constants.js          72 lines — shared constants (WMO codes & gradients)
   donkey-runner.js    2581 lines — Donkey Runner minigame engine (canvas-based runner with extensive features)
   icons.js             289 lines — animated SVG weather icons
   local-sensor.js      704 lines — Local Sensor Bar for displaying local weather station data (15 sensor types, flexible unit parsing, auto-refresh with exponential backoff, TTL expiry, page visibility awareness, health checks)
-  main.js              252 lines — entry point (state + DOM init + event bindings + game toggle + radar player + run orchestration)
+   main.js              252 lines — entry point (state + DOM init + event bindings + game toggle + radar background + run orchestration)
   network-monitor.js   331 lines — network outage detection, animated error panel, auto-retry
-  radar-player.js      1202 lines — Radar Player engine (zoom, pan, timeline scrubbing, playback state management, pin rendering with animation, coordinate readout with MGRS/UTM/DMS conversion, fullscreen mode, layer switching)
   render.js            518 lines — DOM rendering (placeholder cards, incremental OM/NWS updates, full card render with ghost NWS overlay, chart coordination) using named constants
   utils.js             213 lines — utility functions (unit conversion, haversine, bearing, wind compass, AQI labeling, day/night check, IP-based location, NWS bounds check, background refresh, unit toggle)
 rag-docs/
@@ -164,30 +161,11 @@ When the cache exceeds `DataCache.MAX_ENTRIES_PER_TYPE` (default: 500 entries pe
 
 ### Radar Cache Architecture
 
-Radar images use **Browser Cache API** (CacheStorage) instead of localStorage — binary images (~100-300KB each as PNG) are stored directly in CacheStorage with frame-based keys for future animated clip playback. Metadata (available timestamps, layer info) is tracked in localStorage.
-
-- **Cache API key pattern:** `https://radar.hasweather.local/frame/{lat}/{lon}/{layer}/frame/{timestamp}`
-- **localStorage metadata:** `hasw_cache_radar_meta_{lat}_{lon}_{layer}` — `{ timestamps: [...], layer, lat, lon, lastUpdated }`
-- **Cache eviction:** ~250MB total limit — evicts oldest frames when exceeded
+The radar background uses a single cached image stored in localStorage with a 5-minute TTL. The cache key pattern is `hasw_radar_current_{lat}_{lon}` and stores the data URL along with a timestamp for expiry checking.
 
 ### NWS Toggle State Persistence
 
 The app persists per-city NWS toggle state in localStorage (`hasW_nwsActive`) — entries are intentionally NOT cleaned up when cities are removed, preserving user preference across removal/re-addition. This has negligible storage impact (~30 bytes per entry).
-
-### Radar Player Features
-
-The radar player provides an enhanced radar viewing experience with the following features:
-
-- **Timeline Scrubbing** — Click or drag on the progress bar to scrub through time. Touch support included for mobile devices.
-- **Zoom-to-Point** — Scroll wheel zooms toward cursor position for precise location focus. Double-click resets the view.
-- **Keyboard Shortcuts** — Space (play/pause), +/- (zoom in/out), 0 (reset view), arrow keys (pan to adjacent frame).
-- **Fullscreen Mode** — Toggle fullscreen view for immersive radar viewing.
-- **Layer Selector** — Dropdown to switch between Base Reflectivity, Composite Reflectivity, Echo Tops, and Precipitation Type layers.
-- **Request Deduplication** — Prevents duplicate WMS fetches for the same location/layer/timestamp via Map-based pending fetch tracking.
-- **Exponential Backoff Retry** — 3 retries with 1s/2s/4s delays for failed WMS requests.
-- **Size-Based Cache Eviction** — ~250MB total limit — evicts oldest frames when limit is exceeded.
-- **Prefetch Progress Bar** — Shows progress of frame pre-fetching on load.
-- **Load All Frames Button** — Manually load all remaining uncached frames.
 
 Additional `localStorage` keys used by the app:
 
@@ -196,9 +174,9 @@ Additional `localStorage` keys used by the app:
 | `hasW_maxCities`        | User-configured max city count (default: 6) |
 | `hasW_donkeyHighScore`  | Donkey Runner minigame high score         |
 | `hasW_nwsActive`          | Per-city NWS toggle state persistence       |
-| `hasw_cache_radar_meta_*` | Radar frame timestamps per location/layer |
+| `hasw_radar_current_*`  | Cached radar background image (5min TTL)    |
 
-Clear all cached data via browser dev tools → Application → Local Storage → remove keys starting with `hasw_cache_`, `hasw_lru_`, or `hasW_`. For radar cache, also clear Cache Storage entries in the `hasw-radar-v1` cache.
+Clear all cached data via browser dev tools → Application → Local Storage → remove keys starting with `hasw_cache_`, `hasw_lru_`, or `hasW_`.
 
 ## Local Sensor Bar
 
