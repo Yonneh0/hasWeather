@@ -31,25 +31,25 @@ document.addEventListener('DOMContentLoaded', () => {
     }, CHART_RESIZE_DEBOUNCE_MS);
   });
 
-   // Debug location preset buttons
-   document.querySelectorAll('.debug-loc-btn').forEach(btn => {
-     btn.addEventListener('click', async () => {
-       const lat = parseFloat(btn.dataset.lat);
-       const lon = parseFloat(btn.dataset.lon);
-       const name = btn.dataset.name;
-       userLocation = { lat, lon };
-       const locEl = document.getElementById('user-location');
-       if (locEl) {
-         const latDir = lat >= 0 ? 'N' : 'S';
-         const lonDir = lon >= 0 ? 'E' : 'W';
-         locEl.textContent = `\u{1F4CD} ${Math.abs(lat).toFixed(2)}\u00B0${latDir}, ${Math.abs(lon).toFixed(2)}\u00B0${lonDir} (${name})`;
+   // Debug location select
+   const debugSel = document.getElementById('debug-location-select');
+   if (debugSel) {
+     debugSel.addEventListener('change', async () => {
+       const val = debugSel.value;
+
+       if (val === 'local') {
+         // Clear cached userLocation so getLocation() re-fetches fresh browser geolocation
+         userLocation = null;
+       } else {
+         const [lat, lon] = val.split(':').map(Number);
+         userLocation = { lat, lon };
        }
-       // Clear nearby cache so fresh results are fetched for new location
+
        _nearbyCache = null;
        _nearbyCacheTime = 0;
        await run();
      });
-   });
+   }
 
    // Toggle network outage retry when pressing the refresh button while offline
    // (already handled above in checkNetwork)

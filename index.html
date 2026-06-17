@@ -22,15 +22,15 @@
    <button id="game-btn" class="btn btn-small" title="Donkey Runner Minigame">🫏</button>
    <button id="fullscreen-btn" class="btn btn-small" title="Toggle fullscreen" style="display:none;">⛶</button>
   <span id="user-location" class="location-display"></span>
-  <div id="debug-locations" style="display:flex;gap:4px;align-items:center;">
-    <span style="font-size:0.65rem;color:rgba(255,255,255,0.3);margin-right:2px;">Test:</span>
-    <button class="btn btn-small debug-loc-btn" data-lat="25.2854" data-lon="51.5310" data-name="Qatar" title="Qatar">Qatar</button>
-    <button class="btn btn-small debug-loc-btn" data-lat="24.4539" data-lon="54.3773" data-name="Abu Dhabi" title="Abu Dhabi">Abu Dhabi</button>
-    <button class="btn btn-small debug-loc-btn" data-lat="50.1109" data-lon="8.6821" data-name="Frankfurt" title="Frankfurt">Frankfurt</button>
-    <button class="btn btn-small debug-loc-btn" data-lat="33.4709" data-lon="-81.9648" data-name="Augusta" title="Augusta, GA">Augusta</button>
-    <button class="btn btn-small debug-loc-btn" data-lat="42.3601" data-lon="-71.0589" data-name="Boston" title="Boston, MA">Boston</button>
-    <button class="btn btn-small debug-loc-btn" data-lat="35.2271" data-lon="-80.8431" data-name="Charlotte" title="Charlotte, NC">Charlotte</button>
-  </div>
+  <select id="debug-location-select" class="btn btn-small debug-location-select" title="Select test location">
+    <option value="local">Local</option>
+    <option value="25.2854:51.5310">Qatar</option>
+    <option value="24.4539:54.3773">Abu Dhabi</option>
+    <option value="50.1109:8.6821">Frankfurt</option>
+    <option value="33.4709:-81.9648">Augusta, GA</option>
+    <option value="42.3601:-71.0589">Boston, MA</option>
+    <option value="35.2271:-80.8431">Charlotte, NC</option>
+  </select>
 </header>
 
 <!-- Local sensor bar (populated by js/local-sensor.js) -->
