@@ -75,6 +75,51 @@ body {
   padding: 0.6rem 1.2rem;
 }
 
+/* ===== RADAR OVERLAY COMBO BOX ===== */
+#radar-overlay-select {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.12);
+  color: #fff;
+  padding: 0.3rem 1.2rem 0.3rem 0.6rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-family: inherit;
+  transition: background 0.2s, transform 0.1s, border-color 0.2s;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23ffffff' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 6px center;
+  background-size: 10px;
+  min-width: auto;
+}
+
+#radar-overlay-select:hover {
+  background-color: rgba(255,255,255,0.15);
+}
+
+#radar-overlay-select:active {
+  transform: scale(0.96);
+}
+
+#radar-overlay-select:focus {
+  outline: none;
+  border-color: rgba(70,130,255,0.6);
+  box-shadow: 0 0 0 2px rgba(70,130,255,0.2);
+}
+
+#radar-overlay-select option {
+  background: rgba(20, 25, 40, 0.95);
+  color: #fff;
+  padding: 0.4rem 0.6rem;
+}
+
+#radar-overlay-select option:checked {
+  background: rgba(70, 130, 255, 0.3);
+}
+
 .location-display {
   margin-left: auto;
   font-size: 0.85rem;
@@ -212,34 +257,6 @@ body {
   font-size: 1rem;
 }
 
-/* ===== OVERLAY SELECT COMBO BOX ===== */
-.overlay-select {
-  background: rgba(255,255,255,0.08);
-  border: 1px solid rgba(255,255,255,0.12);
-  color: #fff;
-  padding: 0.3rem 0.6rem;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 0.8rem;
-  font-weight: 500;
-  transition: background 0.2s, border-color 0.2s;
-  min-width: 100px;
-  max-width: 160px;
-  outline: none;
-}
-.overlay-select:hover {
-  background: rgba(255,255,255,0.15);
-}
-.overlay-select:focus {
-  border-color: rgba(70,130,255,0.6);
-}
-.overlay-select option {
-  background: #1a1a2e;
-  color: #fff;
-  padding: 0.4rem;
-  font-size: 0.8rem;
-}
-
 /* ===== GLOW FOR HEADER TEXT ===== */
 .city-name,
 .city-state,
@@ -367,45 +384,6 @@ body {
     gap: 0.5rem;
     padding: 0.4rem 1rem;
   }
-}
-
-/* ===== OVERLAY SELECT DROPDOWN ===== */
-.overlay-select {
-  background: rgba(255,255,255,0.08);
-  border: 1px solid rgba(255,255,255,0.12);
-  color: #fff;
-  padding: 0.4rem 1.6rem 0.4rem 0.8rem;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 0.85rem;
-  transition: background 0.2s, transform 0.1s;
-  appearance: none;
-  -webkit-appearance: none;
-  -moz-appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%23ffffff' d='M5 5L0 0h10z'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 8px center;
-}
-.overlay-select:hover {
-  background: rgba(255,255,255,0.15);
-}
-.overlay-select:active {
-  transform: scale(0.96);
-}
-.overlay-select:focus {
-  outline: none;
-  box-shadow: 0 0 0 2px rgba(70,130,255,0.5);
-}
-.overlay-select option {
-  background: #1a1a2e;
-  color: #fff;
-  padding: 0.4rem;
-}
-.overlay-select:disabled {
-  background: rgba(255,255,255,0.04);
-  border-color: rgba(255,255,255,0.08);
-  color: rgba(255,255,255,0.35);
-  cursor: not-allowed;
 }
 
 /* ===== CARD-COMPONENTS - Card-related display components ===== */
@@ -1411,6 +1389,30 @@ body {
   justify-content: center;
   padding: 1rem 2rem 2rem;
 }
+
+/* Radar overlay select styles are in layout.css (#radar-overlay-select) */
+
+/* ===== RADAR OVERLAY COMBO BOX ===== */
+.radar-overlay-select {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23fff'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 8px center !important;
+  background-size: 10px 6px !important;
+  padding-right: 28px !important;
+  cursor: pointer !important;
+}
+
+.radar-overlay-select:hover {
+  background-color: rgba(255, 255, 255, 0.18) !important;
+}
+
+.radar-overlay-select option {
+  background: #1a1a2e;
+  color: #fff;
+  padding: 4px 8px;
+}
 /* ===== DONKEY RUNNER MINIGAME ===== */
 .donkey-panel {
   position: fixed;
@@ -2200,9 +2202,9 @@ body.donkey-fullscreen .donkey-panel.donkey-hidden {
 <header class="header">
   <h1 class="logo">hasWeather</h1>
    <button id="unit-toggle" class="btn btn-small" title="Toggle °F/°C">°F</button>
+   <select id="radar-overlay-select" class="btn btn-small radar-overlay-select" title="Radar Overlay"></select>
    <button id="refresh-btn" class="btn btn-small" title="Refresh data">⟳</button>
    <button id="game-btn" class="btn btn-small" title="Donkey Runner Minigame">🫏</button>
-   <select id="radar-overlay-select" class="overlay-select" title="Radar overlay"></select>
    <button id="fullscreen-btn" class="btn btn-small" title="Toggle fullscreen" style="display:none;">⛶</button>
   <span id="user-location" class="location-display"></span>
   <div id="debug-locations" style="display:flex;gap:4px;align-items:center;">
@@ -2765,6 +2767,21 @@ function getCityShortestTTL(city) {
     const ttl = DataCache.TTL[entry.type] || DataCache.TTL.nwsPoint;
     const remaining = ttl - (Date.now() - entry.timestamp);
     if (remaining < shortest) shortest = remaining;
+  }
+
+  // Radar cache — only relevant when overlay is displayed, use the active layer
+  if (typeof RADAR_LAYERS !== 'undefined') {
+    const activeOverlay = typeof _selectedRadarOverlay !== 'undefined' && _selectedRadarOverlay ? _selectedRadarOverlay : 'qcd-composite';
+    const layerName = activeOverlay === 'none' || !RADAR_LAYERS[activeOverlay]
+      ? 'conus_bref_qcd'
+      : RADAR_LAYERS[activeOverlay].wmsLayer;
+    const radarKey = `hasw_radar_overlay_${layerName}_${lat.toFixed(4)}_${lon.toFixed(4)}`;
+    const radarEntry = localStorage.getItem(radarKey);
+    if (radarEntry) {
+      const entry = JSON.parse(radarEntry);
+      const remaining = RADAR_CACHE_TTL - (Date.now() - entry.timestamp);
+      if (remaining < shortest) shortest = remaining;
+    }
   }
 
   return shortest === Infinity ? MIN_BACKGROUND_REFRESH_MS : shortest;
@@ -4596,29 +4613,11 @@ function nwsToAppData(city, nwsData) {
 <script>
 // ===== WEATHER.GOV RADAR API CLIENT (SIMPLIFIED) =====
 // Fetches the current radar image from NOAA/NCEP GeoServer WMS service.
-// Caches only the single latest image in localStorage by location.
+// Caches multiple overlays in localStorage by location + layer.
 
 const RADAR_WMS_BASE = 'https://opengeo.ncep.noaa.gov/geoserver/conus/';
-const RADAR_DEFAULT_LAYER = 'conus_bref_qcd'; // default to Base Reflectivity
-
-// Radar overlay definitions — layer name and display label
-// Source: https://opengeo.ncep.noaa.gov/geoserver/conus/ (MRMS composite radar)
-const RADAR_OVERLAYS = [
-  { layer: 'conus_bref_qcd',   label: 'Base Reflectivity' },    // Quality Controlled 1km Base Reflectivity (MRMS)
-  { layer: 'conus_cref_qcd',   label: 'Composite Reflectivity' },// Highest reflectivity at any altitude
-  { layer: 'conus_neet_v18',   label: 'Echo Tops' },            // Height of radar echoes
-  { layer: 'conus_pcpn_typ',   label: 'Precipitation Type' },   // Rain, snow, sleet, hail
-];
-
-// Currently selected overlay index (0 = first in list)
-let radarOverlayIndex = 0;
-
 const RADAR_IMAGE_SIZE = 512;
 const RADAR_BBOX_RADIUS_KM = 200;
-
-// Radar background refresh — every ~120 seconds (radar updates every ~2 min)
-const RADAR_BG_REFRESH_INTERVAL_MS = 120 * 1000;
-let _radarBgRefreshTimer = null;
 
 // EPSG:3857 / Web Mercator constants
 const WEB_MERCATOR_SEMI_MAJOR_AXIS = 20037508.34;
@@ -4629,6 +4628,21 @@ const RADAR_WMS_TIMEOUT_MS = 15000;
 
 // Cache TTL — radar updates every ~2 minutes, so 5 min is safe
 const RADAR_CACHE_TTL = 5 * 60 * 1000;
+
+// Available radar overlays
+const RADAR_LAYERS = {
+  'base':         { wmsLayer: 'conus_bref_qcd',  label: 'Base Reflectivity' },
+  'qcd-composite':    { wmsLayer: 'conus_cref_qcd',   label: 'Composite Reflectivity (QCD)' },
+  'echo_tops':    { wmsLayer: 'conus_neet_v18',   label: 'Echo Tops' },
+  'precip_type':  { wmsLayer: 'conus_pcpn_typ',   label: 'Precipitation Type' },
+};
+
+const RADAR_DEFAULT_OVERLAY = 'qcd-composite'; // Default: QCD Composite Reflectivity
+
+// ===== GetCapabilities cache key =====
+function getCapabilitiesCacheKey(lat, lon) {
+  return `hasw_radar_capabilities_${lat.toFixed(4)}_${lon.toFixed(4)}`;
+}
 
 function lonToX(lon) {
   return lon * WEB_MERCATOR_SEMI_MAJOR_AXIS / 180;
@@ -4653,13 +4667,63 @@ function latLonToBboxEPSG3857(lat, lon, radiusKm) {
 
 function buildRadarImageUrl(lat, lon, layer) {
   const bbox = latLonToBboxEPSG3857(lat, lon, RADAR_BBOX_RADIUS_KM);
-  // WMS uses a single /wms endpoint with LAYERS param
-  const l = layer || RADAR_DEFAULT_LAYER;
-  return `${RADAR_WMS_BASE}wms?` +
-    `SERVICE=WMS&REQUEST=GetMap&VERSION=1.1.1&FORMAT=image/png` +
-    `&LAYERS=${encodeURIComponent(l)}` +
+
+  return `${RADAR_WMS_BASE}${layer}/wms?` +
+    'SERVICE=WMS&REQUEST=GetMap&VERSION=1.1.1&FORMAT=image/png' +
+    `&LAYERS=${encodeURIComponent(layer)}` +
     `&WIDTH=${RADAR_IMAGE_SIZE}&HEIGHT=${RADAR_IMAGE_SIZE}` +
-    `&SRS=EPSG:3857&BBOX=${bbox.join(',')}`;
+    '&SRS=EPSG:3857&BBOX=' + bbox.join(',');
+}
+
+/**
+ * Fetch available radar layers using WMS GetCapabilities.
+ * Returns an array of layer objects: { name, label }
+ */
+async function fetchAvailableRadarLayers(lat, lon) {
+  const cacheKey = getCapabilitiesCacheKey(lat, lon);
+  try {
+    const raw = localStorage.getItem(cacheKey);
+    if (raw) {
+      const entry = JSON.parse(raw);
+      if (Date.now() - entry.timestamp < RADAR_CACHE_TTL * 10) { // cache GetCaps for 50 min
+        return entry.data;
+      }
+    }
+  } catch {}
+
+  const capsUrl = `${RADAR_WMS_BASE}conus_bref_qcd/wms?SERVICE=WMS&REQUEST=GetCapabilities&VERSION=1.1.1`;
+  try {
+    const resp = await fetch(capsUrl);
+    const text = await resp.text();
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(text, 'text/xml');
+    const layers = [];
+
+    for (const layerEl of doc.querySelectorAll('Layer')) {
+      const nameEl = layerEl.querySelector('Name');
+      const titleEl = layerEl.querySelector('Title');
+      if (nameEl) {
+        const name = nameEl.textContent.trim();
+        if (name.startsWith('conus_') && !name.includes('_anl')) {
+          layers.push({
+            name: name,
+            label: titleEl ? titleEl.textContent.trim() : name,
+          });
+        }
+      }
+    }
+
+    // Save to cache
+    localStorage.setItem(cacheKey, JSON.stringify({
+      data: layers,
+      timestamp: Date.now(),
+    }));
+
+    return layers;
+  } catch (e) {
+    console.warn('[Radar] GetCapabilities failed:', e);
+    return Object.entries(RADAR_LAYERS).map(([key, val]) => ({ name: val.wmsLayer, label: val.label }));
+  }
 }
 
 // ===== SINGLE-IMAGE CACHE (localStorage) =====
@@ -4694,104 +4758,6 @@ function cacheRadarImage(lat, lon, dataUrl) {
   } catch { /* storage full — ignore */ }
 }
 
-// ===== OVERLAY CACHE (per-overlay images) =====
-function getOverlayCacheKey(lat, lon, layer) {
-  return `hasw_radar_overlay_${layer}_${lat.toFixed(4)}_${lon.toFixed(4)}`;
-}
-
-function getCachedOverlayImage(lat, lon, layer) {
-  try {
-    const key = getOverlayCacheKey(lat, lon, layer);
-    const raw = localStorage.getItem(key);
-    if (!raw) return null;
-    const entry = JSON.parse(raw);
-    if (Date.now() - entry.timestamp > RADAR_CACHE_TTL) {
-      localStorage.removeItem(key);
-      return null;
-    }
-    return entry.dataUrl;
-  } catch {
-    return null;
-  }
-}
-
-function cacheOverlayImage(lat, lon, layer, dataUrl) {
-  try {
-    const key = getOverlayCacheKey(lat, lon, layer);
-    localStorage.setItem(key, JSON.stringify({
-      dataUrl,
-      timestamp: Date.now(),
-    }));
-  } catch { /* storage full — ignore */ }
-}
-
-// ===== OVERLAY SWITCHING =====
-function setOverlay(index) {
-  if (index >= 0 && index < RADAR_OVERLAYS.length) {
-    radarOverlayIndex = index;
-    // Update select element if it exists
-    const selectEl = document.getElementById('radar-overlay-select');
-    if (selectEl) selectEl.value = index;
-  }
-}
-
-function getCurrentOverlay() {
-  return RADAR_OVERLAYS[radarOverlayIndex];
-}
-
-// ===== FETCH ALL OVERLAYS =====
-async function fetchAllOverlays(lat, lon) {
-  const results = await Promise.allSettled(
-    RADAR_OVERLAYS.map(async (overlay, i) => {
-      // Check cache first
-      const cached = getCachedOverlayImage(lat, lon, overlay.layer);
-      if (cached) {
-        console.log(`[Radar] Overlay "${overlay.label}" cache HIT`);
-        return { index: i, dataUrl: cached, layer: overlay.layer };
-      }
-
-      // Fetch from WMS
-      const imageUrl = buildRadarImageUrl(lat, lon, overlay.layer);
-      const blob = await fetchRadarImageFromWMS(imageUrl);
-      const dataUrl = await new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result);
-        reader.readAsDataURL(blob);
-      });
-      cacheOverlayImage(lat, lon, overlay.layer, dataUrl);
-      console.log(`[Radar] Overlay "${overlay.label}" fetched`);
-      return { index: i, dataUrl, layer: overlay.layer };
-    })
-  );
-
-  // Return successfully fetched overlays
-  const overlays = results
-    .filter(r => r.status === 'fulfilled')
-    .map(r => r.value)
-    .sort((a, b) => a.index - b.index);
-
-  console.log(`[Radar] Fetched ${overlays.length}/${RADAR_OVERLAYS.length} overlays`);
-  return overlays;
-}
-
-// Get the current overlay image data URL (from cache or fetch)
-async function getOverlayDataUrl(lat, lon) {
-  const overlay = getCurrentOverlay();
-  const cached = getCachedOverlayImage(lat, lon, overlay.layer);
-  if (cached) return Promise.resolve(cached);
-
-  // Fallback: fetch just this overlay
-  const imageUrl = buildRadarImageUrl(lat, lon, overlay.layer);
-  const blob = await fetchRadarImageFromWMS(imageUrl);
-  const dataUrl = await new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onloadend = () => resolve(reader.result);
-    reader.readAsDataURL(blob);
-  });
-  cacheOverlayImage(lat, lon, overlay.layer, dataUrl);
-  return dataUrl;
-}
-
 // ===== FETCH =====
 async function fetchRadarImageFromWMS(url) {
   const controller = new AbortController();
@@ -4817,69 +4783,78 @@ async function fetchRadarImageFromWMS(url) {
   }
 }
 
-// ===== RADAR BACKGROUND REFRESH =====
-function startRadarBackgroundRefresh() {
-  if (_radarBgRefreshTimer) clearInterval(_radarBgRefreshTimer);
-
-  _radarBgRefreshTimer = setInterval(() => {
-    if (userLocation && _radarOverlayImages && Object.keys(_radarOverlayImages).length > 0) {
-      refreshRadarBackground(userLocation.lat, userLocation.lon);
-    }
-  }, RADAR_BG_REFRESH_INTERVAL_MS);
-}
-
-// Refresh the radar background (re-fetches all overlays in place)
-async function refreshRadarBackground(lat, lon) {
-  try {
-    const overlays = await fetchAllOverlays(lat, lon);
-    for (const overlay of overlays) {
-      const transparentUrl = await new Promise((resolve) => {
-        makeWhiteTransparent(overlay.dataUrl, resolve);
-      });
-      _radarOverlayImages[overlay.index] = transparentUrl;
-    }
-
-    // Re-apply the current overlay
-    applyOverlayBackground(lat, lon);
-  } catch (e) {
-    console.warn('[Radar] Background refresh failed:', e);
-  }
-}
-
-// Fetch the current radar image — returns a data URL string.
-// Uses cache on page load, fetches fresh on refresh.
-async function fetchCurrentRadarImage(lat, lon) {
-  // Check cache first
-  const cached = getCachedRadarImage(lat, lon);
+/**
+ * Fetch radar image for a specific overlay layer.
+ * @param {string} lat
+ * @param {string} lon
+ * @param {string} layer - WMS layer name (e.g., 'conus_bref_qcd')
+ * @returns {Promise<string|null>} data URL string
+ */
+async function fetchRadarImageForOverlay(lat, lon, layer) {
+  // Check overlay-specific cache
+  const cached = getCachedRadarOverlay(lat, lon, layer);
   if (cached) {
-    console.log('[Radar] Cache HIT for current image');
+    console.log(`[Radar] Cache HIT for ${layer}`);
     return cached;
   }
 
-  const imageUrl = buildRadarImageUrl(lat, lon);
-  console.log('[Radar] Fetching current radar image from WMS');
+  const imageUrl = buildRadarImageUrl(lat, lon, layer);
+  console.log(`[Radar] Fetching overlay: ${layer}`);
 
   try {
     const blob = await fetchRadarImageFromWMS(imageUrl);
-    // Convert blob to data URL for caching and display
     const dataUrl = await new Promise((resolve) => {
       const reader = new FileReader();
       reader.onloadend = () => resolve(reader.result);
       reader.readAsDataURL(blob);
     });
-
-    cacheRadarImage(lat, lon, dataUrl);
+    cacheRadarOverlay(lat, lon, layer, dataUrl);
     return dataUrl;
   } catch (e) {
-    console.error('[Radar] Failed to fetch radar image:', e);
+    console.error(`[Radar] Failed to fetch ${layer}:`, e);
     return null;
   }
 }
 
+// ===== Overlay-specific cache =====
+function getRadarOverlayCacheKey(lat, lon, layer) {
+  return `hasw_radar_overlay_${layer}_${lat.toFixed(4)}_${lon.toFixed(4)}`;
+}
+
+function getCachedRadarOverlay(lat, lon, layer) {
+  try {
+    const key = getRadarOverlayCacheKey(lat, lon, layer);
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const entry = JSON.parse(raw);
+    if (Date.now() - entry.timestamp > RADAR_CACHE_TTL) {
+      localStorage.removeItem(key);
+      return null;
+    }
+    return entry.dataUrl;
+  } catch {
+    return null;
+  }
+}
+
+function cacheRadarOverlay(lat, lon, layer, dataUrl) {
+  try {
+    const key = getRadarOverlayCacheKey(lat, lon, layer);
+    localStorage.setItem(key, JSON.stringify({ dataUrl, timestamp: Date.now() }));
+  } catch {}
+}
+
+// Legacy: keep fetchCurrentRadarImage for backward compat — uses 'base' layer
+async function fetchCurrentRadarImage(lat, lon) {
+  return await fetchRadarImageForOverlay(lat, lon, 'conus_bref_qcd');
+}
+
 // Make available globally
+window.fetchRadarImageForOverlay = fetchRadarImageForOverlay;
+window.fetchAvailableRadarLayers = fetchAvailableRadarLayers;
 window.fetchCurrentRadarImage = fetchCurrentRadarImage;
-window.startRadarBackgroundRefresh = startRadarBackgroundRefresh;
-window.refreshRadarBackground = refreshRadarBackground;
+window.RADAR_LAYERS = RADAR_LAYERS;
+window.RADAR_DEFAULT_OVERLAY = RADAR_DEFAULT_OVERLAY;
 
 </script>
 <script>
@@ -9794,6 +9769,7 @@ let _nearbyCacheTime = 0;
 let _toggleDebounceTimer = null;
 let _chartResizeTimer = null;
 let _maxCities = MAX_CITIES; // Default: show nearest 6 cities
+let _selectedRadarOverlay = 'qcd-composite'; // Current overlay selection
 
 // ===== INIT =====
 document.addEventListener('DOMContentLoaded', () => {
@@ -9802,21 +9778,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const unitBtn = document.getElementById('unit-toggle');
   const refreshBtn = document.getElementById('refresh-btn');
   const gameBtn = document.getElementById('game-btn');
-  const radarSelect = document.getElementById('radar-overlay-select');
 
   if (unitBtn) unitBtn.addEventListener('click', toggleUnit);
   if (refreshBtn) refreshBtn.addEventListener('click', refresh);
   if (gameBtn) gameBtn.addEventListener('click', toggleGame);
-  if (radarSelect) {
-    radarSelect.addEventListener('change', () => {
-      setOverlay(parseInt(radarSelect.value));
-      applyOverlayBackground(userLocation?.lat, userLocation?.lon);
-    });
-    populateOverlaySelect();
-
-    // Start radar background refresh
-    startRadarBackgroundRefresh();
-  }
 
   // Chart redraw on resize (includes ghost charts)
   window.addEventListener('resize', () => {
@@ -9850,6 +9815,12 @@ document.addEventListener('DOMContentLoaded', () => {
    // Toggle network outage retry when pressing the refresh button while offline
    // (already handled above in checkNetwork)
 
+   // Radar overlay combo box handler
+   const radarSel = document.getElementById('radar-overlay-select');
+   if (radarSel) {
+     radarSel.addEventListener('change', () => applyRadarOverlaySelection(userLocation?.lat, userLocation?.lon));
+   }
+
    // Start the app with network check
    checkNetworkAndRun(run);
  });
@@ -9882,11 +9853,6 @@ async function run() {
   // Render placeholder cards while requests are in flight
   renderPlaceholderCards(allCities);
   
-   // Load radar image as page background
-   if (userLocation) {
-     loadRadarBackground(userLocation.lat, userLocation.lon);
-   }
-
   // Fetch OM weather data
   const omResults = await Promise.allSettled(
     [fetchWeatherForCities(allCities).catch(() => null)]
@@ -9947,72 +9913,83 @@ async function run() {
   // All requests complete — render once
   renderAll();
 
+  // Setup radar overlay select and start background radar updates (only if not "None")
+  if (userLocation) {
+    loadRadarOverlaySelect(userLocation.lat, userLocation.lon);
+    if (_selectedRadarOverlay !== 'none') {
+      loadRadarBackground(userLocation.lat, userLocation.lon);
+      startRadarUpdates(userLocation.lat, userLocation.lon);
+    }
+  }
+
 }
 
-// ===== RADAR BACKGROUND =====
-let _radarOverlayImages = {}; // { index: transparentDataUrl }
-let _currentRadarDataUrl = null;
+// ===== RADAR BACKGROUND STATE =====
+let _currentRadarLayer = null; // WMS layer name for current display (e.g., 'conus_cref_qcd')
+let _radarUpdateTimer = null;
+const RADAR_UPDATE_INTERVAL_MS = 4 * 60 * 1000; // 4 min — update before cache expires
 
+// ===== RADAR BACKGROUND =====
 async function loadRadarBackground(lat, lon) {
   const bg = document.getElementById('radar-background');
   if (!bg) return;
 
-  // Fetch all overlays in parallel
-  try {
-    const overlays = await window.fetchAllOverlays(lat, lon);
-    _radarOverlayImages = {};
+  // Get the WMS layer name for current overlay selection
+  let selectedLayerName = _selectedRadarOverlay === 'none' ? null : RADAR_LAYERS[_selectedRadarOverlay]?.wmsLayer;
 
-    for (const overlay of overlays) {
-      const transparentUrl = await new Promise((resolve) => {
-        makeWhiteTransparent(overlay.dataUrl, resolve);
-      });
-      _radarOverlayImages[overlay.index] = transparentUrl;
-    }
-
-    // Apply the currently selected overlay
-    applyOverlayBackground(lat, lon);
-  } catch (e) {
-    console.warn('[Radar] Failed to load overlays, falling back:', e);
-    const dataUrl = await window.fetchCurrentRadarImage(lat, lon);
-    if (dataUrl) {
-      makeWhiteTransparent(dataUrl, (transparentUrl) => {
-        bg.style.backgroundImage = `url(${transparentUrl})`;
-        bg.style.backgroundSize = 'cover';
-        bg.style.backgroundPosition = 'center';
-        bg.style.backgroundRepeat = 'no-repeat';
-        _currentRadarDataUrl = transparentUrl;
-      });
-    }
+  if (_selectedRadarOverlay === 'none') {
+    // Hide radar image, show animated canvas background
+    bg.style.backgroundImage = 'none';
+    return;
   }
-}
 
-function applyOverlayBackground(lat, lon) {
-  const bg = document.getElementById('radar-background');
-  if (!bg) return;
+  if (!selectedLayerName) return;
 
-  const idx = radarOverlayIndex;
-  let dataUrl = _radarOverlayImages[idx];
+  _currentRadarLayer = selectedLayerName;
 
-  // If overlay not pre-loaded, fetch it on-demand
-  if (!dataUrl) {
-    window.getOverlayDataUrl(lat, lon).then((url) => {
-      makeWhiteTransparent(url, (transparentUrl) => {
-        _radarOverlayImages[idx] = transparentUrl;
-        applyOverlayBackground(lat, lon);
-      });
+  // Check overlay-specific cache first
+  const cached = getCachedRadarOverlay(lat, lon, selectedLayerName);
+  if (cached) {
+    console.log('[Radar] Loading cached overlay');
+    makeWhiteTransparent(cached, (transparentUrl) => {
+      bg.style.backgroundImage = `url(${transparentUrl})`;
+      bg.style.backgroundSize = 'cover';
+      bg.style.backgroundPosition = 'center';
+      bg.style.backgroundRepeat = 'no-repeat';
     });
     return;
   }
 
-  // Crossfade transition: briefly reduce opacity then restore
-  bg.style.transition = 'opacity 0.3s ease';
-  bg.style.opacity = '0';
+  // Not cached — show animated canvas first (no stale data)
+  bg.style.backgroundImage = 'none';
+  console.log('[Radar] Overlay not cached, showing animated background while loading');
 
-  setTimeout(() => {
-    bg.style.backgroundImage = `url(${dataUrl})`;
-    _currentRadarDataUrl = dataUrl;
-    bg.style.opacity = '0.35';
-  }, 150);
+  const dataUrl = await window.fetchRadarImageForOverlay(lat, lon, selectedLayerName);
+  if (dataUrl) {
+    makeWhiteTransparent(dataUrl, (transparentUrl) => {
+      bg.style.backgroundImage = `url(${transparentUrl})`;
+      bg.style.backgroundSize = 'cover';
+      bg.style.backgroundPosition = 'center';
+      bg.style.backgroundRepeat = 'no-repeat';
+    });
+  }
+}
+
+// Refresh the currently-displayed radar overlay
+async function refreshRadarBackground(lat, lon) {
+  if (!_currentRadarLayer || !lat || !lon) return;
+  const dataUrl = await window.fetchRadarImageForOverlay(lat, lon, _currentRadarLayer);
+  if (!dataUrl) return;
+
+  const bg = document.getElementById('radar-background');
+  if (!bg) return;
+
+  makeWhiteTransparent(dataUrl, (transparentUrl) => {
+    bg.style.backgroundImage = `url(${transparentUrl})`;
+    bg.style.backgroundSize = 'cover';
+    bg.style.backgroundPosition = 'center';
+    bg.style.backgroundRepeat = 'no-repeat';
+  });
 }
 
 // Process image to replace white pixels with transparency
@@ -10041,21 +10018,133 @@ function makeWhiteTransparent(dataUrl, callback) {
   img.src = dataUrl;
 }
 
-// ===== POPULATE OVERLAY SELECT =====
-function populateOverlaySelect() {
-  const radarSelect = document.getElementById('radar-overlay-select');
-  if (!radarSelect) return;
+// Start radar background updates (only if overlay is displayed)
+function startRadarUpdates(lat, lon) {
+  if (_radarUpdateTimer) clearInterval(_radarUpdateTimer);
 
-  const cls = radarSelect.className;
-  radarSelect.innerHTML = '';
-  RADAR_OVERLAYS.forEach((overlay, i) => {
-    const opt = document.createElement('option');
-    opt.value = i;
-    opt.textContent = overlay.label;
-    if (i === radarOverlayIndex) opt.selected = true;
-    radarSelect.appendChild(opt);
+  // Use the shortest TTL from all city data to determine refresh interval
+  let shortestTTL = Infinity;
+  if (weatherData.length > 0) {
+    for (const city of weatherData) {
+      const ttl = getCityShortestTTL(city);
+      if (ttl < shortestTTL) shortestTTL = ttl;
+    }
+  }
+
+  // Radar refresh interval: 80% of the radar TTL, minimum 2 minutes
+  const interval = Math.max(2 * 60 * 1000, shortestTTL * BACKGROUND_REFRESH_FRACTION);
+  _radarUpdateTimer = setInterval(() => refreshRadarBackground(lat, lon), interval);
+
+  console.log(`[Radar] Background updates every ${Math.round(interval / 1000)}s (shortest TTL: ${Math.round(shortestTTL / 1000)}s)`);
+}
+
+// Stop radar background updates
+function stopRadarUpdates() {
+  if (_radarUpdateTimer) {
+    clearInterval(_radarUpdateTimer);
+    _radarUpdateTimer = null;
+  }
+}
+
+// ===== RADAR COMBO BOX =====
+let _radarOptionsLoaded = false;
+
+function loadRadarOverlaySelect(lat, lon) {
+  const sel = document.getElementById('radar-overlay-select');
+  if (!sel) return;
+
+  // Restore from localStorage
+  const stored = localStorage.getItem('hasw_radar_overlay');
+  if (stored && stored !== 'null') {
+    _selectedRadarOverlay = stored;
+  } else {
+    _selectedRadarOverlay = RADAR_DEFAULT_OVERLAY;
+  }
+
+  // Populate options from predefined RADAR_LAYERS
+  const existingOpts = new Set();
+  sel.querySelectorAll('option').forEach(o => existingOpts.add(o.value));
+
+  // Add "None" option
+  let noneOpt = sel.querySelector('option[value="none"]');
+  if (!noneOpt) {
+    noneOpt = document.createElement('option');
+    noneOpt.value = 'none';
+    noneOpt.textContent = 'None';
+    sel.insertBefore(noneOpt, sel.firstChild);
+    existingOpts.add('none');
+  }
+
+  // Add all predefined radar layers
+  Object.entries(RADAR_LAYERS).forEach(([key, val]) => {
+    if (!existingOpts.has(key)) {
+      const opt = document.createElement('option');
+      opt.value = key;
+      opt.textContent = val.label;
+      sel.appendChild(opt);
+    }
   });
-  radarSelect.className = cls; // restore class after innerHTML cleared it
+
+  // Also fetch and add discovered overlays from GetCapabilities
+  if (!_radarOptionsLoaded) {
+    window.fetchAvailableRadarLayers(lat, lon).then(layers => {
+      _radarOptionsLoaded = true;
+      const existingOpts = new Set();
+      sel.querySelectorAll('option').forEach(o => existingOpts.add(o.value));
+
+      for (const layer of layers) {
+        // Map WMS layer name to our key
+        let key = Object.keys(RADAR_LAYERS).find(k => RADAR_LAYERS[k].wmsLayer === layer.name);
+        if (!key && layer.name.startsWith('conus_')) {
+          // Generate a key for discovered layers
+          const shortName = layer.name.replace('conus_', '').replace('_qcd', '');
+          key = shortName;
+          RADAR_LAYERS[key] = { wmsLayer: layer.name, label: layer.label };
+        }
+
+        if (key && !existingOpts.has(key)) {
+          const opt = document.createElement('option');
+          opt.value = key;
+          opt.textContent = layer.label;
+          sel.appendChild(opt);
+        }
+      }
+
+      // Set the correct value after adding options
+      sel.value = _selectedRadarOverlay;
+    });
+  }
+
+  sel.value = _selectedRadarOverlay;
+}
+
+function applyRadarOverlaySelection(lat, lon) {
+  const sel = document.getElementById('radar-overlay-select');
+  if (!sel) return;
+  const wasNone = _selectedRadarOverlay === 'none';
+  const isNowNone = sel.value === 'none';
+  _selectedRadarOverlay = sel.value;
+  localStorage.setItem('hasw_radar_overlay', _selectedRadarOverlay);
+
+  // If switching TO "None", stop background updates and clear radar image
+  if (isNowNone && !wasNone) {
+    stopRadarUpdates();
+    const bg = document.getElementById('radar-background');
+    if (bg) bg.style.backgroundImage = 'none';
+    _currentRadarLayer = null;
+    return;
+  }
+
+  // If switching FROM "None", start background updates and load image
+  if (!isNowNone && wasNone) {
+    _currentRadarLayer = RADAR_LAYERS[_selectedRadarOverlay]?.wmsLayer || null;
+    loadRadarBackground(lat, lon);
+    startRadarUpdates(lat, lon);
+    return;
+  }
+
+  // Same overlay type, just reload the image (don't restart timer)
+  loadRadarBackground(lat, lon);
 }
 
 // ===== GAME TOGGLE =====
@@ -10072,6 +10161,8 @@ function toggleGame() {
     gameBtn.classList.add('active');
   }
 }
+
+
 </script>
 </body>
 </html>
