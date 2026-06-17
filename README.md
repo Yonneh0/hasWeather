@@ -34,7 +34,7 @@ completely self-contained single file weather app, that uses public sources, wit
 - **Build:** Node.js (no frameworks, no npm packages required at runtime)
 - **Weather Data:** [Open-Meteo API](https://open-meteo.com/) (forecast + current) + [NWS API](https://api.weather.gov/) (current conditions, hourly forecast, alerts)
 - **Air Quality:** [Open-Meteo Air Quality API](https://open-meteo.com/air-quality-api)
-- **Radar Imagery:** [NOAA/NCEP GeoServer WMS](https://opengeo.ncep.noaa.gov/geoserver/conus/) — MRMS composite radar data (Base Reflectivity, Composite Reflectivity, Echo Tops, Precipitation Type)
+- **Radar Imagery:** [NOAA/NCEP GeoServer WMS](https://opengeo.ncep.noaa.gov/geoserver/conus/) — selectable overlay layers (Base Reflectivity, Composite Reflectivity/QCD, Echo Tops, Precipitation Type) via header combo box; radar image is always centered on the user's location as a single non-tiled background with white pixels made transparent
 - **Geocoding:** [Open-Meteo Geocoding API](https://geocoding-api.open-meteo.com/) + [Nominatim/OSM](https://nominatim.openstreetmap.org/)
 - **Location:** Browser Geolocation API, [ipinfo.io](https://ipinfo.io/) (fallback)
 - **Chart Rendering:** Canvas-based custom implementation
@@ -92,7 +92,7 @@ js/
   api-nws.js          824 lines — NWS API client (gridpoint data, observation stations, alerts, snowfall/ice accumulation parsing, sky cover, cross-source lookup) with rate limiting and exponential backoff for 429 responses
   api-openmeteo.js     428 lines — Open-Meteo weather/AQI API client with consolidated cache keys, per-city incremental fetch, request deduplication, and cross-source NWS fallback
   api-openstreetmap.js 181 lines — Nominatim/OSM nearby city discovery with bearing-based diversity selection
-   api-radar.js          140 lines — NOAA/NCEP GeoServer WMS radar API client (single-image fetch with localStorage caching, white-to-transparent processing)
+   api-radar.js          244 lines — NOAA/NCEP GeoServer WMS radar API client (multi-overlay fetch with per-layer localStorage caching, GetCapabilities layer discovery, white-to-transparent processing)
   cache.js             247 lines — DataCache (localStorage caching with configurable TTLs per type and LRU eviction, NWS toggle state persistence)
    charts.js            481 lines — canvas chart rendering (merged chart, combined chart, ghost NWS overlay charts, particles) with named constants and shared helpers
   constants.js          72 lines — shared constants (WMO codes & gradients)
@@ -159,9 +159,28 @@ When the cache exceeds `DataCache.MAX_ENTRIES_PER_TYPE` (default: 500 entries pe
 - Before API calls, duplicate cities (within 0.01° of each other) are deduplicated — only unique coordinate pairs are fetched
 - `DataCache.MAX_ENTRIES_PER_TYPE` is configurable: set `DataCache.MAX_ENTRIES_PER_TYPE = 1000` before the cache initializes to change the limit
 
+### Radar Overlay Layers
+
+The app supports multiple selectable radar overlays, displayed via a combo box in the header (positioned between the °F/°C toggle and the refresh button). The overlay selection is persisted in `localStorage` (`hasw_radar_overlay`) and restored on page load. Default: **QCD Composite Reflectivity**.
+
+Available layers:
+
+| Key | WMS Layer | Label |
+|-----|-----------|-------|
+| `base` | `conus_bref_qcd` | Base Reflectivity |
+| `qcd-composite` | `conus_cref_qcd` | Composite Reflectivity (QCD) |
+| `echo_tops` | `conus_neet_v18` | Echo Tops |
+| `precip_type` | `conus_pcpn_typ` | Precipitation Type |
+
+Additional layers may be discovered via WMS GetCapabilities and added to the combo box.
+
+**"None" option:** When selected, hides the radar image entirely and shows the animated particle canvas background. Radar updates are stopped automatically.
+
 ### Radar Cache Architecture
 
-The radar background uses a single cached image stored in localStorage with a 5-minute TTL. The cache key pattern is `hasw_radar_current_{lat}_{lon}` and stores the data URL along with a timestamp for expiry checking.
+Each radar overlay is cached independently in `localStorage` with a 5-minute TTL. The cache key pattern is `hasw_radar_overlay_{layerName}_{lat}_{lon}`. A separate GetCapabilities cache (`hasw_radar_capabilities_{lat}_{lon}`) stores discovered layer metadata for up to 50 minutes.
+
+Background radar updates use the shortest TTL from all city data (weather, AQI, NWS, and the active radar overlay) to determine the refresh interval — radar images are updated at approximately 80% of their TTL to ensure fresh data.
 
 ### NWS Toggle State Persistence
 
@@ -174,7 +193,9 @@ Additional `localStorage` keys used by the app:
 | `hasW_maxCities`        | User-configured max city count (default: 6) |
 | `hasW_donkeyHighScore`  | Donkey Runner minigame high score         |
 | `hasW_nwsActive`          | Per-city NWS toggle state persistence       |
-| `hasw_radar_current_*`  | Cached radar background image (5min TTL)    |
+| `hasw_radar_overlay_*`    | Cached radar overlay images (5min TTL)      |
+| `hasw_radar_capabilities_*`| WMS GetCapabilities layer metadata (50min)  |
+| `hasw_radar_overlay`      | Currently selected overlay key (e.g., "qcd-composite") |
 
 Clear all cached data via browser dev tools → Application → Local Storage → remove keys starting with `hasw_cache_`, `hasw_lru_`, or `hasW_`.
 

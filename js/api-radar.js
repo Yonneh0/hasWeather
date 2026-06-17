@@ -1,9 +1,8 @@
 // ===== WEATHER.GOV RADAR API CLIENT (SIMPLIFIED) =====
 // Fetches the current radar image from NOAA/NCEP GeoServer WMS service.
-// Caches only the single latest image in localStorage by location.
+// Caches multiple overlays in localStorage by location + layer.
 
 const RADAR_WMS_BASE = 'https://opengeo.ncep.noaa.gov/geoserver/conus/';
-const RADAR_DEFAULT_LAYER = 'conus_bref_qcd';
 const RADAR_IMAGE_SIZE = 512;
 const RADAR_BBOX_RADIUS_KM = 200;
 
@@ -16,6 +15,21 @@ const RADAR_WMS_TIMEOUT_MS = 15000;
 
 // Cache TTL — radar updates every ~2 minutes, so 5 min is safe
 const RADAR_CACHE_TTL = 5 * 60 * 1000;
+
+// Available radar overlays
+const RADAR_LAYERS = {
+  'base':         { wmsLayer: 'conus_bref_qcd',  label: 'Base Reflectivity' },
+  'qcd-composite':    { wmsLayer: 'conus_cref_qcd',   label: 'Composite Reflectivity (QCD)' },
+  'echo_tops':    { wmsLayer: 'conus_neet_v18',   label: 'Echo Tops' },
+  'precip_type':  { wmsLayer: 'conus_pcpn_typ',   label: 'Precipitation Type' },
+};
+
+const RADAR_DEFAULT_OVERLAY = 'qcd-composite'; // Default: QCD Composite Reflectivity
+
+// ===== GetCapabilities cache key =====
+function getCapabilitiesCacheKey(lat, lon) {
+  return `hasw_radar_capabilities_${lat.toFixed(4)}_${lon.toFixed(4)}`;
+}
 
 function lonToX(lon) {
   return lon * WEB_MERCATOR_SEMI_MAJOR_AXIS / 180;
@@ -38,15 +52,65 @@ function latLonToBboxEPSG3857(lat, lon, radiusKm) {
   ];
 }
 
-function buildRadarImageUrl(lat, lon) {
+function buildRadarImageUrl(lat, lon, layer) {
   const bbox = latLonToBboxEPSG3857(lat, lon, RADAR_BBOX_RADIUS_KM);
-  // Omit TIME param — WMS returns the latest image by default
 
-  return `${RADAR_WMS_BASE}${RADAR_DEFAULT_LAYER}/wms?` +
-    `SERVICE=WMS&REQUEST=GetMap&VERSION=1.1.1&FORMAT=image/png` +
-    `&LAYERS=${encodeURIComponent(RADAR_DEFAULT_LAYER)}` +
+  return `${RADAR_WMS_BASE}${layer}/wms?` +
+    'SERVICE=WMS&REQUEST=GetMap&VERSION=1.1.1&FORMAT=image/png' +
+    `&LAYERS=${encodeURIComponent(layer)}` +
     `&WIDTH=${RADAR_IMAGE_SIZE}&HEIGHT=${RADAR_IMAGE_SIZE}` +
-    `&SRS=EPSG:3857&BBOX=${bbox.join(',')}`;
+    '&SRS=EPSG:3857&BBOX=' + bbox.join(',');
+}
+
+/**
+ * Fetch available radar layers using WMS GetCapabilities.
+ * Returns an array of layer objects: { name, label }
+ */
+async function fetchAvailableRadarLayers(lat, lon) {
+  const cacheKey = getCapabilitiesCacheKey(lat, lon);
+  try {
+    const raw = localStorage.getItem(cacheKey);
+    if (raw) {
+      const entry = JSON.parse(raw);
+      if (Date.now() - entry.timestamp < RADAR_CACHE_TTL * 10) { // cache GetCaps for 50 min
+        return entry.data;
+      }
+    }
+  } catch {}
+
+  const capsUrl = `${RADAR_WMS_BASE}conus_bref_qcd/wms?SERVICE=WMS&REQUEST=GetCapabilities&VERSION=1.1.1`;
+  try {
+    const resp = await fetch(capsUrl);
+    const text = await resp.text();
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(text, 'text/xml');
+    const layers = [];
+
+    for (const layerEl of doc.querySelectorAll('Layer')) {
+      const nameEl = layerEl.querySelector('Name');
+      const titleEl = layerEl.querySelector('Title');
+      if (nameEl) {
+        const name = nameEl.textContent.trim();
+        if (name.startsWith('conus_') && !name.includes('_anl')) {
+          layers.push({
+            name: name,
+            label: titleEl ? titleEl.textContent.trim() : name,
+          });
+        }
+      }
+    }
+
+    // Save to cache
+    localStorage.setItem(cacheKey, JSON.stringify({
+      data: layers,
+      timestamp: Date.now(),
+    }));
+
+    return layers;
+  } catch (e) {
+    console.warn('[Radar] GetCapabilities failed:', e);
+    return Object.entries(RADAR_LAYERS).map(([key, val]) => ({ name: val.wmsLayer, label: val.label }));
+  }
 }
 
 // ===== SINGLE-IMAGE CACHE (localStorage) =====
@@ -106,35 +170,75 @@ async function fetchRadarImageFromWMS(url) {
   }
 }
 
-// Fetch the current radar image — returns a data URL string.
-// Uses cache on page load, fetches fresh on refresh.
-async function fetchCurrentRadarImage(lat, lon) {
-  // Check cache first
-  const cached = getCachedRadarImage(lat, lon);
+/**
+ * Fetch radar image for a specific overlay layer.
+ * @param {string} lat
+ * @param {string} lon
+ * @param {string} layer - WMS layer name (e.g., 'conus_bref_qcd')
+ * @returns {Promise<string|null>} data URL string
+ */
+async function fetchRadarImageForOverlay(lat, lon, layer) {
+  // Check overlay-specific cache
+  const cached = getCachedRadarOverlay(lat, lon, layer);
   if (cached) {
-    console.log('[Radar] Cache HIT for current image');
+    console.log(`[Radar] Cache HIT for ${layer}`);
     return cached;
   }
 
-  const imageUrl = buildRadarImageUrl(lat, lon);
-  console.log('[Radar] Fetching current radar image from WMS');
+  const imageUrl = buildRadarImageUrl(lat, lon, layer);
+  console.log(`[Radar] Fetching overlay: ${layer}`);
 
   try {
     const blob = await fetchRadarImageFromWMS(imageUrl);
-    // Convert blob to data URL for caching and display
     const dataUrl = await new Promise((resolve) => {
       const reader = new FileReader();
       reader.onloadend = () => resolve(reader.result);
       reader.readAsDataURL(blob);
     });
-
-    cacheRadarImage(lat, lon, dataUrl);
+    cacheRadarOverlay(lat, lon, layer, dataUrl);
     return dataUrl;
   } catch (e) {
-    console.error('[Radar] Failed to fetch radar image:', e);
+    console.error(`[Radar] Failed to fetch ${layer}:`, e);
     return null;
   }
 }
 
+// ===== Overlay-specific cache =====
+function getRadarOverlayCacheKey(lat, lon, layer) {
+  return `hasw_radar_overlay_${layer}_${lat.toFixed(4)}_${lon.toFixed(4)}`;
+}
+
+function getCachedRadarOverlay(lat, lon, layer) {
+  try {
+    const key = getRadarOverlayCacheKey(lat, lon, layer);
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const entry = JSON.parse(raw);
+    if (Date.now() - entry.timestamp > RADAR_CACHE_TTL) {
+      localStorage.removeItem(key);
+      return null;
+    }
+    return entry.dataUrl;
+  } catch {
+    return null;
+  }
+}
+
+function cacheRadarOverlay(lat, lon, layer, dataUrl) {
+  try {
+    const key = getRadarOverlayCacheKey(lat, lon, layer);
+    localStorage.setItem(key, JSON.stringify({ dataUrl, timestamp: Date.now() }));
+  } catch {}
+}
+
+// Legacy: keep fetchCurrentRadarImage for backward compat — uses 'base' layer
+async function fetchCurrentRadarImage(lat, lon) {
+  return await fetchRadarImageForOverlay(lat, lon, 'conus_bref_qcd');
+}
+
 // Make available globally
+window.fetchRadarImageForOverlay = fetchRadarImageForOverlay;
+window.fetchAvailableRadarLayers = fetchAvailableRadarLayers;
 window.fetchCurrentRadarImage = fetchCurrentRadarImage;
+window.RADAR_LAYERS = RADAR_LAYERS;
+window.RADAR_DEFAULT_OVERLAY = RADAR_DEFAULT_OVERLAY;

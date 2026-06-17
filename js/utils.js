@@ -177,6 +177,21 @@ function getCityShortestTTL(city) {
     if (remaining < shortest) shortest = remaining;
   }
 
+  // Radar cache — only relevant when overlay is displayed, use the active layer
+  if (typeof RADAR_LAYERS !== 'undefined') {
+    const activeOverlay = typeof _selectedRadarOverlay !== 'undefined' && _selectedRadarOverlay ? _selectedRadarOverlay : 'qcd-composite';
+    const layerName = activeOverlay === 'none' || !RADAR_LAYERS[activeOverlay]
+      ? 'conus_bref_qcd'
+      : RADAR_LAYERS[activeOverlay].wmsLayer;
+    const radarKey = `hasw_radar_overlay_${layerName}_${lat.toFixed(4)}_${lon.toFixed(4)}`;
+    const radarEntry = localStorage.getItem(radarKey);
+    if (radarEntry) {
+      const entry = JSON.parse(radarEntry);
+      const remaining = RADAR_CACHE_TTL - (Date.now() - entry.timestamp);
+      if (remaining < shortest) shortest = remaining;
+    }
+  }
+
   return shortest === Infinity ? MIN_BACKGROUND_REFRESH_MS : shortest;
 }
 
