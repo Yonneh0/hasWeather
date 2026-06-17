@@ -67,9 +67,17 @@ const _aqiRateLimiter = {
 // Check NWS cache keys for weather data (NWS doesn't provide AQI).
 
 function crossSourceGetWeather(lat, lon) {
+  // Check NWS hourly forecast cache — contains the actual forecast data
   const nwsPoint = DataCache.get(nwsPointCacheKey(lat, lon), 'nwsPoint');
-  if (nwsPoint && nwsPoint.weather) return { data: nwsPoint, source: 'nws' };
+  if (nwsPoint && nwsPoint.wfo && nwsPoint.gridX != null && nwsPoint.gridY != null) {
+    // We have grid info; check if hourly forecast is cached
+    const nwsHourly = DataCache.get(nwsGridCacheKey(nwsPoint.wfo, nwsPoint.gridX, nwsPoint.gridY, 'hourly'), 'nwsHourly');
+    if (nwsHourly && Array.isArray(nwsHourly) && nwsHourly.length > 0) {
+      return { data: { weather: { hourly: nwsHourly } }, source: 'nws', point: nwsPoint };
+    }
+  }
 
+  // Check NWS city-level consolidated cache (populated by nwsToAppData callers)
   const nwsCityData = DataCache.get(nwsCacheKey(lat, lon), 'nwsCityData');
   if (nwsCityData && nwsCityData.weather) return { data: nwsCityData, source: 'nws' };
 
@@ -226,13 +234,14 @@ async function fetchWeatherForCity(city) {
     return { ...city, source: crossSource.source, weather: crossSource.data.weather, aqi: {} };
   }
   try {
-    await _aqiRateLimiter.waitForSlot();
+    // Note: no rate limiter needed for weather API — the AQI rate limiter is only for air-quality-api.open-meteo.com
     const weatherUrl = `${WEATHER_API}?latitude=${city.latitude}&longitude=${city.longitude}&${WEATHER_CURRENT_PARAMS}&${WEATHER_HOURLY_PARAMS}&${WEATHER_OPTIONS_PARAMS}`;
     const weatherRes = await retryWithBackoff(() => fetch(weatherUrl));
     if (!weatherRes.ok) {
       return { ...city, source: 'open-meteo', weather: null, aqi: {} };
     }
     const weatherAll = await weatherRes.json();
+
     const cityWeather = {
       current: weatherAll.current || {},
       hourly: weatherAll.hourly || { time: [] },

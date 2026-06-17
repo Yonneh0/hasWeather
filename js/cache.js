@@ -10,6 +10,8 @@ function nwsCacheKey(lat, lon) {
 // ===== NWS RATE LIMITER =====
 // NWS API limit: 1 request/second, burst of 3.
 // Moved here (before utils.js) so isNwsBoundsAvailable can use it during initial page load.
+const RATE_LIMITER_POLL_INTERVAL_MS = 50;
+
 const _nwsRateLimiter = {
   lastRequestTime: 0,
   burstCount: 0,

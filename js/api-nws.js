@@ -10,6 +10,10 @@ const NWS_RATE_LIMIT_RETRIES = 3;
 const NWS_RATE_LIMIT_BACKOFF_BASE_MS = 2000;
 const NWS_RATE_LIMIT_BACKOFF_EXPONENT = 2;
 
+// NOTE: rate limiting is handled by the global _nwsRateLimiter in cache.js.
+// The bounds check in utils.js uses it, so all NWS requests are coordinated
+// through a single limiter (1 req/s, burst of 3).
+
 // ===== Duration Constants (milliseconds) =====
 const MS_PER_DAY = 86400000;
 const MS_PER_HOUR = 3600000;
@@ -133,7 +137,7 @@ function nwsGridCacheKey(wfo, x, y, suffix) {
 
 // Fetch with User-Agent header, rate limiting, and retry logic
 async function nwsFetch(url, maxRetries = 3) {
-  // Rate limit: wait for available slot
+  // Rate limit through the global limiter in cache.js
   await _nwsRateLimiter.waitForSlot();
 
   const controller = new AbortController();
@@ -480,19 +484,43 @@ async function fetchZoneForecast(zoneId) {
   return periods;
 }
 
-// Main orchestrator: fetch all NWS data for a city's coordinates
+// Main orchestrator: fetch all NWS data for a city's coordinates.
+// Retries once on transient failure (network blip, brief rate limit).
 async function fetchForCity(lat, lon) {
-  const point = await resolvePoint(lat, lon);
-  if (!point.wfo || !point.gridX || !point.gridY) {
-    return null; // NWS doesn't cover this area
+  try {
+    const point = await resolvePoint(lat, lon);
+    if (!point.wfo || !point.gridX || !point.gridY) {
+      return null; // NWS doesn't cover this area
+    }
+
+    const [current, hourly] = await Promise.all([
+      fetchCurrentConditions(point.wfo, point.gridX, point.gridY),
+      fetchHourlyForecast(point.wfo, point.gridX, point.gridY),
+    ]);
+
+    return { point, current, hourly };
+  } catch (err) {
+    console.warn(`[NWS fetchForCity] First attempt failed for ${lat},${lon}: ${err.message}, retrying...`);
+    // Retry once — clear the potentially stale point cache so resolvePoint re-requests
+    const pointKey = nwsPointCacheKey(lat, lon);
+    DataCache.invalidate(pointKey);
+    try {
+      const point = await resolvePoint(lat, lon);
+      if (!point.wfo || !point.gridX || !point.gridY) {
+        return null;
+      }
+
+      const [current, hourly] = await Promise.all([
+        fetchCurrentConditions(point.wfo, point.gridX, point.gridY),
+        fetchHourlyForecast(point.wfo, point.gridX, point.gridY),
+      ]);
+
+      return { point, current, hourly };
+    } catch (err2) {
+      console.error(`[NWS fetchForCity] Retry failed for ${lat},${lon}: ${err2.message}`);
+      return null;
+    }
   }
-
-  const [current, hourly] = await Promise.all([
-    fetchCurrentConditions(point.wfo, point.gridX, point.gridY),
-    fetchHourlyForecast(point.wfo, point.gridX, point.gridY),
-  ]);
-
-  return { point, current, hourly };
 }
 
 // NWS unit code constants
@@ -738,19 +766,6 @@ function nwsToAppData(city, nwsData) {
     windGust: windGust,
     shortForecast: current.weather?.[0]?.icon || '',
     detailedForecast: '',
-    // Keep raw values for reference
-    _rawTemp: current.temperature,
-    _rawTempUnit: current.temperatureUnit,
-    _rawWindSpeed: current.windSpeed,
-    _rawWindSpeedUnit: current.windSpeedUnit,
-    _rawVisibility: current.visibility,
-    _rawVisibilityUnit: current.visibilityUnit,
-    _rawPrecip: current.quantitativePrecipitation,
-    _rawPrecipUnit: current.quantitativePrecipitationUnit,
-    _rawIce: current.iceAccumulation,
-    _rawIceUnit: current.iceAccumulationUnit,
-    _rawSnow: current.snowfallAmount,
-    _rawSnowUnit: current.snowfallAmount?.uom ?? 'wmoUnit:mm',
   };
 
   // Cross-source missing fields from OM cache (pressure, visibility, UV Index)
@@ -774,6 +789,8 @@ function nwsToAppData(city, nwsData) {
   }
 
   // Build hourly forecast array (NWS hourly is already sorted)
+  // NWS returns timestamps with explicit timezone offset (e.g. "2026-06-17T03:00:00-04:00").
+  // Keep the offset so new Date() parses correctly regardless of browser timezone.
   const hourlyTimes = hourly.map(p => p.startTime);
   // NWS hourly with units=us returns Fahrenheit — convert to Celsius for storage
   const hourlyTemps = hourly.map(p => {

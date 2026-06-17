@@ -3,6 +3,9 @@
 // ===== ENDPOINT =====
 const NOMINATIM = 'https://nominatim.openstreetmap.org/search';
 
+// Nominatim requires a descriptive User-Agent per usage policy
+const NOMINATIM_USER_AGENT = 'hasWeather/1.0 (https://github.com/Yonneh0/hasWeather)';
+
 // ===== NOMINATIM CONSTANTS =====
 const NOMINATIM_CLOSE_RADIUS = 0.45;
 const NOMINATIM_WIDE_RADIUS = 1.0;
@@ -48,7 +51,7 @@ async function findNearbyCities(lat, lon) {
 
   let results;
   try {
-    const resp = await fetch(url);
+    const resp = await fetch(url, { headers: { 'User-Agent': NOMINATIM_USER_AGENT } });
     if (!resp.ok) throw new Error(`Nominatim ${resp.status}`);
     results = await resp.json();
   } catch {
@@ -73,7 +76,7 @@ async function findNearbyCities(lat, lon) {
     viewbox = scaleViewbox(lat, lon, NOMINATIM_WIDE_RADIUS);
     url = `${NOMINATIM}?q=city&format=jsonv2&viewbox=${viewbox}&bounded=1&limit=${NOMINATIM_WIDE_LIMIT}&addressdetails=1`;
     try {
-      const resp = await fetch(url);
+      const resp = await fetch(url, { headers: { 'User-Agent': NOMINATIM_USER_AGENT } });
       if (resp.ok) {
         const extra = await resp.json();
         const existingIds = new Set(results.map(r => r.place_id));

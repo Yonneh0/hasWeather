@@ -56,6 +56,7 @@ function renderPlaceholderCard(city, suffix) {
 // --- Incremental Updates ---
 
 function updateCardsWithOMData(omWeatherData) {
+  const now = new Date();
   for (const cityData of omWeatherData) {
     const card = findCardByCoords(cityData.latitude, cityData.longitude);
     if (!card) continue;
@@ -65,6 +66,16 @@ function updateCardsWithOMData(omWeatherData) {
 
     const suffix = cityData.place_id || `${cityData.latitude || 0}_${cityData.longitude || 0}`;
     const html = renderCityCard(cityData, suffix);
+
+    // Find start index for chart alignment
+    let startIdx = 0;
+    const timeArr = cityData.weather?.hourly?.time || [];
+    for (let i = 0; i < timeArr.length; i++) {
+      if (Math.abs(new Date(timeArr[i]).getTime() - now.getTime()) <= 3600000) {
+        startIdx = i;
+        break;
+      }
+    }
 
     card.style.opacity = '0';
     setTimeout(() => {
@@ -82,14 +93,15 @@ function updateCardsWithOMData(omWeatherData) {
 
       const safeName = cityData.place_id || `${cityData.latitude || 0}_${cityData.longitude || 0}`;
       setTimeout(() => {
-        drawMergedChart(`chart-merged-${safeName}`, cityData.weather, cityData.highTemp, cityData.lowTemp);
-        drawCombinedChart(`chart-combined-${safeName}`, cityData.weather);
+        drawMergedChart(`chart-merged-${safeName}`, cityData.weather, cityData.highTemp, cityData.lowTemp, startIdx);
+        drawCombinedChart(`chart-combined-${safeName}`, cityData.weather, startIdx);
       }, RENDER_CHART_DRAW_DELAY_MS);
     }, OM_FADE_TRANSITION_MS);
   }
 }
 
 function updateCardsWithNWSData(nwsCityData) {
+  const now = new Date();
   for (const cityData of nwsCityData) {
     const card = findCardByCoords(cityData.latitude, cityData.longitude);
     if (!card || !cityData.nwsData || !cityData.weather) continue;
@@ -98,6 +110,25 @@ function updateCardsWithNWSData(nwsCityData) {
 
     const suffix = cityData.place_id || `${cityData.latitude || 0}_${cityData.longitude || 0}`;
     const html = renderCityCard(cityData, suffix);
+
+    // Find start indices for chart alignment
+    let omStartIdx = 0;
+    const omTimeArr = cityData.weather?.hourly?.time || [];
+    for (let i = 0; i < omTimeArr.length; i++) {
+      if (Math.abs(new Date(omTimeArr[i]).getTime() - now.getTime()) <= 3600000) {
+        omStartIdx = i;
+        break;
+      }
+    }
+
+    let nwsStartIdx = 0;
+    const nwsTimeArr = cityData.nwsData?.weather?.hourly?.time || [];
+    for (let i = 0; i < nwsTimeArr.length; i++) {
+      if (Math.abs(new Date(nwsTimeArr[i]).getTime() - now.getTime()) <= 3600000) {
+        nwsStartIdx = i;
+        break;
+      }
+    }
 
     card.style.opacity = '0';
     setTimeout(() => {
@@ -115,9 +146,9 @@ function updateCardsWithNWSData(nwsCityData) {
 
       const safeName = cityData.place_id || `${cityData.latitude || 0}_${cityData.longitude || 0}`;
       setTimeout(() => {
-        drawMergedChart(`chart-merged-${safeName}`, cityData.weather, cityData.highTemp, cityData.lowTemp);
-        drawCombinedChart(`chart-combined-${safeName}`, cityData.weather);
-        drawGhostMergedChart(`chart-ghost-merged-${safeName}`, cityData.nwsData.weather, cityData.highTemp, cityData.lowTemp);
+        drawMergedChart(`chart-merged-${safeName}`, cityData.weather, cityData.highTemp, cityData.lowTemp, omStartIdx);
+        drawCombinedChart(`chart-combined-${safeName}`, cityData.weather, omStartIdx);
+        drawGhostMergedChart(`chart-ghost-merged-${safeName}`, cityData.nwsData.weather, cityData.highTemp, cityData.lowTemp, nwsStartIdx);
       }, RENDER_CHART_DRAW_DELAY_MS);
     }, NWS_FADE_TRANSITION_MS);
   }
@@ -352,11 +383,15 @@ function renderCityCard(data, suffix) {
     }
     
     const nwsTimeArr = nwsHourly?.time || [];
-    const nwsCurrentDay = now.toISOString().split('T')[0];
-    const nwsCurrentIdx = nwsTimeArr.findIndex(t => {
-      const [datePart, timePart] = t.split('T');
-      return datePart === nwsCurrentDay && timePart.startsWith(`T${String(currentHour).padStart(2, '0')}`);
-    });
+    // Use Date comparison for NWS timestamps (they include explicit UTC offsets)
+    let nwsCurrentIdx = -1;
+    for (let ti = 0; ti < nwsTimeArr.length; ti++) {
+      const nwsTs = new Date(nwsTimeArr[ti]);
+      if (Math.abs(nwsTs.getTime() - now.getTime()) <= 3600000) {
+        nwsCurrentIdx = ti;
+        break;
+      }
+    }
     
     let ghostHourlySlotsHTML = '';
     for (let i = 0; i < HOURLY_FORECAST_SLOTS; i++) {
@@ -487,23 +522,25 @@ function drawGhostCharts() {
     if (Object.keys(hourly).length === 0) return;
 
     const nwsTimeArr = hourly.time || [];
-    const nwsCurrentDay = new Date().toISOString().split('T')[0];
-    const currentHour = new Date().getHours();
+    const now = new Date();
     let currentIdx = -1;
+
+    // Compare timestamps using Date objects rather than string matching,
+    // since both NWS and OM now have timezone offsets in their timestamps.
     for (let i = 0; i < nwsTimeArr.length; i++) {
-      const t = nwsTimeArr[i];
-      const [datePart, timePart] = t.split('T');
-      if (datePart === nwsCurrentDay && timePart.startsWith(`T${String(currentHour).padStart(2, '0')}`)) {
+      const nwsTime = new Date(nwsTimeArr[i]);
+      // Find the entry whose timestamp is within the current hour window
+      if (Math.abs(nwsTime.getTime() - now.getTime()) <= 3600000) {
         currentIdx = i;
         break;
       }
     }
 
+    // Fallback: find any entry on the current day using Date comparison
     if (currentIdx === -1) {
       for (let i = 0; i < nwsTimeArr.length; i++) {
-        const t = nwsTimeArr[i];
-        const [datePart] = t.split('T');
-        if (datePart === nwsCurrentDay) {
+        const nwsTime = new Date(nwsTimeArr[i]);
+        if (nwsTime.toDateString() === now.toDateString()) {
           currentIdx = i;
           break;
         }

@@ -114,12 +114,17 @@ async function isNwsBoundsAvailable(lat, lon) {
     }
   }
   const promise = (async () => {
+    // Rate-limit the bounds check through the global NWS rate limiter
+    await _nwsRateLimiter.waitForSlot();
     try {
       const data = await (await fetch(`${NWS_API}/points/${lat},${lon}`)).json();
       const props = data?.properties || {};
       return !!(props.gridId || props.cwa) && !!props.gridX && !!props.gridY;
-    } catch {
-      return false;
+    } catch (err) {
+      // Only return false for 404 (outside coverage). Network errors propagate
+      // so the caller can retry or handle them.
+      console.warn(`[NWS bounds] ${key}: ${err.message}`);
+      throw err;
     }
   })();
   _nwsBoundsCache[key] = promise;

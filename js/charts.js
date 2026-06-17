@@ -71,7 +71,7 @@ function drawGrid(ctx, pad, plotW, plotH, color) {
 }
 
 // ===== CLEAN CANVAS CHART =====
-function drawMergedChart(canvasId, cityData, dayHigh, dayLow) {
+function drawMergedChart(canvasId, cityData, dayHigh, dayLow, startIndex = 0) {
   const canvas = document.getElementById(canvasId);
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
@@ -87,10 +87,10 @@ function drawMergedChart(canvasId, cityData, dayHigh, dayLow) {
   ctx.clearRect(0, 0, w, h);
 
   const hourly = cityData.hourly || {};
-  // Slice to 24 hours (current day only), convert temps to current unit
-  const temps = (hourly.temperature_2m || []).slice(0, 24).map(v => convertTemp(v));
-  const rain = (hourly.precipitation || []).slice(0, 24);
-  const wind = (hourly.wind_speed_10m || []).slice(0, 24);
+  // Slice to 24 hours starting from startIndex, convert temps to current unit
+  const temps = (hourly.temperature_2m || []).slice(startIndex, startIndex + 24).map(v => convertTemp(v));
+  const rain = (hourly.precipitation || []).slice(startIndex, startIndex + 24);
+  const wind = (hourly.wind_speed_10m || []).slice(startIndex, startIndex + 24);
 
   if (temps.length === 0) return;
 
@@ -309,7 +309,7 @@ function drawGhostMergedChart(canvasId, cityData, dayHigh, dayLow, currentIdx = 
 }
 
 // ===== COMBINED CHART =====
-function drawCombinedChart(canvasId, cityData) {
+function drawCombinedChart(canvasId, cityData, startIndex = 0) {
   const canvas = document.getElementById(canvasId);
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
@@ -325,10 +325,10 @@ function drawCombinedChart(canvasId, cityData) {
   ctx.clearRect(0, 0, w, h);
 
   const hourly = cityData.hourly || {};
-  // Slice to 24 hours (current day only)
-  const hum = (hourly.relative_humidity_2m || []).slice(0, 24);
-  const wind = (hourly.wind_speed_10m || []).slice(0, 24);
-  const rain = (hourly.precipitation || []).slice(0, 24);
+  // Slice to 24 hours starting from startIndex for consistent alignment
+  const hum = (hourly.relative_humidity_2m || []).slice(startIndex, startIndex + 24);
+  const wind = (hourly.wind_speed_10m || []).slice(startIndex, startIndex + 24);
+  const rain = (hourly.precipitation || []).slice(startIndex, startIndex + 24);
 
   if (hum.length === 0) return;
 
@@ -411,13 +411,26 @@ function drawCombinedChart(canvasId, cityData) {
 
 // ===== CANVAS CHARTS =====
 function drawAllCharts() {
+  const now = new Date();
   weatherData.forEach((data) => {
     if (!data.weather) return;
     const hourly = data.weather.hourly || {};
     const safeName = data.place_id || `${data.latitude || 0}_${data.longitude || 0}`;
     if (Object.keys(hourly).length === 0) return;
-    drawMergedChart(`chart-merged-${safeName}`, data.weather, data.highTemp, data.lowTemp);
-    drawCombinedChart(`chart-combined-${safeName}`, data.weather);
+
+    // Find current hour index using Date comparison for consistent alignment with ghost charts
+    let startIdx = 0;
+    const timeArr = hourly.time || [];
+    for (let i = 0; i < timeArr.length; i++) {
+      const ts = new Date(timeArr[i]);
+      if (Math.abs(ts.getTime() - now.getTime()) <= 3600000) {
+        startIdx = i;
+        break;
+      }
+    }
+
+    drawMergedChart(`chart-merged-${safeName}`, data.weather, data.highTemp, data.lowTemp, startIdx);
+    drawCombinedChart(`chart-combined-${safeName}`, data.weather, startIdx);
   });
 }
 

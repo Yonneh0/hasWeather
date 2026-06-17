@@ -82,36 +82,39 @@ async function run() {
     return;
   }
 
-  // ===== PHASE 1: Render placeholder cards immediately + start radar loading =====
+  // Render placeholder cards while requests are in flight
   renderPlaceholderCards(allCities);
   
-  // Start radar card loading as soon as location is known (don't wait for weather data)
+  // Start radar card loading as soon as location is known
   if (userLocation) {
     loadRadarCard(userLocation.lat, userLocation.lon);
   }
 
-   // ===== PHASE 2: Fetch OM weather data in BULK and update cards incrementally =====
-   // Use batched fetch instead of individual calls to avoid AQI API 429 errors
-   const omResults = await Promise.allSettled(
-     [fetchWeatherForCities(allCities).catch(() => null)]
-   );
-   
-   weatherData = [];
-   if (omResults[0].status === 'fulfilled' && omResults[0].value) {
-     // Update all cards at once since batch fetch returns all results together
-     updateCardsWithOMData(omResults[0].value);
-     weatherData = omResults[0].value;
-   }
+  // Fetch OM weather data
+  const omResults = await Promise.allSettled(
+    [fetchWeatherForCities(allCities).catch(() => null)]
+  );
+  
+  weatherData = [];
+  if (omResults[0].status === 'fulfilled' && omResults[0].value) {
+    weatherData = omResults[0].value;
+  }
 
-   // ===== PHASE 3: Check NWS bounds and fetch NWS data where available — in parallel =====
-   if (weatherData.length > 0) {
-     // Check all bounds in parallel (only for cities within US lat/lon range)
-     const boundsPromises = weatherData.map(async (city) => {
+  // Check NWS bounds and fetch NWS data where available — all in parallel
+  if (weatherData.length > 0) {
+    // Check all bounds in parallel (only for cities within US lat/lon range).
+    // isNwsBoundsAvailable now propagates errors, so we wrap each call.
+    const boundsPromises = weatherData.map(async (city) => {
       if (city.latitude != null && city.longitude != null &&
           city.latitude >= 17 && city.latitude <= 71 &&
           city.longitude >= -170 && city.longitude <= -65) {
-        const inBounds = await isNwsBoundsAvailable(city.latitude, city.longitude);
-        return { city, nwsBounds: inBounds };
+        try {
+          const inBounds = await isNwsBoundsAvailable(city.latitude, city.longitude);
+          return { city, nwsBounds: inBounds };
+        } catch (err) {
+          console.warn(`[NWS bounds] ${city.name} (${city.latitude},${city.longitude}): ${err.message}`);
+          return { city, nwsBounds: false };
+        }
       }
       return { city, nwsBounds: false };
     });
@@ -121,34 +124,33 @@ async function run() {
       city.nwsBounds = nwsBounds;
     }
     
-     // Queue cities that have NWS bounds for data fetching
-     const nwsCities = weatherData.filter(c => c.nwsBounds);
+    // Queue cities that have NWS bounds for data fetching
+    const nwsCities = weatherData.filter(c => c.nwsBounds);
 
-     // Fetch NWS data for all queued cities in parallel (still per-city since NWS doesn't support batching)
-     if (nwsCities.length > 0) {
-       const nwsResults = await Promise.allSettled(
-         nwsCities.map(city => fetchForCity(city.latitude, city.longitude).catch(() => null))
-       );
+    // Fetch NWS data for all queued cities in parallel (still per-city since NWS doesn't support batching)
+    if (nwsCities.length > 0) {
+      const nwsResults = await Promise.allSettled(
+        nwsCities.map(city => fetchForCity(city.latitude, city.longitude).catch(() => null))
+      );
 
-       // Store NWS data on each city object as separate from OM data, updating cards incrementally
-       for (let i = 0; i < nwsCities.length; i++) {
-         const city = nwsCities[i];
-         const result = nwsResults[i];
-         if (result.status === 'fulfilled' && result.value && result.value.current) {
-           // Convert NWS data to app format
-           const nwsAppData = nwsToAppData(city, result.value);
-           if (nwsAppData) {
-             city.nwsData = nwsAppData;
-             
-             // Update this card immediately as NWS data arrives (also draws charts)
-             updateCardsWithNWSData([city]);
-           }
-         }
-       }
-     }
-   }
-
+      // Store NWS data on each city object — do NOT update cards yet
+      for (let i = 0; i < nwsCities.length; i++) {
+        const city = nwsCities[i];
+        const result = nwsResults[i];
+        if (result.status === 'fulfilled' && result.value && result.value.current) {
+          const nwsAppData = nwsToAppData(city, result.value);
+          if (nwsAppData) {
+            city.nwsData = nwsAppData;
+          }
+        }
+      }
+    }
   }
+
+  // All requests complete — render once
+  renderAll();
+
+}
 
 // ===== RADAR PLAYER =====
 async function loadRadarCard(lat, lon) {
