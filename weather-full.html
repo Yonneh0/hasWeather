@@ -2431,6 +2431,263 @@ body.donkey-fullscreen .donkey-panel.donkey-hidden {
 }
 
 </style>
+<style>
+/* ===== ABOUT PANEL (VT100 TERMINAL STYLE) ===== */
+.about-panel {
+  position: fixed;
+  top: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 720px;
+  max-width: 95vw;
+  height: 600px;
+  max-height: 80vh;
+  z-index: 200;
+  background: rgba(10, 10, 10, 0.97);
+  border: 1px solid rgba(0, 255, 65, 0.3);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 40px rgba(0, 255, 65, 0.08);
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease, top 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  transform-origin: top center;
+  will-change: transform, opacity;
+}
+
+.about-panel.about-visible {
+  top: 80px;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.about-panel.about-hidden {
+  top: -300px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Header - full width titlebar */
+.about-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.8rem;
+  background: rgba(0, 0, 0, 0.6);
+  border-bottom: 1px solid rgba(0, 255, 65, 0.2);
+  gap: 0.6rem;
+}
+
+.about-header h2 {
+  font-family: 'Courier New', Courier, monospace;
+  color: #00ff41;
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin: 0;
+  text-shadow: 0 0 8px rgba(0, 255, 65, 0.4);
+}
+
+.about-close-btn {
+  font-size: 1.1rem;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.1);
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.85);
+  min-width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  flex-shrink: 0;
+}
+
+.about-close-btn:hover {
+  background: rgba(239, 68, 68, 0.25);
+  border-color: rgba(239, 68, 68, 0.5);
+  color: #ef4444;
+}
+
+/* Content area */
+.about-content {
+  padding: 1rem 1.2rem;
+  overflow-y: auto;
+  overflow-x: hidden;
+  height: calc(100% - 42px);
+  color: #00ff41;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  text-shadow: 0 0 4px rgba(0, 255, 65, 0.2);
+}
+
+/* Scrollbar styling */
+.about-content::-webkit-scrollbar {
+  width: 8px;
+}
+
+.about-content::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 4px;
+}
+
+.about-content::-webkit-scrollbar-thumb {
+  background: rgba(0, 255, 65, 0.3);
+  border-radius: 4px;
+}
+
+.about-content::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 255, 65, 0.5);
+}
+
+/* CRT scanline effect overlay */
+.about-content::after {
+  content: '';
+  position: absolute;
+  top: 42px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.1) 2px,
+    rgba(0, 0, 0, 0.1) 4px
+  );
+  z-index: 1;
+}
+
+/* Markdown-rendered elements */
+.about-content h1 {
+  color: #00ff41;
+  font-size: 1.6rem;
+  font-weight: 900;
+  margin: 1.2em 0 0.6em 0;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid rgba(0, 255, 65, 0.3);
+  text-shadow: 0 0 10px rgba(0, 255, 65, 0.5);
+}
+
+.about-content h2 {
+  color: #00e83b;
+  font-size: 1.3rem;
+  font-weight: 700;
+  margin: 1em 0 0.5em 0;
+  text-shadow: 0 0 6px rgba(0, 255, 65, 0.4);
+}
+
+.about-content h3 {
+  color: #00d234;
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin: 0.8em 0 0.4em 0;
+}
+
+.about-content p {
+  margin: 0.6em 0;
+}
+
+.about-content a {
+  color: #4dff6e;
+  text-decoration: underline;
+  text-shadow: 0 0 4px rgba(77, 255, 110, 0.3);
+}
+
+.about-content a:hover {
+  color: #80ff96;
+}
+
+/* Lists */
+.about-content ul, .about-content ol {
+  margin: 0.5em 0 0.5em 1.2em;
+  padding-left: 0.5em;
+}
+
+.about-content li {
+  margin: 0.3em 0;
+}
+
+.about-content li::marker {
+  color: #00e83b;
+}
+
+/* Bold */
+.about-content strong {
+  color: #66ff88;
+  font-weight: 700;
+}
+
+/* Inline code */
+.about-content code {
+  background: rgba(0, 255, 65, 0.1);
+  border: 1px solid rgba(0, 255, 65, 0.2);
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  font-size: 0.85em;
+  color: #4dff6e;
+}
+
+/* Code blocks */
+.about-content pre {
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(0, 255, 65, 0.2);
+  border-radius: 8px;
+  padding: 0.8rem 1rem;
+  margin: 0.8em 0;
+  overflow-x: auto;
+}
+
+.about-content pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+/* Tables */
+.about-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.8em 0;
+  font-size: 0.82rem;
+}
+
+.about-content th, .about-content td {
+  padding: 0.45em 0.6em;
+  text-align: left;
+  border: 1px solid rgba(0, 255, 65, 0.2);
+}
+
+.about-content th {
+  background: rgba(0, 255, 65, 0.12);
+  font-weight: 700;
+  color: #4dff6e;
+}
+
+.about-content tr:nth-child(even) td {
+  background: rgba(0, 255, 65, 0.03);
+}
+
+/* Horizontal rules */
+.about-content hr {
+  border: none;
+  border-top: 1px solid rgba(0, 255, 65, 0.3);
+  margin: 1em 0;
+}
+
+/* Blockquotes */
+.about-content blockquote {
+  border-left: 3px solid rgba(0, 255, 65, 0.4);
+  margin: 0.6em 0;
+  padding: 0.4em 0 0.4em 1em;
+  color: #80ff96;
+}
+</style>
 </head>
 <body translate="no">
 
@@ -2447,6 +2704,7 @@ body.donkey-fullscreen .donkey-panel.donkey-hidden {
      <select id="radar-overlay-select" class="btn btn-small radar-overlay-select" title="Radar Overlay"></select>
    </div>
    <button id="refresh-btn" class="btn btn-small" title="Refresh data">⟳</button>
+   <button id="about-btn" class="btn btn-small" title="About">?</button>
    <button id="game-btn" class="btn btn-small" title="Donkey Runner Minigame">🫏</button>
    <button id="fullscreen-btn" class="btn btn-small" title="Toggle fullscreen" style="display:none;">⛶</button>
   <span id="user-location" class="location-display"></span>
@@ -9998,6 +10256,291 @@ document.addEventListener('DOMContentLoaded', () => {
 
 })();
 
+</script>
+ <script>
+/* ===== ABOUT PANEL — VT100 Terminal Style ===== */
+
+// README.md content — embedded at build time by build.js
+// If not embedded (development), fetch from file
+const ABOUT_README_CONTENT = ABOUT_README_EMBEDDED || null;
+
+(function() {
+  'use strict';
+
+  // --- DOM refs ---
+  let panel, closeBtn, contentEl;
+
+  function init() {
+    // Create panel elements
+    panel = document.createElement('div');
+    panel.className = 'about-panel about-hidden';
+    panel.id = 'about-panel';
+    panel.setAttribute('aria-label', 'About');
+
+    // Header
+    const header = document.createElement('div');
+    header.className = 'about-header';
+    header.innerHTML = '<h2>About</h2>';
+
+    closeBtn = document.createElement('button');
+    closeBtn.className = 'about-close-btn';
+    closeBtn.textContent = '\u00d7'; // ×
+    closeBtn.title = 'Close';
+    closeBtn.addEventListener('click', closeAbout);
+    header.appendChild(closeBtn);
+    panel.appendChild(header);
+
+    // Content
+    contentEl = document.createElement('div');
+    contentEl.className = 'about-content';
+    panel.appendChild(contentEl);
+
+    document.body.appendChild(panel);
+
+    // Open button in header
+    const openBtn = document.getElementById('about-btn');
+    if (openBtn) {
+      openBtn.addEventListener('click', openAbout);
+    }
+
+    // Load and render content
+    loadContent();
+  }
+
+  function loadContent() {
+    let md;
+    if (ABOUT_README_CONTENT) {
+      md = ABOUT_README_CONTENT;
+    } else {
+      // Development mode: fetch README.md
+      fetch('README.md')
+        .then(r => r.text())
+        .then(text => { renderContent(text); })
+        .catch(() => {
+          contentEl.innerHTML = '<p>Failed to load README.md</p>';
+        });
+      return;
+    }
+    renderContent(md);
+  }
+
+  // --- Simple Markdown Parser (no dependencies) ---
+  function parseMarkdown(md) {
+    const lines = md.split('\n');
+    let html = '';
+    let inList = false;
+    let listType = '';
+    let inCodeBlock = false;
+    let codeContent = '';
+    let codeLang = '';
+    let inTable = false;
+    let tableRows = [];
+    let paragraphBuffer = '';
+
+    function flushParagraph() {
+      if (paragraphBuffer.trim()) {
+        html += '<p>' + processInline(paragraphBuffer.trim()) + '</p>\n';
+        paragraphBuffer = '';
+      }
+    }
+
+    function flushList() {
+      if (inList) {
+        html += `</${listType}>\n`;
+        inList = false;
+        listType = '';
+      }
+    }
+
+    function flushTable() {
+      if (tableRows.length > 0) {
+        html += '<table>';
+        tableRows.forEach((row, i) => {
+          if (i === 0) {
+            html += '<thead><tr>' + row.map(c => '<th>' + processInline(c.trim()) + '</th>').join('') + '</tr></thead>\n';
+          } else if (i === 1 && row.every(c => /^[\s-:]+$/.test(c))) {
+            // separator row, skip
+          } else {
+            html += '<tbody><tr>' + row.map(c => '<td>' + processInline(c.trim()) + '</td>').join('') + '</tr></tbody>\n';
+          }
+        });
+        html += '</table>\n';
+        tableRows = [];
+      }
+    }
+
+    function closeBlockElements() {
+      flushParagraph();
+      flushList();
+      flushTable();
+    }
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+
+      // Code blocks (fenced with ``` or ~~~)
+      if (/^(`{3,}|~{3,})(\w*)/.test(line)) {
+        if (!inCodeBlock) {
+          flushParagraph();
+          flushList();
+          flushTable();
+          inCodeBlock = true;
+          codeLang = line.replace(/^(`{3,}|~{3,})(\w*).*/, '$2');
+          codeContent = '';
+        } else {
+          html += '<pre><code>' + escapeHtml(codeContent) + '</code></pre>\n';
+          inCodeBlock = false;
+          codeContent = '';
+        }
+        continue;
+      }
+
+      if (inCodeBlock) {
+        codeContent += line + '\n';
+        continue;
+      }
+
+      // Empty line
+      if (line.trim() === '') {
+        closeBlockElements();
+        continue;
+      }
+
+      // Horizontal rule
+      if (/^(-{3,}|_{3,}|\*{3,})$/.test(line.trim())) {
+        flushParagraph();
+        flushList();
+        html += '<hr>\n';
+        continue;
+      }
+
+      // Headers
+      const headerMatch = line.match(/^(#{1,6})\s+(.+)/);
+      if (headerMatch) {
+        flushParagraph();
+        flushList();
+        const level = headerMatch[1].length;
+        html += `<h${level}>${processInline(headerMatch[2])}</h${level}>\n`;
+        continue;
+      }
+
+      // Table row detection (contains |)
+      if (line.includes('|') && !line.startsWith('|')) {
+        flushParagraph();
+        flushList();
+      }
+      if (line.trim().startsWith('|')) {
+        const cells = line.split('|').slice(1, -1);
+        tableRows.push(cells);
+        inTable = true;
+        // Check if next non-empty line is not a table row -> flush
+        let j = i + 1;
+        while (j < lines.length && lines[j].trim() === '') j++;
+        if (j >= lines.length || !lines[j].trim().startsWith('|')) {
+          flushTable();
+        }
+        continue;
+      } else if (inTable) {
+        flushTable();
+      }
+
+      // Unordered list
+      if (/^\s*[-*+]\s/.test(line)) {
+        closeBlockElements();
+        if (!inList || listType !== 'ul') {
+          flushParagraph();
+          html += '<ul>\n';
+          inList = true;
+          listType = 'ul';
+        }
+        html += '<li>' + processInline(line.replace(/^\s*[-*+]\s/, '')) + '</li>\n';
+        continue;
+      }
+
+      // Ordered list
+      if (/^\s*\d+\.\s/.test(line)) {
+        closeBlockElements();
+        if (!inList || listType !== 'ol') {
+          flushParagraph();
+          html += '<ol>\n';
+          inList = true;
+          listType = 'ol';
+        }
+        html += '<li>' + processInline(line.replace(/^\s*\d+\.\s/, '')) + '</li>\n';
+        continue;
+      }
+
+      if (inList) flushList();
+
+      // Paragraph (buffer lines until block ends)
+      paragraphBuffer += line + ' ';
+    }
+
+    // Close any open blocks
+    if (inCodeBlock) {
+      html += '<pre><code>' + escapeHtml(codeContent) + '</code></pre>\n';
+    }
+    closeBlockElements();
+
+    return html;
+  }
+
+  function processInline(text) {
+    // Escape HTML entities first
+    text = escapeHtml(text);
+
+    // Inline code (``...`` before `...`)
+    text = text.replace(/``(.+?)``/g, '<code>$1</code>');
+    text = text.replace(/`([^`]+)`/g, '<code>$1</code>');
+
+    // Bold (**...** or __...__)
+    text = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    text = text.replace(/__(.+?)__/g, '<strong>$1</strong>');
+
+    // Links [text](url)
+    text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+
+    return text;
+  }
+
+  function escapeHtml(str) {
+    var amp = String.fromCharCode(38); // &
+    var lt = String.fromCharCode(60);  // <
+    var gt = String.fromCharCode(62);  // >
+    var quot = String.fromCharCode(34); // "
+    return str
+      .replace(new RegExp(amp, 'g'), amp + 'amp;')
+      .replace(new RegExp(lt, 'g'), amp + 'lt;')
+      .replace(new RegExp(gt, 'g'), amp + 'gt;')
+      .replace(new RegExp(quot, 'g'), amp + 'quot;');
+  }
+
+  function renderContent(md) {
+    contentEl.innerHTML = parseMarkdown(md);
+  }
+
+  // --- Panel controls ---
+  function openAbout() {
+    panel.classList.remove('about-hidden');
+    panel.classList.add('about-visible');
+  }
+
+  function closeAbout() {
+    panel.classList.remove('about-visible');
+    panel.classList.add('about-hidden');
+  }
+
+  // Expose for external access
+  window.aboutOpen = openAbout;
+  window.aboutClose = closeAbout;
+
+  // Initialize when DOM is ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
 </script>
  <script>
 // ===== STATE =====
