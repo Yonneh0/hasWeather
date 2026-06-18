@@ -178,16 +178,10 @@ async function fetchRadarImageFromWMS(url) {
  * @returns {Promise<string|null>} data URL string
  */
 async function fetchRadarImageForOverlay(lat, lon, layer) {
-  // Check overlay-specific cache
   const cached = getCachedRadarOverlay(lat, lon, layer);
-  if (cached) {
-    console.log(`[Radar] Cache HIT for ${layer}`);
-    return cached;
-  }
+  if (cached) return cached;
 
   const imageUrl = buildRadarImageUrl(lat, lon, layer);
-  console.log(`[Radar] Fetching overlay: ${layer}`);
-
   try {
     const blob = await fetchRadarImageFromWMS(imageUrl);
     const dataUrl = await new Promise((resolve) => {

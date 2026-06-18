@@ -16,6 +16,7 @@ let _markerResizeTimer = null;
 
 // ===== INIT =====
 document.addEventListener('DOMContentLoaded', () => {
+  console.log('[App] Initializing...');
   initParticles();
 
   const unitBtn = document.getElementById('unit-toggle');
@@ -74,8 +75,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ===== MAIN RUN =====
 async function run() {
+  const prevLoc = userLocation ? `${userLocation.lat.toFixed(4)},${userLocation.lon.toFixed(4)}` : null;
+
   if (!userLocation) {
     userLocation = await getLocation();
+    console.log(`[Location] Resolved: ${userLocation.lat.toFixed(2)}°, ${Math.abs(userLocation.lon).toFixed(2)}°`);
+  } else if (prevLoc) {
+    const newLoc = `${userLocation.lat.toFixed(4)},${userLocation.lon.toFixed(4)}`;
+    if (newLoc !== prevLoc) {
+      console.log(`[Location] Changed: ${prevLoc} → ${newLoc}`);
+    }
   }
 
   const locEl = document.getElementById('user-location');
@@ -158,6 +167,7 @@ async function run() {
   }
 
   // All requests complete — render once
+  DataCacheLogSummary('location update');
   renderAll();
 
   // Setup radar overlay select and start background radar updates (only if not "None")
@@ -407,6 +417,81 @@ function toggleGame() {
     DONKEY_RUNNER.toggle();
     gameBtn.classList.add('active');
   }
+}
+
+// ===== RENDER ALL (with card count logging) =====
+let _lastCardCount = 0;
+
+function renderAll() {
+  const grid = document.getElementById('city-grid');
+  if (!grid) return;
+
+  const seenCoords = new Map();
+  const deduped = [];
+  for (const entry of weatherData) {
+    const lat = entry.latitude != null ? DataCache._roundCoord(entry.latitude) : null;
+    const lon = entry.longitude != null ? DataCache._roundCoord(entry.longitude) : null;
+    if (lat == null || lon == null) {
+      deduped.push(entry);
+      continue;
+    }
+    const coordKey = `${lat},${lon}`;
+    let isDup = false;
+    for (const [existingKey, existingEntry] of seenCoords) {
+      const [exLat, exLon] = existingKey.split(',').map(Number);
+      if (Math.abs(lat - exLat) < COORD_MATCH_TOLERANCE && Math.abs(lon - exLon) < COORD_MATCH_TOLERANCE) {
+        isDup = true;
+        if (!existingEntry.place_id && entry.place_id) {
+          seenCoords.set(existingKey, entry);
+          const dupIdx = deduped.findIndex(d => d === existingEntry);
+          if (dupIdx !== -1) deduped[dupIdx] = entry;
+        }
+        break;
+      }
+    }
+    if (!isDup) {
+      seenCoords.set(coordKey, entry);
+      deduped.push(entry);
+    }
+  }
+  weatherData = deduped;
+
+  const added = weatherData.length - _lastCardCount;
+  _lastCardCount = weatherData.length;
+  if (added !== 0) {
+    const lines = [`${added > 0 ? 'Added' : 'Removed'}: ${Math.abs(added)} card(s) (${weatherData.length} total)`];
+    for (const city of weatherData) {
+      const lat = city.latitude != null ? city.latitude.toFixed(2) + '°' : '?';
+      const lon = city.longitude != null ? Math.abs(city.longitude).toFixed(2) + '°' : '?';
+      lines.push(`  ${city.name} — ${lat}, ${lon}`);
+    }
+    console.log('[Cards]', lines.join('\n'));
+  }
+
+  grid.innerHTML = '';
+
+  weatherData.forEach((data, i) => {
+    const card = document.createElement('div');
+    card.className = 'city-card';
+    card.dataset.cityName = data.name;
+    card.dataset.placeid = data.place_id || '';
+    card.dataset.citydist = data.distance != null ? data.distance : '';
+    card.dataset.citylat = data.latitude != null ? data.latitude : '';
+    card.dataset.citylon = data.longitude != null ? data.longitude : '';
+    card.style.animationDelay = `${i * CARD_ANIMATION_STAGGER_MS}ms`;
+    card.style.animationFillMode = 'forwards';
+    card.style.overflow = 'visible';
+    const suffix = data.latitude != null && data.longitude != null ? `${data.latitude}_${data.longitude}` : undefined;
+    card.innerHTML = renderCityCard(data, suffix);
+    grid.appendChild(card);
+  });
+
+  applyBackgrounds();
+
+  setTimeout(() => {
+    drawAllCharts();
+    drawGhostCharts();
+  }, RENDER_ALL_CHART_DELAY_MS);
 }
 
 // ===== RADAR MARKER TOGGLE =====

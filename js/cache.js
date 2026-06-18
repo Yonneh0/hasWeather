@@ -7,6 +7,23 @@ function nwsCacheKey(lat, lon) {
   return `nws_${DataCache._roundCoord(lat)}_${DataCache._roundCoord(lon)}`;
 }
 
+// ===== LOG COUNTERS =====
+const _logCounter = { hits: 0, misses: 0, sets: 0, evictions: 0 };
+
+function DataCacheLogSummary(context) {
+  if (_logCounter.hits === 0 && _logCounter.misses === 0 && _logCounter.sets === 0) return;
+  const parts = [];
+  if (_logCounter.hits > 0) parts.push(`${_logCounter.hits}h`);
+  if (_logCounter.misses > 0) parts.push(`${_logCounter.misses}m`);
+  if (_logCounter.sets > 0) parts.push(`${_logCounter.sets}s`);
+  if (_logCounter.evictions > 0) parts.push(`${_logCounter.evictions}e`);
+  console.log(`[Cache] ${parts.join(', ')}${context ? ` — ${context}` : ''}`);
+  _logCounter.hits = 0;
+  _logCounter.misses = 0;
+  _logCounter.sets = 0;
+  _logCounter.evictions = 0;
+}
+
 // ===== NWS RATE LIMITER =====
 // NWS API limit: 1 request/second, burst of 3.
 // Moved here (before utils.js) so isNwsBoundsAvailable can use it during initial page load.
@@ -176,7 +193,7 @@ const DataCache = {
       const toRemove = lruList.splice(0, lruList.length - maxEntries);
       for (const key of toRemove) {
         localStorage.removeItem(`hasw_cache_${key}`);
-        console.log(`[DataCache] EVICTED (LRU): ${key}`);
+        _logCounter.evictions++;
       }
       this._setLruList(type, lruList);
     } catch (e) {
@@ -203,27 +220,15 @@ const DataCache = {
   has(key, type) {
     try {
       const raw = localStorage.getItem(`hasw_cache_${key}`);
-      if (!raw) {
-        console.log(`[DataCache] MISS (not found): ${key}`);
-        return false;
-      }
+      if (!raw) return false;
       const entry = JSON.parse(raw);
-      // Validate type matches (skip only for backward compat)
-      if (type != null && entry.type !== type) {
-        console.log(`[DataCache] MISS (type mismatch): ${key} (expected: ${type}, got: ${entry.type})`);
-        return false;
-      }
-      // Use entry.type for TTL lookup when type is null, to avoid undefined TTL
+      if (type != null && entry.type !== type) return false;
       const ttlKey = type ?? entry.type;
-      const expired = !entry || (Date.now() - entry.timestamp > this.TTL[ttlKey]);
-      if (expired) {
-        console.log(`[DataCache] MISS (expired): ${key} (type: ${ttlKey})`);
-        return false;
-      }
-      console.log(`[DataCache] HIT: ${key} (type: ${type})`);
+      if (!entry || Date.now() - entry.timestamp > this.TTL[ttlKey]) return false;
+      _logCounter.hits++;
       return true;
-    } catch (e) {
-      console.log(`[DataCache] MISS (error): ${key}`);
+    } catch {
+      _logCounter.misses++;
       return false;
     }
   },
@@ -232,28 +237,20 @@ const DataCache = {
   get(key, type) {
     try {
       const raw = localStorage.getItem(`hasw_cache_${key}`);
-      if (!raw) {
-        console.log(`[DataCache] MISS (not found): ${key}`);
-        return null;
-      }
+      if (!raw) return null;
       const entry = JSON.parse(raw);
-      // Validate type matches (skip only for backward compat)
-      if (type != null && entry.type !== type) {
-        console.log(`[DataCache] MISS (type mismatch): ${key} (expected: ${type}, got: ${entry.type})`);
-        return null;
-      }
-      // Use entry.type for TTL lookup when type is null, to avoid undefined TTL
+      if (type != null && entry.type !== type) return null;
       const ttlKey = type ?? entry.type;
       if (Date.now() - entry.timestamp > this.TTL[ttlKey]) {
-        console.log(`[DataCache] MISS (expired): ${key} (type: ${ttlKey}, age: ${Math.round((Date.now() - entry.timestamp) / 1000)}s, ttl: ${this.TTL[ttlKey] / 1000}s)`);
         localStorage.removeItem(`hasw_cache_${key}`);
         return null;
       }
-      console.log(`[DataCache] HIT: ${key} (type: ${type}, age: ${Math.round((Date.now() - entry.timestamp) / 1000)}s)`);
+      _logCounter.hits++;
       this._touchLru(type, key);
       return entry.data;
     } catch (e) {
-      console.log(`[DataCache] MISS (parse error): ${key}`, e);
+      console.error(`[DataCache] parse error: ${key}`, e);
+      _logCounter.misses++;
       return null;
     }
   },
@@ -261,8 +258,6 @@ const DataCache = {
   // Store data with timestamp and type
   set(key, data, type) {
     try {
-      const size = new Blob([JSON.stringify({ timestamp: Date.now(), type: type, data: data })]).size;
-      console.log(`[DataCache] SET: ${key} (type: ${type}, size: ${Math.round(size / 100)} / 100B)`);
       localStorage.setItem(`hasw_cache_${key}`, JSON.stringify({
         timestamp: Date.now(),
         type: type,
@@ -270,14 +265,14 @@ const DataCache = {
       }));
       this._touchLru(type, key);
       this._evictIfNecessary(type);
+      _logCounter.sets++;
     } catch (e) {
-      console.log(`[DataCache] SET FAILED: ${key} - ${e.message}`);
+      console.error(`[DataCache] SET FAILED: ${key} - ${e.message}`);
     }
   },
 
   // Invalidate a specific cache key by type
   invalidate(key) {
-    console.log(`[DataCache] INVALIDATE: ${key}`);
     localStorage.removeItem(`hasw_cache_${key}`);
   },
 

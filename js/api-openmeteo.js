@@ -298,7 +298,6 @@ async function fetchWeatherForCities(cities) {
   // Check for pending fetch (request deduplication)
   const pendingKey = getPendingWeatherFetch(uncachedCities);
   if (pendingKey) {
-    console.log('[fetchWeatherForCities] Pending fetch exists, waiting...');
     return pendingKey;
   }
 

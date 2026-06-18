@@ -69,50 +69,111 @@ node build.js
 
 Output: `weather.html` — the one true file.
 
-## Project Structure
+## Project Structure (hasWeather/)
 
-```
-build.js                249 lines — build script (inlines CSS/JS into weather.html)
-favicon.ico                       — site favicon
-index.html               74 lines — development HTML template (linked CSS/JS)
-package.json             14 lines — project metadata + build script
-README.md                         — you are here
-weather-full.html       GENERATED — complete single-file build output with comments, including embedded favicon (318kb+)
-weather-prod.html       GENERATED — minimized/optimized production-ready single-file build output, without embedded favicon (179kb+)
-weather.html            GENERATED — complete single-file build output with comments, without embedded favicon (303kb+)
-weather-local.js        — local weather station data override file (see below)
-weather-local.js.example — example configuration for local sensor data
-css/
-  base.css              18 lines — reset & base styles (body, particle-canvas)
-  main.css               7 lines — entry point (imports all modular CSS)
-  layout.css           183 lines — core layout & structural styles (header, city grid, modal, loading, text glow)
-  card-components.css  436 lines — card display components (city card, hourly forecast, canvas charts)
-   interactive.css      410 lines — interactive elements (SVG weather icons, network outage panel)
-  donkey-runner.css    740 lines — minigame panel styling & animations
-js/
-  api-nws.js          824 lines — NWS API client (gridpoint data, observation stations, alerts, snowfall/ice accumulation parsing, sky cover, cross-source lookup) with rate limiting and exponential backoff for 429 responses
-  api-openmeteo.js     428 lines — Open-Meteo weather/AQI API client with consolidated cache keys, per-city incremental fetch, request deduplication, and cross-source NWS fallback
-  api-openstreetmap.js 181 lines — Nominatim/OSM nearby city discovery with bearing-based diversity selection
-   api-radar.js          244 lines — NOAA/NCEP GeoServer WMS radar API client (multi-overlay fetch with per-layer localStorage caching, GetCapabilities layer discovery, white-to-transparent processing)
-  cache.js             247 lines — DataCache (localStorage caching with configurable TTLs per type and LRU eviction, NWS toggle state persistence)
-   charts.js            481 lines — canvas chart rendering (merged chart, combined chart, ghost NWS overlay charts, particles) with named constants and shared helpers
-  constants.js          72 lines — shared constants (WMO codes & gradients)
-  donkey-runner.js    2581 lines — Donkey Runner minigame engine (canvas-based runner with extensive features)
-  icons.js             289 lines — animated SVG weather icons
-  local-sensor.js      704 lines — Local Sensor Bar for displaying local weather station data (15 sensor types, flexible unit parsing, auto-refresh with exponential backoff, TTL expiry, page visibility awareness, health checks)
-   main.js              290 lines — entry point (state + DOM init + event bindings + game toggle + radar background + marker toggle + run orchestration)
-  network-monitor.js   331 lines — network outage detection, animated error panel, auto-retry
-  render.js            518 lines — DOM rendering (placeholder cards, incremental OM/NWS updates, full card render with ghost NWS overlay, chart coordination) using named constants
-  utils.js             213 lines — utility functions (unit conversion, haversine, bearing, wind compass, AQI labeling, day/night check, IP-based location, NWS bounds check, background refresh, unit toggle)
-rag-docs/
-  air-quality-api.md      167 lines — documentation for the air-quality endpoint
-  alternate-weather-apis.md — list of alternative weather APIs
-  geocoding-api.md        137 lines — documentation for the geocoding endpoint
-  MET_Norway-api.md       — documentation for the MET Norway API
-  weather-forecast-api.md 204 lines — documentation for the weather forecast endpoint
-  weather.gov-api.md     1200 lines — documentation for the NWS API endpoint
-  WeatherGov-Radar-API.md 400+ lines — documentation for the Weather.gov radar endpoints (WMS, metadata)
-```
+### .git/ - 11 items - GIT Folder
+
+### css/ - 6 items - Directory
+
+#### css/base.css - 29 lines - Cascading Style Sheet (css) — reset & base styles (body, particle-canvas)
+
+#### css/card-components.css - 912 lines - Cascading Style Sheet (css) — card display components (city card, hourly forecast, canvas charts)
+
+#### css/donkey-runner.css - 777 lines - Cascading Style Sheet (css) — minigame panel styling & animations
+
+#### css/interactive.css - 385 lines - Cascading Style Sheet (css) — interactive elements (SVG weather icons, network outage panel)
+
+#### css/layout.css - 323 lines - Cascading Style Sheet (css) — core layout & structural styles (header, city grid, modal, loading, text glow)
+
+#### css/main.css - 7 lines - Cascading Style Sheet (css) — entry point (imports all modular CSS)
+
+### js/ - 14 items - Directory
+
+#### js/api-nws.js - 842 lines - JavaScript (js) — NWS API client
+- gridpoint data, observation stations, alerts, snowfall/ice accumulation parsing, sky cover, cross-source lookup with rate limiting and exponential backoff for 429 responses
+
+#### js/api-openmeteo.js - 437 lines - JavaScript (js) — Open-Meteo weather/AQI API client
+- consolidated cache keys, per-city incremental fetch, request deduplication, and cross-source NWS fallback
+
+#### js/api-openstreetmap.js - 184 lines - JavaScript (js) — Nominatim/OSM nearby city discovery with bearing-based diversity selection
+
+#### js/api-radar.js - 245 lines - JavaScript (js) — NOAA/NCEP GeoServer WMS radar API client
+- multi-overlay fetch with per-layer localStorage caching, GetCapabilities layer discovery, white-to-transparent processing
+
+#### js/cache.js - 285 lines - JavaScript (js) — DataCache (localStorage caching with configurable TTLs per type and LRU eviction, NWS toggle state persistence)
+
+#### js/charts.js - 495 lines - JavaScript (js) — canvas chart rendering (merged chart, combined chart, ghost NWS overlay charts, particles) with named constants and shared helpers
+
+#### js/constants.js - 68 lines - JavaScript (js) — shared constants (WMO codes & gradients)
+
+#### js/donkey-runner.js - 2755 lines - JavaScript (js) — Donkey Runner minigame engine (canvas-based runner with extensive features)
+
+#### js/icons.js - 290 lines - JavaScript (js) — animated SVG weather icons
+
+#### js/local-sensor.js - 754 lines - JavaScript (js) — Local Sensor Bar for displaying local weather station data (15 sensor types, flexible unit parsing, auto-refresh with exponential backoff, TTL expiry, page visibility awareness, health checks)
+
+#### js/main.js - 589 lines - JavaScript (js) — entry point (state + DOM init + event bindings + game toggle + radar background + marker toggle + run orchestration)
+
+#### js/network-monitor.js - 332 lines - JavaScript (js) — network outage detection, animated error panel, auto-retry
+
+#### js/render.js - 555 lines - JavaScript (js) — DOM rendering (placeholder cards, incremental OM/NWS updates, full card render with ghost NWS overlay, chart coordination) using named constants
+
+#### js/utils.js - 258 lines - JavaScript (js) — utility functions (unit conversion, haversine, bearing, wind compass, AQI labeling, day/night check, IP-based location, NWS bounds check, background refresh, unit toggle)
+
+### node_modules/ - 20 items
+
+### rag-docs/ - 7 items - Directory
+
+#### rag-docs/MET_Norway-api.md - 253 lines - Markdown Document (md) — documentation for the MET Norway API
+
+#### rag-docs/WeatherGov-Radar-API.md - 356 lines - Markdown Document (md) — documentation for the Weather.gov radar endpoints (WMS, metadata)
+
+#### rag-docs/air-quality-api.md - 168 lines - Markdown Document (md) — documentation for the air-quality endpoint
+
+#### rag-docs/alternate-weather-apis.md - 510 lines - Markdown Document (md) — list of alternative weather APIs
+
+#### rag-docs/geocoding-api.md - 138 lines - Markdown Document (md) — documentation for the geocoding endpoint
+
+#### rag-docs/weather-forecast-api.md - 205 lines - Markdown Document (md) — documentation for the weather forecast endpoint
+
+#### rag-docs/weather.gov-api.md - 1201 lines - Markdown Document (md) — documentation for the NWS API endpoint
+
+### .gitignore - 2 lines
+
+### AGENTS.md - 2 lines — I wouldn't let your agent read this. Very bad advice.
+
+### README.md - 281 lines — you are here
+
+### build.js - 250 lines — build script (inlines CSS/JS into weather.html)
+
+### favicon.ico - 130985 bytes - ICO Image (ico) — site favicon
+
+### has.png - 61909 bytes - PNG Image (png) — Half-Assed Solutions Official Unoffocial Mascott
+
+### hasWeather-low.png - 11568 bytes - PNG Image (png) — Favicon, minimized, in png flavor
+
+### hasWeather.png - 52189 bytes - PNG Image (png) — Favicon, in png flavor
+
+### index.html - 64 lines — development HTML template (linked CSS/JS)
+
+### package-lock.json - 251 lines — build script stuff
+
+### package.json - 15 lines — project metadata + build script
+
+### project-tree.js - 211 lines — ... huh, I wonder what this was....
+
+### weather-full.html - 10597 lines — (GENERATED) complete single-file build output with comments, including embedded favicon (318kb+)
+
+### weather-local.js - 4 lines — local weather station data override file (see below)
+
+### weather-local.js.example - 107 lines — example configuration for local sensor data
+
+### weather-prod.html - 1 lines — (GENERATED) minimized/optimized production-ready single-file build output, without embedded favicon (179kb+)
+
+### weather.html - 10597 lines — (GENERATED) complete single-file build output with comments, without embedded favicon (303kb+)
+
+
+---
 
 ## Caching
 
