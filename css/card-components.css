@@ -1,5 +1,150 @@
 /* ===== CARD-COMPONENTS - Card-related display components ===== */
 
+/* ===== RADAR MAP CONTAINER & MARKERS ===== */
+.radar-map-container {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  width: 512px;
+  height: 512px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 2;
+  transition: opacity 0.4s ease;
+  will-change: transform, opacity;
+}
+
+.radar-map-container.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.radar-marker-layer {
+  position: absolute;
+  inset: 0;
+}
+
+.radar-marker-dot {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  background: rgba(255, 255, 255, 0.85);
+  border: 2px solid rgba(70, 130, 255, 0.9);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+  cursor: pointer;
+  transition: opacity 0.4s ease, transform 0.3s ease;
+  box-shadow: 0 0 6px rgba(70, 130, 255, 0.4);
+}
+
+.radar-marker-dot:hover {
+  transform: translate(-50%, -50%) scale(1.8);
+  background: #fff;
+  box-shadow: 0 0 12px rgba(70, 130, 255, 0.8);
+  z-index: 100;
+}
+
+.radar-marker-dot .marker-city-name {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 0 3px rgba(0,0,0,1), 0 0 6px rgba(0,0,0,0.8);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.radar-marker-dot:hover .marker-city-name {
+  opacity: 1;
+  z-index: 200;
+}
+
+/* Always show city name on markers */
+.radar-marker-dot::after {
+  content: attr(data-cityname);
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 0 3px rgba(0,0,0,1), 0 0 6px rgba(0,0,0,0.8);
+  pointer-events: none;
+  opacity: 1;
+  z-index: 200;
+}
+
+.radar-marker-dot:hover .marker-city-name {
+  display: none;
+}
+
+.radar-marker-dot:hover .marker-distance {
+  opacity: 1;
+  z-index: 200;
+}
+
+.radar-marker-dot .marker-distance {
+  position: absolute;
+  top: calc(100% + 16px);
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-size: 0.6rem;
+  color: rgba(255,255,255,0.85);
+  text-shadow: 0 0 3px rgba(0,0,0,1), 0 0 6px rgba(0,0,0,0.8);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.radar-marker-dot:hover .marker-distance {
+  opacity: 1;
+}
+
+/* User location indicator (center marker) */
+.radar-user-marker {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 6px;
+  height: 6px;
+  background: #fff;
+  border: 2px solid rgba(70, 130, 255, 1);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 50;
+  box-shadow: 0 0 8px rgba(70, 130, 255, 0.6);
+}
+
+.radar-user-marker::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 20px;
+  height: 20px;
+  background: rgba(70, 130, 255, 0.15);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  animation: radar-pulse 2s ease-in-out infinite;
+}
+
+@keyframes radar-pulse {
+  0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.5; }
+  50% { transform: translate(-50%, -50%) scale(2); opacity: 0; }
+}
+
+/* ===== CARD-COMPONENTS - Card-related display components ===== */
+
 /* ===== LOCAL SENSOR BAR ===== */
 .sensor-bar {
   display: flex;

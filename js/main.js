@@ -10,6 +10,10 @@ let _chartResizeTimer = null;
 let _maxCities = MAX_CITIES; // Default: show nearest 6 cities
 let _selectedRadarOverlay = 'qcd-composite'; // Current overlay selection
 
+// ===== RADAR MARKER TOGGLE STATE =====
+let _radarMarkersVisible = false;
+let _markerResizeTimer = null;
+
 // ===== INIT =====
 document.addEventListener('DOMContentLoaded', () => {
   initParticles();
@@ -17,10 +21,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const unitBtn = document.getElementById('unit-toggle');
   const refreshBtn = document.getElementById('refresh-btn');
   const gameBtn = document.getElementById('game-btn');
+  const radarToggleBtn = document.getElementById('radar-toggle-btn');
 
   if (unitBtn) unitBtn.addEventListener('click', toggleUnit);
   if (refreshBtn) refreshBtn.addEventListener('click', refresh);
   if (gameBtn) gameBtn.addEventListener('click', toggleGame);
+  if (radarToggleBtn) radarToggleBtn.addEventListener('click', toggleRadarMarkers);
 
   // Chart redraw on resize (includes ghost charts)
   window.addEventListener('resize', () => {
@@ -29,6 +35,8 @@ document.addEventListener('DOMContentLoaded', () => {
       drawAllCharts();
       drawGhostCharts();
     }, CHART_RESIZE_DEBOUNCE_MS);
+    // Also redraw markers if visible
+    onMarkerResize();
   });
 
    // Debug location select
@@ -399,5 +407,182 @@ function toggleGame() {
     DONKEY_RUNNER.toggle();
     gameBtn.classList.add('active');
   }
+}
+
+// ===== RADAR MARKER TOGGLE =====
+function createRadarMapContainer() {
+  // Only create once
+  if (document.getElementById('radar-map-container')) return;
+
+  const container = document.createElement('div');
+  container.id = 'radar-map-container';
+  container.className = 'radar-map-container hidden';
+  container.innerHTML = `
+    <div class="radar-marker-layer" id="radar-marker-layer"></div>
+    <div class="radar-user-marker" title="Your Location"></div>
+  `;
+  document.body.appendChild(container);
+}
+
+function calculateMarkerPosition(city) {
+  if (!userLocation || city.latitude == null || city.longitude == null) return null;
+
+  // Calculate offset in degrees from user location
+  const dLat = city.latitude - userLocation.lat;
+  const dLon = city.longitude - userLocation.lon;
+
+  // Convert to km (approximate)
+  const latKm = dLat * 111.32;
+  const lonKm = dLon * 111.32 * Math.cos(userLocation.lat * DEG_TO_RAD);
+
+  // Radar shows a square area centered on user, radius = RADAR_BBOX_RADIUS_KM (200km)
+  const bboxSize = RADAR_BBOX_RADIUS_KM * 2; // 400km
+
+  // Position as percentage within the 512x512 container
+  // left: 0% = west edge, 50% = user location, 100% = east edge
+  return {
+    leftPct: ((lonKm + bboxSize / 2) / bboxSize) * 100,
+    topPct: ((bboxSize / 2 - latKm) / bboxSize) * 100,
+  };
+}
+
+function renderMarkers() {
+  createRadarMapContainer();
+  const container = document.getElementById('radar-map-container');
+  const layer = document.getElementById('radar-marker-layer');
+  if (!container || !layer) return;
+
+  // Calculate scale to match background-size: cover behavior
+  // The radar image is 512x512, scaled to fill viewport like background-size: cover
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const scale = Math.max(vw, vh) / RADAR_IMAGE_SIZE;
+  container.style.transform = `translate(-50%, -50%) scale(${scale})`;
+
+  // Track which city keys are currently rendered
+  const existingDots = layer.querySelectorAll('.radar-marker-dot');
+  const existingKeys = new Set();
+  existingDots.forEach(d => existingKeys.add(d.dataset.key));
+
+  const currentKeys = new Set();
+
+  for (const city of weatherData) {
+    if (city.latitude == null || city.longitude == null) continue;
+
+    const key = `${city.latitude.toFixed(4)}:${city.longitude.toFixed(4)}`;
+    currentKeys.add(key);
+
+    // Try to update existing marker instead of recreating
+    let dot = layer.querySelector(`.radar-marker-dot[data-key="${key}"]`);
+    if (dot) {
+      existingKeys.delete(key);
+      // Update position and content
+      const pos = calculateMarkerPosition(city);
+      if (pos) {
+        dot.style.left = `${pos.leftPct}%`;
+        dot.style.top = `${pos.topPct}%`;
+      }
+      dot.setAttribute('data-cityname', city.name);
+      dot.title = city.name;
+      const distText = city.distance != null ? `${Math.round(city.distance)} mi` : '';
+      dot.innerHTML = `
+        <span class="marker-city-name">${escapeHTML(city.name)}</span>
+        ${distText ? `<span class="marker-distance">${distText}</span>` : ''}
+      `;
+    } else {
+      // Create new marker
+      const pos = calculateMarkerPosition(city);
+      if (!pos) continue;
+
+      dot = document.createElement('div');
+      dot.className = 'radar-marker-dot';
+      dot.dataset.key = key;
+      dot.style.left = `${pos.leftPct}%`;
+      dot.style.top = `${pos.topPct}%`;
+      dot.title = city.name;
+      dot.setAttribute('data-cityname', city.name);
+      const distText = city.distance != null ? `${Math.round(city.distance)} mi` : '';
+      dot.innerHTML = `
+        <span class="marker-city-name">${escapeHTML(city.name)}</span>
+        ${distText ? `<span class="marker-distance">${distText}</span>` : ''}
+      `;
+      layer.appendChild(dot);
+    }
+  }
+
+  // Remove stale markers for cities no longer in weatherData
+  for (const key of existingKeys) {
+    if (!currentKeys.has(key)) {
+      const staleDot = layer.querySelector(`.radar-marker-dot[data-key="${key}"]`);
+      if (staleDot) staleDot.remove();
+    }
+  }
+}
+
+function toggleRadarMarkers() {
+  const btn = document.getElementById('radar-toggle-btn');
+  if (!btn) return;
+
+  _radarMarkersVisible = !_radarMarkersVisible;
+  btn.classList.toggle('active', _radarMarkersVisible);
+
+  if (_radarMarkersVisible) {
+    // Show markers, hide cards with animation
+    renderMarkers();
+
+    const container = document.getElementById('radar-map-container');
+    if (container) {
+      container.classList.remove('hidden');
+    }
+
+    // Animate cards outward — disable CSS animation to avoid transform conflicts
+    const cards = document.querySelectorAll('.city-card');
+    cards.forEach(card => {
+      card.style.animation = 'none';
+      card.style.opacity = '1';
+      card.style.transform = 'scale(1)';
+      card.style.zIndex = '1'; // Below radar container (z=2)
+
+      // Force reflow so the browser registers the starting state
+      void card.offsetHeight;
+
+      const cardRect = card.getBoundingClientRect();
+      const centerX = window.innerWidth / 2;
+      const centerY = window.innerHeight / 2;
+      const dx = (cardRect.left + cardRect.width / 2 - centerX) / Math.max(centerX, 1);
+      const dy = (cardRect.top + cardRect.height / 2 - centerY) / Math.max(centerY, 1);
+
+      card.style.transition = 'opacity 0.9s ease, transform 1s cubic-bezier(0.16, 1, 0.3, 1)';
+      card.style.transformOrigin = `${50 + dx * 50}% ${50 + dy * 50}%`;
+      card.style.transform = `scale(2.5)`;
+      card.style.opacity = '0';
+    });
+  } else {
+    // Hide markers, show cards with animation
+    const container = document.getElementById('radar-map-container');
+    if (container) {
+      container.classList.add('hidden');
+    }
+
+    // Animate cards back in
+    const cards = document.querySelectorAll('.city-card');
+    cards.forEach(card => {
+      card.style.transition = 'opacity 0.9s ease, transform 1s cubic-bezier(0.16, 1, 0.3, 1)';
+      card.style.transformOrigin = 'center center';
+      card.style.transform = 'scale(1)';
+      card.style.opacity = '1';
+      card.style.zIndex = '';
+    });
+  }
+}
+
+// ===== RADAR MARKER RESIZE HANDLER =====
+function onMarkerResize() {
+  clearTimeout(_markerResizeTimer);
+  _markerResizeTimer = setTimeout(() => {
+    if (_radarMarkersVisible) {
+      renderMarkers();
+    }
+  }, 200);
 }
 

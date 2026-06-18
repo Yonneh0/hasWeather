@@ -133,6 +133,56 @@
   color: rgba(255,255,255,0.6);
 }
 
+/* ===== RADAR TOGGLE GROUP (button bar) ===== */
+.radar-toggle-group {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 8px;
+  overflow: hidden;
+  position: relative;
+  z-index: 10;
+}
+
+/* Remove border-radius from the select so it connects to the button */
+.radar-toggle-group .radar-overlay-select {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.radar-toggle-btn {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-right: none;
+  color: #fff;
+  padding: 0.3rem 0.6rem;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.1s, box-shadow 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.radar-toggle-btn:hover {
+  background: rgba(255,255,255,0.15);
+}
+
+.radar-toggle-btn:active {
+  transform: scale(0.96);
+}
+
+/* Active state - markers visible */
+.radar-toggle-btn.active {
+  background: rgba(70, 130, 255, 0.3);
+  border-color: rgba(70, 130, 255, 0.5);
+  box-shadow: 0 0 8px rgba(70, 130, 255, 0.25);
+}
+
+.radar-toggle-btn.active:hover {
+  background: rgba(70, 130, 255, 0.4);
+}
+
 #refresh-btn.spinning {
   animation: spin 1s linear infinite;
 }

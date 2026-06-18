@@ -8,6 +8,7 @@ completely self-contained single file weather app, that uses public sources, wit
 - Dual data source architecture: Open-Meteo as base for all cities, NWS as supplemental where available (enhanced mode)
 - Weather data from Open-Meteo API (temperature, humidity, wind, precipitation, UV index, visibility, surface pressure, air quality, 24-hour hourly forecast) + NWS API (current conditions, hourly forecast, alerts)
 - Radar imagery from NOAA/NCEP GeoServer WMS — current MRMS base reflectivity image displayed as a page background with white-to-transparent processing
+- **Radar Marker Toggle** — Click the 👁 button (next to the radar overlay selector) to switch between city cards and small map markers overlaid on the radar image. City cards animate outward from their positions while markers fade in at their exact geographic locations. Markers are pixel-perfect, centered on the user's location, and positioned using percentage-based coordinates within a 512×512 container scaled to match the background image. City names and distances are always visible on markers; hover reveals additional info. Background weather updates continue uninterrupted in either view.
 - localStorage-based caching with configurable TTLs per data type (15 min for weather/AQI, 24h for geocoding/IP, 10 min for nearby cities) and LRU eviction (default: 500 entries per type)
 - Nearby city discovery via Nominatim with bearing-based diversity selection and automatic display of up to 6 nearest cities
 - °F/°C unit toggle with debouncing
@@ -34,7 +35,7 @@ completely self-contained single file weather app, that uses public sources, wit
 - **Build:** Node.js (no frameworks, no npm packages required at runtime)
 - **Weather Data:** [Open-Meteo API](https://open-meteo.com/) (forecast + current) + [NWS API](https://api.weather.gov/) (current conditions, hourly forecast, alerts)
 - **Air Quality:** [Open-Meteo Air Quality API](https://open-meteo.com/air-quality-api)
-- **Radar Imagery:** [NOAA/NCEP GeoServer WMS](https://opengeo.ncep.noaa.gov/geoserver/conus/) — selectable overlay layers (Base Reflectivity, Composite Reflectivity/QCD, Echo Tops, Precipitation Type) via header combo box; radar image is always centered on the user's location as a single non-tiled background with white pixels made transparent
+- **Radar Imagery:** [NOAA/NCEP GeoServer WMS](https://opengeo.ncep.noaa.gov/geoserver/conus/) — selectable overlay layers (Base Reflectivity, Composite Reflectivity/QCD, Echo Tops, Precipitation Type) via header combo box (in a button bar with the 👁 radar marker toggle); radar image is always centered on the user's location as a single non-tiled background with white pixels made transparent
 - **Geocoding:** [Open-Meteo Geocoding API](https://geocoding-api.open-meteo.com/) + [Nominatim/OSM](https://nominatim.openstreetmap.org/)
 - **Location:** Browser Geolocation API, [ipinfo.io](https://ipinfo.io/) (fallback)
 - **Chart Rendering:** Canvas-based custom implementation
@@ -99,7 +100,7 @@ js/
   donkey-runner.js    2581 lines — Donkey Runner minigame engine (canvas-based runner with extensive features)
   icons.js             289 lines — animated SVG weather icons
   local-sensor.js      704 lines — Local Sensor Bar for displaying local weather station data (15 sensor types, flexible unit parsing, auto-refresh with exponential backoff, TTL expiry, page visibility awareness, health checks)
-   main.js              252 lines — entry point (state + DOM init + event bindings + game toggle + radar background + run orchestration)
+   main.js              290 lines — entry point (state + DOM init + event bindings + game toggle + radar background + marker toggle + run orchestration)
   network-monitor.js   331 lines — network outage detection, animated error panel, auto-retry
   render.js            518 lines — DOM rendering (placeholder cards, incremental OM/NWS updates, full card render with ghost NWS overlay, chart coordination) using named constants
   utils.js             213 lines — utility functions (unit conversion, haversine, bearing, wind compass, AQI labeling, day/night check, IP-based location, NWS bounds check, background refresh, unit toggle)
