@@ -195,6 +195,13 @@ function getCityShortestTTL(city) {
   return shortest === Infinity ? MIN_BACKGROUND_REFRESH_MS : shortest;
 }
 
+function stopBackgroundRefresh() {
+  if (_bgRefreshTimer) {
+    clearInterval(_bgRefreshTimer);
+    _bgRefreshTimer = null;
+  }
+}
+
 function startBackgroundRefresh() {
   if (_bgRefreshTimer) clearInterval(_bgRefreshTimer);
 
@@ -240,6 +247,9 @@ async function refresh() {
   const btn = document.getElementById('refresh-btn');
   btn.classList.add('spinning');
   btn.disabled = true;
+
+  // Stop existing background timer before re-fetching
+  stopBackgroundRefresh();
 
   DataCache.invalidate('ip_location');
   _nearbyCache = null;

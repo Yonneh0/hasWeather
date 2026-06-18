@@ -5,7 +5,6 @@ let weatherData = [];
 let isLoading = false;
 let _nearbyCache = null;
 let _nearbyCacheTime = 0;
-let _toggleDebounceTimer = null;
 let _chartResizeTimer = null;
 let _maxCities = MAX_CITIES; // Default: show nearest 6 cities
 let _selectedRadarOverlay = 'qcd-composite'; // Current overlay selection
@@ -179,6 +178,8 @@ async function run() {
     }
   }
 
+  // Start periodic background refresh of weather data
+  startBackgroundRefresh();
 }
 
 // ===== RADAR BACKGROUND STATE =====
