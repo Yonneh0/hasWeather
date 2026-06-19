@@ -2889,12 +2889,253 @@ body.donkey-fullscreen .donkey-panel.donkey-hidden {
   <div class="about-panel-body">
     <div class="about-inner-panel" id="about-content">
       <!-- START README.md -->
-      <h1># hasWeather</h1>
-      <p>completely self-contained single file weather app, that uses public sources, with proper local caching, to provide reliable comprehensive weather information, with 0 ads.</p>
-      <p><em>— Brought to you by Carls Jr —</em></p>
-      <br>
-      <h2>[ <A HREF="README.md">View README.md</A> ]</h2>
-      <!-- END README.md -->
+<p># hasWeather (Under Development: Proceed with caution)</p>
+<p>completely self-contained single file weather app, that uses public sources, with proper local caching, to provide reliable comprehensive weather information, with 0 ads. Brought to you by <code>Carls' Jr</code>.</p>
+<p>## Features</p>
+<ul>
+  <li>Multiple city monitoring in a responsive grid layout (configurable up to 6 cities)</li>
+  <li>Dual data source architecture: Open-Meteo as base for all cities, NWS as supplemental where available (enhanced mode)</li>
+  <li>Weather data from Open-Meteo API (temperature, humidity, wind, precipitation, UV index, visibility, surface pressure, air quality, 24-hour hourly forecast) + NWS API (current conditions, hourly forecast, alerts)</li>
+  <li>Radar imagery from NOAA/NCEP GeoServer WMS — current MRMS base reflectivity image displayed as a page background with white-to-transparent processing</li>
+  <li><strong>Radar Marker Toggle</strong> — Click the 👁 button (next to the radar overlay selector) to switch between city cards and small map markers overlaid on the radar image. City cards animate outward from their positions while markers fade in at their exact geographic locations. Markers are pixel-perfect, centered on the user's location, and positioned using percentage-based coordinates within a 512×512 container scaled to match the background image. City names and distances are always visible on markers; hover reveals additional info. Background weather updates continue uninterrupted in either view.</li>
+  <li>localStorage-based caching with configurable TTLs per data type (15 min for weather/AQI, 24h for geocoding/IP, 10 min for nearby cities) and LRU eviction (default: 500 entries per type)</li>
+  <li>Nearby city discovery via Nominatim with bearing-based diversity selection and automatic display of up to 6 nearest cities</li>
+  <li>°F/°C unit toggle with debouncing</li>
+  <li>Fullscreen toggle button (hidden by default, shown when supported)</li>
+  <li>Animated SVG weather icons (20+ weather types with glow, rotation, drift, shake, bob, and particle animations)</li>
+  <li>Canvas-based charts — merged chart (temperature area fill + precipitation bars + wind line), combined chart (humidity fill + wind line + precipitation bars) with live min/max/avg stats, and ghost NWS overlay charts</li>
+  <li>Automatic API retry with exponential backoff (3 retries, 1s/2s/4s) for network resilience</li>
+  <li>Automatic geolocation via browser Geolocation API, falling back to ipinfo.io IP-based lookup</li>
+  <li>Nearby city discovery via Nominatim with bearing-based diversity selection and Open-Meteo feature_code categorization (state capitals, regional capitals, nearest cities)</li>
+  <li>Wind compass display with directional arrows</li>
+  <li>Day/night aware UI theming (dynamic city backgrounds based on current weather code)</li>
+  <li>Debug quick-select buttons for common test locations</li>
+  <li>Particle canvas background animation</li>
+  <li>Network outage detection on initial load with comical animated error panel, progress bar, and auto-retry cycle</li>
+  <li><strong>Local Sensor Bar</strong> — Real-time local weather station data display (temperature, feels-like, dewpoint, wind speed/gust/direction, humidity, pressure, GPS coordinates, UV index, visibility, rainfall, solar radiation, soil moisture) with auto-refresh and TTL expiry</li>
+  <li><strong>Ghost Chart Overlay</strong> — When NWS data is available, parallel NWS data shown as blue-tinted ghost elements: ghost temperature, ghost weather icon, ghost details grid values, ghost hourly forecast, and ghost merged chart canvas</li>
+  <li><strong>Cross-source Data Model</strong> — Three states: <code>open-meteo</code> (OM-only), <code>nws</code> (NWS-only), <code>enhanced</code> (OM base + NWS supplemental). Field-level merging where missing OM fields are filled from NWS cache and vice versa</li>
+  <li><strong>Donkey Runner Minigame</strong> — Chrome dinosaur-style endless runner with extensive features: animated donkey character, backflip on rare jumps, double-jump with fart sound effect, stumble mechanic (donkey trips for 2 seconds), property damage bonus (+100 points when knocking obstacles while stumbling), near-miss detection (+50 points), snarky message system (50+ messages across 20 event types), procedural sound effects (jump, double-jump/fart, game over, milestone, near-miss, land, ceiling), day/night cycle, air-based obstacles (jet, falling rock, drone), obstacle count tracking on game over screen with SVG icons, post-game stats breakdown (run time, air time, jump stats), corner stat blocks, fullscreen mode, sound toggle with localStorage persistence</li>
+  <li>Zero external dependencies — pure vanilla HTML/CSS/JS</li>
+</ul>
+<p>## Tech Stack</p>
+<ul>
+  <li><strong>Frontend:</strong> Vanilla HTML5, CSS3, JavaScript (ES6+)</li>
+  <li><strong>Build:</strong> Node.js (no frameworks, no npm packages required at runtime)</li>
+  <li><strong>Weather Data:</strong> <a href="https://open-meteo.com/">Open-Meteo API</a> (forecast + current) + <a href="https://api.weather.gov/">NWS API</a> (current conditions, hourly forecast, alerts)</li>
+  <li><strong>Air Quality:</strong> <a href="https://open-meteo.com/air-quality-api">Open-Meteo Air Quality API</a></li>
+  <li><strong>Radar Imagery:</strong> <a href="https://opengeo.ncep.noaa.gov/geoserver/conus/">NOAA/NCEP GeoServer WMS</a> — selectable overlay layers (Base Reflectivity, Composite Reflectivity/QCD, Echo Tops, Precipitation Type) via header combo box (in a button bar with the 👁 radar marker toggle); radar image is always centered on the user's location as a single non-tiled background with white pixels made transparent</li>
+  <li><strong>Geocoding:</strong> <a href="https://geocoding-api.open-meteo.com/">Open-Meteo Geocoding API</a> + <a href="https://nominatim.openstreetmap.org/">Nominatim/OSM</a></li>
+  <li><strong>Location:</strong> Browser Geolocation API, <a href="https://ipinfo.io/">ipinfo.io</a> (fallback)</li>
+  <li><strong>Chart Rendering:</strong> Canvas-based custom implementation</li>
+</ul>
+<p>## Getting Started</p>
+<p>Just open <code>weather-prod.html</code> in your browser. That's it. No install, no server, no nonsense.</p>
+<pre><code>file:///path/to/weather.html
+</code></pre>
+<p>Alternatively, if you want to build from source (see <a href="#building">Building</a> below):</p>
+<pre><code># Open index.html directly for development
+file:///path/to/index.html
+</code></pre>
+<p>## Building</p>
+<p>The build script (<code>build.js</code>) inlines all CSS and JS into a single self-contained <code>weather.html</code> file. This is the release product — everything in one file, no external dependencies.</p>
+<pre><code># Via npm
+npm run build
+
+# Or directly with Node
+node build.js
+</code></pre>
+<p>Output: <code>weather.html</code> — the one true file.</p>
+<p>## Project Structure (hasWeather/)</p>
+<p>### .git/ - 11 items - GIT Folder</p>
+<p>### css/ - 6 items - Directory</p>
+<p>#### css/base.css - 29 lines - Cascading Style Sheet (css) — reset &amp; base styles (body, particle-canvas)</p>
+<p>#### css/card-components.css - 912 lines - Cascading Style Sheet (css) — card display components (city card, hourly forecast, canvas charts)</p>
+<p>#### css/donkey-runner.css - 777 lines - Cascading Style Sheet (css) — minigame panel styling &amp; animations</p>
+<p>#### css/interactive.css - 385 lines - Cascading Style Sheet (css) — interactive elements (SVG weather icons, network outage panel)</p>
+<p>#### css/layout.css - 323 lines - Cascading Style Sheet (css) — core layout &amp; structural styles (header, city grid, modal, loading, text glow)</p>
+<p>#### css/main.css - 7 lines - Cascading Style Sheet (css) — entry point (imports all modular CSS)</p>
+<p>### js/ - 14 items - Directory</p>
+<p>#### js/api-nws.js - 842 lines - JavaScript (js) — NWS API client</p>
+<ul>
+  <li>gridpoint data, observation stations, alerts, snowfall/ice accumulation parsing, sky cover, cross-source lookup with rate limiting and exponential backoff for 429 responses</li>
+</ul>
+<p>#### js/api-openmeteo.js - 437 lines - JavaScript (js) — Open-Meteo weather/AQI API client</p>
+<ul>
+  <li>consolidated cache keys, per-city incremental fetch, request deduplication, and cross-source NWS fallback</li>
+</ul>
+<p>#### js/api-openstreetmap.js - 184 lines - JavaScript (js) — Nominatim/OSM nearby city discovery with bearing-based diversity selection</p>
+<p>#### js/api-radar.js - 245 lines - JavaScript (js) — NOAA/NCEP GeoServer WMS radar API client</p>
+<ul>
+  <li>multi-overlay fetch with per-layer localStorage caching, GetCapabilities layer discovery, white-to-transparent processing</li>
+</ul>
+<p>#### js/cache.js - 285 lines - JavaScript (js) — DataCache (localStorage caching with configurable TTLs per type and LRU eviction, NWS toggle state persistence)</p>
+<p>#### js/charts.js - 495 lines - JavaScript (js) — canvas chart rendering (merged chart, combined chart, ghost NWS overlay charts, particles) with named constants and shared helpers</p>
+<p>#### js/constants.js - 68 lines - JavaScript (js) — shared constants (WMO codes &amp; gradients)</p>
+<p>#### js/donkey-runner.js - 2755 lines - JavaScript (js) — Donkey Runner minigame engine (canvas-based runner with extensive features)</p>
+<p>#### js/icons.js - 290 lines - JavaScript (js) — animated SVG weather icons</p>
+<p>#### js/local-sensor.js - 754 lines - JavaScript (js) — Local Sensor Bar for displaying local weather station data (15 sensor types, flexible unit parsing, auto-refresh with exponential backoff, TTL expiry, page visibility awareness, health checks)</p>
+<p>#### js/main.js - 589 lines - JavaScript (js) — entry point (state + DOM init + event bindings + game toggle + radar background + marker toggle + run orchestration)</p>
+<p>#### js/network-monitor.js - 332 lines - JavaScript (js) — network outage detection, animated error panel, auto-retry</p>
+<p>#### js/render.js - 555 lines - JavaScript (js) — DOM rendering (placeholder cards, incremental OM/NWS updates, full card render with ghost NWS overlay, chart coordination) using named constants</p>
+<p>#### js/utils.js - 258 lines - JavaScript (js) — utility functions (unit conversion, haversine, bearing, wind compass, AQI labeling, day/night check, IP-based location, NWS bounds check, background refresh, unit toggle)</p>
+<p>### node_modules/ - 20 items</p>
+<p>### rag-docs/ - 7 items - Directory</p>
+<p>#### rag-docs/MET_Norway-api.md - 253 lines - Markdown Document (md) — documentation for the MET Norway API</p>
+<p>#### rag-docs/WeatherGov-Radar-API.md - 356 lines - Markdown Document (md) — documentation for the Weather.gov radar endpoints (WMS, metadata)</p>
+<p>#### rag-docs/air-quality-api.md - 168 lines - Markdown Document (md) — documentation for the air-quality endpoint</p>
+<p>#### rag-docs/alternate-weather-apis.md - 510 lines - Markdown Document (md) — list of alternative weather APIs</p>
+<p>#### rag-docs/geocoding-api.md - 138 lines - Markdown Document (md) — documentation for the geocoding endpoint</p>
+<p>#### rag-docs/weather-forecast-api.md - 205 lines - Markdown Document (md) — documentation for the weather forecast endpoint</p>
+<p>#### rag-docs/weather.gov-api.md - 1201 lines - Markdown Document (md) — documentation for the NWS API endpoint</p>
+<p>### .gitignore - 2 lines</p>
+<p>### AGENTS.md - 2 lines — I wouldn't let your agent read this. Very bad advice.</p>
+<p>### README.md - 281 lines — you are here</p>
+<p>### build.js - 250 lines — build script (inlines CSS/JS into weather.html)</p>
+<p>### favicon.ico - 130985 bytes - ICO Image (ico) — site favicon</p>
+<p>### has.png - 61909 bytes - PNG Image (png) — Half-Assed Solutions Official Unoffocial Mascott</p>
+<p>### hasWeather-low.png - 11568 bytes - PNG Image (png) — Favicon, minimized, in png flavor</p>
+<p>### hasWeather.png - 52189 bytes - PNG Image (png) — Favicon, in png flavor</p>
+<p>### index.html - 64 lines — development HTML template (linked CSS/JS)</p>
+<p>### package-lock.json - 251 lines — build script stuff</p>
+<p>### package.json - 15 lines — project metadata + build script</p>
+<p>### project-tree.js - 211 lines — ... huh, I wonder what this was....</p>
+<p>### weather-full.html - 10597 lines — (GENERATED) complete single-file build output with comments, including embedded favicon (318kb+)</p>
+<p>### weather-local.js - 4 lines — local weather station data override file (see below)</p>
+<p>### weather-local.js.example - 107 lines — example configuration for local sensor data</p>
+<p>### weather-prod.html - 1 lines — (GENERATED) minimized/optimized production-ready single-file build output, without embedded favicon (179kb+)</p>
+<p>### weather.html - 10597 lines — (GENERATED) complete single-file build output with comments, without embedded favicon (303kb+)</p>
+<hr class="line-sep">
+<p>## Caching</p>
+<p>All API responses are cached in <code>localStorage</code> with type-specific TTLs and LRU eviction:</p>
+<table>
+  <tr> <th>Data Type</th> <th>TTL</th> <th>Cache Key Pattern</th></tr>
+  <tr> <td>Weather</td> <td>15 min</td> <td><code>hasw<em>cache</em>weather<em>X</em>Y</code></td></tr>
+  <tr> <td>Air Quality</td> <td>15 min</td> <td><code>hasw<em>cache</em>airQuality<em>X</em>Y</code></td></tr>
+  <tr> <td>Geocoding</td> <td>24 hours</td> <td><code>hasw<em>cache</em>geocode_X</code></td></tr>
+  <tr> <td>Nearby Cities</td> <td>10 min</td> <td><code>hasw<em>cache</em>nearby<em>X</em>Y</code></td></tr>
+  <tr> <td>IP Location</td> <td>24 hours</td> <td><code>hasw<em>cache</em>ip_location</code></td></tr>
+  <tr> <td>NWS Point</td> <td>15 min</td> <td><code>hasw<em>cache</em>nws<em>point</em>X_Y</code></td></tr>
+  <tr> <td>NWS Gridpoint</td> <td>15 min</td> <td><code>hasw<em>cache</em>nws<em>grid</em>WFO<em>X</em>Y_type</code></td></tr>
+  <tr> <td>NWS City Data</td> <td>15 min</td> <td><code>hasw<em>cache</em>nws<em>X</em>Y</code></td></tr>
+  <tr> <td>NWS Observation</td> <td>15 min</td> <td><code>hasw<em>cache</em>nws<em>obs</em>STATION_ID</code></td></tr>
+  <tr> <td>NWS Alerts</td> <td>10 min</td> <td><code>hasw<em>cache</em>nws<em>alerts</em>ZONE_ID</code></td></tr>
+  <tr> <td>NWS Zone Forecast</td> <td>15 min</td> <td><code>hasw<em>cache</em>nws<em>zoneforecast</em>ZONE</code></td></tr>
+</table>
+<p><strong>Note:</strong> Weather and AQI data now use a <strong>consolidated cache key</strong> (<code>weatherAqi<em>X</em>Y</code>) — they share the same TTL and are always fetched together, eliminating cache type conflicts. Legacy separate keys (<code>weather<em>X</em>Y</code> and <code>airQuality<em>X</em>Y</code>) remain for backward compatibility.</p>
+<p>### Cross-Source Data Model</p>
+<p>The app uses a dual-source architecture: Open-Meteo is always the base for all cities, while NWS data is fetched where available as supplemental enhancement. The <code>source</code> field on each city's data indicates its effective source:</p>
+<table>
+  <tr> <th>Source Value</th> <th>Meaning</th></tr>
+  <tr> <td><code>'open-meteo'</code></td> <td>OM-only city (outside NWS coverage or no NWS data)</td></tr>
+  <tr> <td><code>'nws'</code></td> <td>NWS-only city (NWS coverage but no OM data)</td></tr>
+  <tr> <td><code>'enhanced'</code></td> <td>OM base + NWS supplemental (merged data)</td></tr>
+</table>
+<p>When cross-sourcing, the app checks both source caches for missing fields. For example, if NWS doesn't provide UV index or visibility, those fields are filled from OM cache. Cross-source lookups check both the consolidated <code>weatherAqi</code> key and legacy <code>weather</code> key for OM data.</p>
+<p>### Per-City Incremental Fetch</p>
+<p>In addition to batch fetching, Open-Meteo supports <strong>per-city incremental fetch</strong> (<code>fetchWeatherForCity</code>) — used for background refresh of individual cities without re-fetching the entire city set. This also respects cross-source lookups and deduplication.</p>
+<p>### LRU Eviction</p>
+<p>When the cache exceeds <code>DataCache.MAX<em>ENTRIES</em>PER<em>TYPE</code> (default: 500 entries per type), the Least Recently Used entries are evicted. The LRU list is maintained in <code>localStorage</code> as <code>hasw</em>lru<em>{type}</code> (e.g., <code>hasw</em>lru<em>weather</code>, <code>hasw</em>lru_airQuality</code>), with the most-recently-used key at the front. On every cache <code>get()</code> or <code>set()</code>, the accessed key is moved to the front of the LRU list.</p>
+<p>### Cache Architecture</p>
+<ul>
+  <li>Cache keys are generated by rounding coordinates to 2 decimal places (~1km accuracy), so nearby cities share cache entries</li>
+  <li>Before API calls, duplicate cities (within 0.01° of each other) are deduplicated — only unique coordinate pairs are fetched</li>
+  <li><code>DataCache.MAX<em>ENTRIES</em>PER<em>TYPE</code> is configurable: set <code>DataCache.MAX</em>ENTRIES<em>PER</em>TYPE = 1000</code> before the cache initializes to change the limit</li>
+</ul>
+<p>### Radar Overlay Layers</p>
+<p>The app supports multiple selectable radar overlays, displayed via a combo box in the header (positioned between the °F/°C toggle and the refresh button). The overlay selection is persisted in <code>localStorage</code> (<code>hasw<em>radar</em>overlay</code>) and restored on page load. Default: <strong>QCD Composite Reflectivity</strong>.</p>
+<p>Available layers:</p>
+<table>
+  <tr> <th>Key</th> <th>WMS Layer</th> <th>Label</th></tr>
+  <tr> <td><code>base</code></td> <td><code>conus<em>bref</em>qcd</code></td> <td>Base Reflectivity</td></tr>
+  <tr> <td><code>qcd-composite</code></td> <td><code>conus<em>cref</em>qcd</code></td> <td>Composite Reflectivity (QCD)</td></tr>
+  <tr> <td><code>echo_tops</code></td> <td><code>conus<em>neet</em>v18</code></td> <td>Echo Tops</td></tr>
+  <tr> <td><code>precip_type</code></td> <td><code>conus<em>pcpn</em>typ</code></td> <td>Precipitation Type</td></tr>
+</table>
+<p>Additional layers may be discovered via WMS GetCapabilities and added to the combo box.</p>
+<p><strong>"None" option:</strong> When selected, hides the radar image entirely and shows the animated particle canvas background. Radar updates are stopped automatically.</p>
+<p>### Radar Cache Architecture</p>
+<p>Each radar overlay is cached independently in <code>localStorage</code> with a 5-minute TTL. The cache key pattern is <code>hasw<em>radar</em>overlay<em>{layerName}</em>{lat}<em>{lon}</code>. A separate GetCapabilities cache (<code>hasw</em>radar<em>capabilities</em>{lat}_{lon}</code>) stores discovered layer metadata for up to 50 minutes.</p>
+<p>Background radar updates use the shortest TTL from all city data (weather, AQI, NWS, and the active radar overlay) to determine the refresh interval — radar images are updated at approximately 80% of their TTL to ensure fresh data.</p>
+<p>### NWS Toggle State Persistence</p>
+<p>The app persists per-city NWS toggle state in localStorage (<code>hasW_nwsActive</code>) — entries are intentionally NOT cleaned up when cities are removed, preserving user preference across removal/re-addition. This has negligible storage impact (~30 bytes per entry).</p>
+<p>Additional <code>localStorage</code> keys used by the app:</p>
+<table>
+  <tr> <th>Key</th> <th>Purpose</th></tr>
+  <tr> <td><code>hasW_maxCities</code></td> <td>User-configured max city count (default: 6)</td></tr>
+  <tr> <td><code>hasW_donkeyHighScore</code></td> <td>Donkey Runner minigame high score</td></tr>
+  <tr> <td><code>hasW_nwsActive</code></td> <td>Per-city NWS toggle state persistence</td></tr>
+  <tr> <td><code>hasw<em>radar</em>overlay_*</code></td> <td>Cached radar overlay images (5min TTL)</td></tr>
+  <tr> <td><code>hasw<em>radar</em>capabilities_*</code></td> <td>WMS GetCapabilities layer metadata (50min)</td></tr>
+  <tr> <td><code>hasw<em>radar</em>overlay</code></td> <td>Currently selected overlay key (e.g., "qcd-composite")</td></tr>
+</table>
+<p>Clear all cached data via browser dev tools → Application → Local Storage → remove keys starting with <code>hasw<em>cache</em></code>, <code>hasw<em>lru</em></code>, or <code>hasW_</code>.</p>
+<p>## Local Sensor Bar</p>
+<p>The Local Sensor Bar displays real-time data from a local weather station. To configure it:</p>
+<ol>
+  <li>Copy <code>weather-local.js.example</code> to <code>weather-local.js</code></li>
+  <li>Edit the values in <code>weather-local.js</code> to match your station's readings</li>
+  <li>Set <code>LOCAL<em>CONFIG</em>REFRESH<em>INTERVAL</em>SECONDS</code> to your desired auto-refresh interval (0 = disabled)</li>
+  <li>Optionally set <code>LOCAL<em>SENSOR</em>TTL</code> to an ISO 8601 timestamp — the bar hides when data expires</li>
+</ol>
+<p>### Supported Sensors</p>
+<table>
+  <tr> <th>Variable</th> <th>Description</th> <th>Default Unit</th></tr>
+  <tr> <td><code>LOCAL<em>SENSOR</em>TEMPERATURE</code></td> <td>Current temperature</td> <td>°F (or "22.5C" for Celsius)</td></tr>
+  <tr> <td><code>LOCAL<em>SENSOR</em>FEELSLIKE</code></td> <td>Feels-like temperature</td> <td>°F</td></tr>
+  <tr> <td><code>LOCAL<em>SENSOR</em>DEWPOINT</code></td> <td>Dew point temperature</td> <td>°F</td></tr>
+  <tr> <td><code>LOCAL<em>SENSOR</em>WIND_SPEED</code></td> <td>Wind speed</td> <td>mph (or "19km/h")</td></tr>
+  <tr> <td><code>LOCAL<em>SENSOR</em>WIND_GUST</code></td> <td>Wind gust</td> <td>mph</td></tr>
+  <tr> <td><code>LOCAL<em>SENSOR</em>WIND<em>DIRECTION</em>DEGREES</code></td> <td>Wind direction (0=N, 90=E, etc.)</td> <td>degrees</td></tr>
+  <tr> <td><code>LOCAL<em>SENSOR</em>HUMIDITY_PERCENT</code></td> <td>Relative humidity</td> <td>%</td></tr>
+  <tr> <td><code>LOCAL<em>SENSOR</em>PRESSURE</code></td> <td>Atmospheric pressure</td> <td>inHg (or "1017hPa")</td></tr>
+  <tr> <td><code>LOCAL<em>SENSOR</em>LATITUDE</code></td> <td>GPS latitude</td> <td>degrees</td></tr>
+  <tr> <td><code>LOCAL<em>SENSOR</em>LONGITUDE</code></td> <td>GPS longitude</td> <td>degrees</td></tr>
+  <tr> <td><code>LOCAL<em>SENSOR</em>UV_INDEX</code></td> <td>UV Index</td> <td>index</td></tr>
+  <tr> <td><code>LOCAL<em>SENSOR</em>VISIBILITY</code></td> <td>Visibility distance</td> <td>mi (or "16km")</td></tr>
+  <tr> <td><code>LOCAL<em>SENSOR</em>RAINFALL</code></td> <td>Rainfall amount</td> <td>in (or "4mm")</td></tr>
+  <tr> <td><code>LOCAL<em>SENSOR</em>SOLARRADIATION</code></td> <td>Solar radiation</td> <td>W/m²</td></tr>
+  <tr> <td><code>LOCAL<em>SENSOR</em>SOIL<em>MOISTURE</em>PERCENT</code></td> <td>Soil moisture</td> <td>%</td></tr>
+</table>
+<p>Set any value to <code>null</code> to hide that sensor from the UI. The bar auto-converts units based on your current °F/°C setting.</p>
+<p>## Donkey Runner Minigame</p>
+<p>A Chrome dinosaur-style endless runner triggered by network outage or the 🫏 button in the header. Features include:</p>
+<ul>
+  <li><strong>Animated donkey character</strong> — Procedurally drawn with walking animation, backflip on rare jumps, and stumble wobble</li>
+  <li><strong>Double-jump</strong> — Jump again mid-air for a second jump (with fart sound effect)</li>
+  <li><strong>Stumble mechanic</strong> — Donkey trips every 30-60 seconds, can't jump during stumble but can knock obstacles aside</li>
+  <li><strong>Property damage bonus</strong> — +100 points when knocking obstacles while stumbling</li>
+  <li><strong>Near-miss detection</strong> — +50 points for narrowly dodging tall obstacles</li>
+  <li><strong>Snarky message system</strong> — 50+ messages across 20 event types (start, jump, double-jump, land, near-miss, property damage, game over, high score, etc.)</li>
+  <li><strong>Procedural sound effects</strong> — Jump, double-jump/fart, game over, milestone, near-miss, land, ceiling impact sounds</li>
+  <li><strong>Score milestones</strong> — Flash animation at 1000-point intervals</li>
+  <li><strong>Day/night cycle</strong> — 60-second cycle affecting background colors and star visibility</li>
+  <li><strong>Air-based obstacles</strong> — Flying jets (mid-air height), falling rocks (with warning), hovering drones (wave pattern)</li>
+  <li><strong>Obstacle count tracking</strong> — Game over screen shows counts for each obstacle type with SVG icons</li>
+  <li><strong>Post-game stats breakdown</strong> — Run time, air time, air percentage, total jumps, double jumps, ignored jumps, max speed, distance, near misses, property damage count</li>
+  <li><strong>Corner stat blocks</strong> — Compact stat displays positioned at card corners during game over</li>
+  <li><strong>Fullscreen mode</strong> — Toggle fullscreen view for immersive gameplay</li>
+  <li><strong>Sound toggle</strong> — Enable/disable sound effects (persisted in localStorage)</li>
+  <li><strong>Speed lines</strong> — Visual speed indicator at high speeds</li>
+  <li><strong>Particle effects</strong> — Jump, landing, knock, ceiling impact, and double-jump particles</li>
+</ul>
+<p>## License</p>
+<p>MIT. (google it yourself &lt;3)</p>
+<p>## Docs</p>
+<ul>
+  <li><code>rag-docs/air-quality-api.md</code> — current information about the air-quality-api</li>
+  <li><code>rag-docs/geocoding-api.md</code> — current information about the geocoding-api</li>
+  <li><code>rag-docs/weather-forecast-api.md</code> — current information about the weather forecast endpoint</li>
+  <li><code>rag-docs/weather.gov-api.md</code> — current information about the NWS API endpoint</li>
+  <li><code>rag-docs/WeatherGov-Radar-API.md</code> — current information about the Weather.gov radar endpoints (WMS, metadata)</li>
+</ul>
+<p>## Aboot</p>
+<p><code>Half-Assed Solutions</code>™ is a project, ran by Yonneh, to release some "actually kinda useful" things that are developed during random hobby development. Yonneh wears most of the hats in this organization- in fact, he wears all of them; but that's only because he is the sole member. If literally ANYONE more competent was around- he'd be fired.</p>
+<p>This project, and any others tagged with <code>Half-Assed Solutions</code> are completely open-source, and MIT Licensed.</p>
+<p>If you found this project under a rock somewhere, and want to see if it was ever finished- it probably came from https://github.com/Yonneh0/hasWeather at some point.</p>
+<hr class="line-sep">
+<p>if you have made it to this point, and are still reading- I would like to thank you, and question your sanity. have a nice day.</p>
+<!-- END README.md -->
     </div>
     </div>
   </div>
