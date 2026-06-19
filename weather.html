@@ -11245,70 +11245,60 @@ function initAboutPanel() {
 }
 
 /**
- * Load README.md content from the iframe and parse it
+ * Load README.md content from the iframe and parse it.
+ * Handles CORS issues on file:// protocol by reading from injected div.
  */
-function loadAboutContent(contentEl) {
-  const iframe = ABOUT_PAGE.iframe;
+async function loadAboutContent(contentEl) {
+  let markdown = '';
 
-  function tryLoad() {
-    try {
-      let rawContent = '';
+  // Method 1: Try fetch (works for http/https)
+  try {
+    const response = await fetch('README.md');
+    if (response.ok) {
+      markdown = await response.text();
+      console.log('[About] Loaded README.md via fetch');
+    }
+  } catch (err) {
+    console.warn('[About] Failed to load README.md via fetch:', err);
+  }
 
-      // Try to get content from iframe's document
-      if (iframe.contentDocument && iframe.contentDocument.body) {
-        rawContent = iframe.contentDocument.body.innerHTML;
-      } else if (iframe.contentWindow && iframe.contentWindow.document) {
-        const doc = iframe.contentWindow.document;
-        rawContent = doc.body ? doc.body.innerHTML : '';
-      }
-
-      // If iframe content is empty or we can't read it, try fetch as fallback
-      if (!rawContent || rawContent.trim() === '') {
-        fetch('README.md')
-          .then(r => r.text())
-          .then(text => {
-            contentEl.innerHTML = parseMarkdown(text);
-          })
-          .catch(() => {
-            contentEl.innerHTML = '<p>Could not load README.md</p>';
-          });
-      } else {
-        // Parse the HTML content from iframe and render in VT100 style
-        // The iframe loaded Markdown as plain text, parse it
-        fetch('README.md')
-          .then(r => r.text())
-          .then(text => {
-            contentEl.innerHTML = parseMarkdown(text);
-          })
-          .catch(() => {
-            contentEl.textContent = rawContent;
-          });
-      }
-
-      ABOUT_PAGE.initialized = true;
-    } catch (e) {
-      // Cross-origin or other error, fallback to fetch
-      fetch('README.md')
-        .then(r => r.text())
-        .then(text => {
-          contentEl.innerHTML = parseMarkdown(text);
-        })
-        .catch(() => {
-          contentEl.textContent = 'Could not load README.md';
-        });
-      ABOUT_PAGE.initialized = true;
+  // Method 2: If fetch didn't produce content, try injected div from build.js
+  if (!markdown.trim()) {
+    const sourceDiv = document.getElementById('about-readme-source');
+    if (sourceDiv && sourceDiv.textContent.trim()) {
+      markdown = sourceDiv.textContent;
+      console.log('[About] Loaded README.md from injected div');
     }
   }
 
-  // Wait for iframe to load
-  if (iframe.src && iframe.src !== '' && iframe.src !== 'about:blank') {
-    iframe.addEventListener('load', () => {
-      setTimeout(tryLoad, 100);
-    });
+  // Method 3: Try reading iframe content directly
+  if (!markdown.trim()) {
+    try {
+      const iframe = ABOUT_PAGE.iframe;
+      if (iframe.contentDocument && iframe.contentDocument.body) {
+        const rawContent = iframe.contentDocument.body.innerHTML || iframe.contentDocument.body.textContent;
+        if (rawContent && rawContent.trim() !== '') {
+          markdown = rawContent;
+          console.log('[About] Loaded README.md from iframe body');
+        }
+      }
+    } catch (e) {
+      console.warn('[About] Failed to read iframe body:', e);
+    }
   }
 
-  // Also try immediately in case already loaded
-  setTimeout(tryLoad, 200);
+  if (!markdown.trim()) {
+    // Fallback content
+    markdown = `# About HasWeather
+
+A weather dashboard application.
+
+*Click the **X** button or press **Esc** to close.*`;
+  }
+
+  // Parse and render
+  contentEl.innerHTML = parseMarkdown(markdown);
+  ABOUT_PAGE.initialized = true;
 }
 
 /**
