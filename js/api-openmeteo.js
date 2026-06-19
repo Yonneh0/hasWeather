@@ -238,6 +238,7 @@ async function fetchWeatherForCity(city) {
     const weatherUrl = `${WEATHER_API}?latitude=${city.latitude}&longitude=${city.longitude}&${WEATHER_CURRENT_PARAMS}&${WEATHER_HOURLY_PARAMS}&${WEATHER_OPTIONS_PARAMS}`;
     const weatherRes = await retryWithBackoff(() => fetch(weatherUrl));
     if (!weatherRes.ok) {
+      // Don't cache null results — return them without caching so re-fetch happens next time
       return { ...city, source: 'open-meteo', weather: null, aqi: {} };
     }
     const weatherAll = await weatherRes.json();
@@ -256,6 +257,7 @@ async function fetchWeatherForCity(city) {
     return { ...city, source: 'open-meteo', weather: cityWeather, aqi: cityAqi };
   } catch (err) {
     console.error(`[fetchWeatherForCity] Failed for ${city.name}:`, err);
+    // Don't cache null results on error — leave them uncached so next refresh re-fetches
     return { ...city, source: 'open-meteo', weather: null, aqi: {} };
   }
 }
@@ -328,13 +330,17 @@ async function fetchWeatherForCities(cities) {
     const aqiRes = await retryWithBackoff(() => fetch(aqiUrl));
     const aqiData = await aqiRes.json();
 
-    const result = new Array(dedupedInput.length);
+      const result = new Array(dedupedInput.length);
 
     // First fill cached results (use get directly — it already handles expiration internally)
     for (let i = 0; i < dedupedInput.length; i++) {
-      const cacheKey = weatherAqiCacheKey(dedupedInput[i].latitude, dedupedInput[i].longitude);
-      const cached = DataCache.get(cacheKey, 'weatherAqi');
+      const cKey = weatherAqiCacheKey(dedupedInput[i].latitude, dedupedInput[i].longitude);
+      const cached = DataCache.get(cKey, 'weatherAqi');
       if (cached) {
+        // Don't use cached null data — force re-fetch
+        if (!cached.weather || !cached.weather.current || Object.keys(cached.weather.current).length === 0) {
+          continue;
+        }
         result[i] = { ...dedupedInput[i], source: 'open-meteo', weather: cached.weather, aqi: cached.aqi };
       }
     }
@@ -348,7 +354,7 @@ async function fetchWeatherForCities(cities) {
 
     let wIdx = 0; // index into weatherAll.results / aqiData.results
     for (let i = 0; i < dedupedInput.length; i++) {
-      // Skip already-cached
+      // Skip already-cached (and not null)
       if (result[i]) continue;
 
       const city = dedupedInput[i];
@@ -370,7 +376,7 @@ async function fetchWeatherForCities(cities) {
           hourly: mergedHourly,
         };
 
-        // AQI from results array
+        // AQI from results array — use same wIdx
         if (hasAqiResultsArray) {
           const aqiRaw = aqiData.results[wIdx] || {};
           aqiResult = parseAqiFields(aqiRaw);
@@ -393,7 +399,7 @@ async function fetchWeatherForCities(cities) {
           aqiResult = { us_aqi: null, pm2_5: null, european_aqi: null };
         }
       } else {
-        // Single result (no results array)
+        // Single result (no results array) — apply to all uncached cities
         const raw = weatherAll;
         cityWeather = {
           current: raw.current || {},
@@ -407,8 +413,11 @@ async function fetchWeatherForCities(cities) {
       }
 
       // Store consolidated cache (weather + AQI together)
-      const cacheKey = weatherAqiCacheKey(city.latitude, city.longitude);
-      DataCache.set(cacheKey, { weather: cityWeather, aqi: aqiResult }, 'weatherAqi');
+      const cKey = weatherAqiCacheKey(city.latitude, city.longitude);
+      // Only cache non-null weather data
+      if (cityWeather && cityWeather.current && Object.keys(cityWeather.current).length > 0) {
+        DataCache.set(cKey, { weather: cityWeather, aqi: aqiResult }, 'weatherAqi');
+      }
 
       result[i] = { ...city, source: 'open-meteo', weather: cityWeather, aqi: aqiResult };
     }
@@ -419,10 +428,15 @@ async function fetchWeatherForCities(cities) {
     // Fill uncached with null data
     const result = new Array(dedupedInput.length);
     for (let i = 0; i < dedupedInput.length; i++) {
-      const cacheKey = weatherAqiCacheKey(dedupedInput[i].latitude, dedupedInput[i].longitude);
-      const cached = DataCache.get(cacheKey, 'weatherAqi');
+      const cKey = weatherAqiCacheKey(dedupedInput[i].latitude, dedupedInput[i].longitude);
+      const cached = DataCache.get(cKey, 'weatherAqi');
       if (cached) {
-        result[i] = { ...dedupedInput[i], source: 'open-meteo', weather: cached.weather, aqi: cached.aqi };
+        // Don't use cached null data — force re-fetch
+        if (!cached.weather || !cached.weather.current || Object.keys(cached.weather.current).length === 0) {
+          result[i] = { ...dedupedInput[i], source: 'open-meteo', weather: null, aqi: {} };
+        } else {
+          result[i] = { ...dedupedInput[i], source: 'open-meteo', weather: cached.weather, aqi: cached.aqi };
+        }
       } else {
         result[i] = { ...dedupedInput[i], source: 'open-meteo', weather: null, aqi: {} };
       }

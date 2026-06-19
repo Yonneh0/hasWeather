@@ -1,0 +1,491 @@
+diff --git a/js/api-nws.js b/js/api-nws.js
+index 75c628c..7214dc6 100644
+--- a/js/api-nws.js
++++ b/js/api-nws.js
+@@ -795,7 +795,7 @@ function nwsToAppData(city, nwsData) {
+   // NWS hourly with units=us returns Fahrenheit — convert to Celsius for storage
+   const hourlyTemps = hourly.map(p => {
+     const f = p.temperature;
+-    return f != null ? (f - CELSIUS_TO_FAHRENHEIT_OFFSET) * CELSIUS_TO_FAHRENHEIT_FACTOR : null;
++    return f != null ? (f - CELSIUS_TO_FAHRENHEIT_OFFSET) / CELSIUS_TO_FAHRENHEIT_FACTOR : null;
+   });
+   const hourlyHumidity = hourly.map(p => p.relativeHumidity);
+   // Parse windSpeed strings ("2 mph", "10 mph") and convert mph → km/h
+diff --git a/js/api-openmeteo.js b/js/api-openmeteo.js
+index dc0b9a6..6d0a66d 100644
+--- a/js/api-openmeteo.js
++++ b/js/api-openmeteo.js
+@@ -238,6 +238,7 @@ async function fetchWeatherForCity(city) {
+     const weatherUrl = `${WEATHER_API}?latitude=${city.latitude}&longitude=${city.longitude}&${WEATHER_CURRENT_PARAMS}&${WEATHER_HOURLY_PARAMS}&${WEATHER_OPTIONS_PARAMS}`;
+     const weatherRes = await retryWithBackoff(() => fetch(weatherUrl));
+     if (!weatherRes.ok) {
++      // Don't cache null results — return them without caching so re-fetch happens next time
+       return { ...city, source: 'open-meteo', weather: null, aqi: {} };
+     }
+     const weatherAll = await weatherRes.json();
+@@ -256,6 +257,7 @@ async function fetchWeatherForCity(city) {
+     return { ...city, source: 'open-meteo', weather: cityWeather, aqi: cityAqi };
+   } catch (err) {
+     console.error(`[fetchWeatherForCity] Failed for ${city.name}:`, err);
++    // Don't cache null results on error — leave them uncached so next refresh re-fetches
+     return { ...city, source: 'open-meteo', weather: null, aqi: {} };
+   }
+ }
+@@ -328,13 +330,17 @@ async function fetchWeatherForCities(cities) {
+     const aqiRes = await retryWithBackoff(() => fetch(aqiUrl));
+     const aqiData = await aqiRes.json();
+ 
+-    const result = new Array(dedupedInput.length);
++      const result = new Array(dedupedInput.length);
+ 
+     // First fill cached results (use get directly — it already handles expiration internally)
+     for (let i = 0; i < dedupedInput.length; i++) {
+-      const cacheKey = weatherAqiCacheKey(dedupedInput[i].latitude, dedupedInput[i].longitude);
+-      const cached = DataCache.get(cacheKey, 'weatherAqi');
++      const cKey = weatherAqiCacheKey(dedupedInput[i].latitude, dedupedInput[i].longitude);
++      const cached = DataCache.get(cKey, 'weatherAqi');
+       if (cached) {
++        // Don't use cached null data — force re-fetch
++        if (!cached.weather || !cached.weather.current || Object.keys(cached.weather.current).length === 0) {
++          continue;
++        }
+         result[i] = { ...dedupedInput[i], source: 'open-meteo', weather: cached.weather, aqi: cached.aqi };
+       }
+     }
+@@ -348,7 +354,7 @@ async function fetchWeatherForCities(cities) {
+ 
+     let wIdx = 0; // index into weatherAll.results / aqiData.results
+     for (let i = 0; i < dedupedInput.length; i++) {
+-      // Skip already-cached
++      // Skip already-cached (and not null)
+       if (result[i]) continue;
+ 
+       const city = dedupedInput[i];
+@@ -370,7 +376,7 @@ async function fetchWeatherForCities(cities) {
+           hourly: mergedHourly,
+         };
+ 
+-        // AQI from results array
++        // AQI from results array — use same wIdx
+         if (hasAqiResultsArray) {
+           const aqiRaw = aqiData.results[wIdx] || {};
+           aqiResult = parseAqiFields(aqiRaw);
+@@ -393,7 +399,7 @@ async function fetchWeatherForCities(cities) {
+           aqiResult = { us_aqi: null, pm2_5: null, european_aqi: null };
+         }
+       } else {
+-        // Single result (no results array)
++        // Single result (no results array) — apply to all uncached cities
+         const raw = weatherAll;
+         cityWeather = {
+           current: raw.current || {},
+@@ -407,8 +413,11 @@ async function fetchWeatherForCities(cities) {
+       }
+ 
+       // Store consolidated cache (weather + AQI together)
+-      const cacheKey = weatherAqiCacheKey(city.latitude, city.longitude);
+-      DataCache.set(cacheKey, { weather: cityWeather, aqi: aqiResult }, 'weatherAqi');
++      const cKey = weatherAqiCacheKey(city.latitude, city.longitude);
++      // Only cache non-null weather data
++      if (cityWeather && cityWeather.current && Object.keys(cityWeather.current).length > 0) {
++        DataCache.set(cKey, { weather: cityWeather, aqi: aqiResult }, 'weatherAqi');
++      }
+ 
+       result[i] = { ...city, source: 'open-meteo', weather: cityWeather, aqi: aqiResult };
+     }
+@@ -419,10 +428,15 @@ async function fetchWeatherForCities(cities) {
+     // Fill uncached with null data
+     const result = new Array(dedupedInput.length);
+     for (let i = 0; i < dedupedInput.length; i++) {
+-      const cacheKey = weatherAqiCacheKey(dedupedInput[i].latitude, dedupedInput[i].longitude);
+-      const cached = DataCache.get(cacheKey, 'weatherAqi');
++      const cKey = weatherAqiCacheKey(dedupedInput[i].latitude, dedupedInput[i].longitude);
++      const cached = DataCache.get(cKey, 'weatherAqi');
+       if (cached) {
+-        result[i] = { ...dedupedInput[i], source: 'open-meteo', weather: cached.weather, aqi: cached.aqi };
++        // Don't use cached null data — force re-fetch
++        if (!cached.weather || !cached.weather.current || Object.keys(cached.weather.current).length === 0) {
++          result[i] = { ...dedupedInput[i], source: 'open-meteo', weather: null, aqi: {} };
++        } else {
++          result[i] = { ...dedupedInput[i], source: 'open-meteo', weather: cached.weather, aqi: cached.aqi };
++        }
+       } else {
+         result[i] = { ...dedupedInput[i], source: 'open-meteo', weather: null, aqi: {} };
+       }
+diff --git a/js/main.js b/js/main.js
+index 9ff1e66..91c8ff8 100644
+--- a/js/main.js
++++ b/js/main.js
+@@ -9,6 +9,10 @@ let _chartResizeTimer = null;
+ let _maxCities = MAX_CITIES; // Default: show nearest 6 cities
+ let _selectedRadarOverlay = 'qcd-composite'; // Current overlay selection
+ 
++// ===== RUN GUARD =====
++// Prevent concurrent run() invocations from background refresh
++let _runPending = false;
++
+ // ===== RADAR MARKER TOGGLE STATE =====
+ let _radarMarkersVisible = false;
+ let _markerResizeTimer = null;
+@@ -80,112 +84,124 @@ document.addEventListener('DOMContentLoaded', () => {
+ 
+ // ===== MAIN RUN =====
+ async function run() {
+-  const prevLoc = userLocation ? `${userLocation.lat.toFixed(4)},${userLocation.lon.toFixed(4)}` : null;
+-
+-  if (!userLocation) {
+-    userLocation = await getLocation();
+-    console.log(`[Location] Resolved: ${userLocation.lat.toFixed(2)}°, ${Math.abs(userLocation.lon).toFixed(2)}°`);
+-  } else if (prevLoc) {
+-    const newLoc = `${userLocation.lat.toFixed(4)},${userLocation.lon.toFixed(4)}`;
+-    if (newLoc !== prevLoc) {
+-      console.log(`[Location] Changed: ${prevLoc} → ${newLoc}`);
++  // Prevent concurrent run() invocations (e.g., background refresh during a full refresh)
++  if (_runPending) return;
++  _runPending = true;
++
++  try {
++    const prevLoc = userLocation ? `${userLocation.lat.toFixed(4)},${userLocation.lon.toFixed(4)}` : null;
++
++    if (!userLocation) {
++      userLocation = await getLocation();
++      console.log(`[Location] Resolved: ${userLocation.lat.toFixed(2)}°, ${Math.abs(userLocation.lon).toFixed(2)}°`);
++    } else if (prevLoc) {
++      const newLoc = `${userLocation.lat.toFixed(4)},${userLocation.lon.toFixed(4)}`;
++      if (newLoc !== prevLoc) {
++        console.log(`[Location] Changed: ${prevLoc} → ${newLoc}`);
++      }
+     }
+-  }
+ 
+-  const locEl = document.getElementById('user-location');
+-  if (locEl) locEl.textContent = `\u{1F4CD} ${userLocation.lat.toFixed(2)}\u00B0N, ${Math.abs(userLocation.lon).toFixed(2)}\u00B0W`;
++    const locEl = document.getElementById('user-location');
++    if (locEl) locEl.textContent = `\u{1F4CD} ${userLocation.lat.toFixed(2)}\u00B0N, ${Math.abs(userLocation.lon).toFixed(2)}\u00B0W`;
+ 
+-  _nearbyCache = null;
+-  _nearbyCacheTime = 0;
++    _nearbyCache = null;
++    _nearbyCacheTime = 0;
+ 
+-  // Load nearby cities and display the nearest _maxCities
+-  const nearby = await findNearbyCities(userLocation.lat, userLocation.lon);
+-  
+-  // Sort by distance from user (closest first)
+-  nearby.sort((a, b) => a.distance - b.distance);
+-  
+-  // Take only the nearest _maxCities cities
+-  const allCities = nearby.slice(0, _maxCities);
++    // Load nearby cities and display the nearest _maxCities
++    const nearby = await findNearbyCities(userLocation.lat, userLocation.lon);
++    
++    // Sort by distance from user (closest first)
++    nearby.sort((a, b) => a.distance - b.distance);
++    
++    // Take only the nearest _maxCities cities
++    const allCities = nearby.slice(0, _maxCities);
+ 
+-  if (allCities.length === 0) {
+-    return;
+-  }
++    if (allCities.length === 0) {
++      return;
++    }
+ 
+-  // Render placeholder cards while requests are in flight
+-  renderPlaceholderCards(allCities);
+-  
+-  // Fetch OM weather data
+-  const omResults = await Promise.allSettled(
+-    [fetchWeatherForCities(allCities).catch(() => null)]
+-  );
+-  
+-  weatherData = [];
+-  if (omResults[0].status === 'fulfilled' && omResults[0].value) {
+-    weatherData = omResults[0].value;
+-  }
++    // Render placeholder cards while requests are in flight
++    renderPlaceholderCards(allCities);
++    
++    // Save a snapshot of existing data before clearing, for fallback on fetch failure
++    const cachedData = weatherData.map(city => ({ ...city, nwsData: city.nwsData ? { ...city.nwsData } : null }));
+ 
+-  // Check NWS bounds and fetch NWS data where available — all in parallel
+-  if (weatherData.length > 0) {
+-    // Check all bounds in parallel (only for cities within US lat/lon range).
+-    // isNwsBoundsAvailable now propagates errors, so we wrap each call.
+-    const boundsPromises = weatherData.map(async (city) => {
+-      if (city.latitude != null && city.longitude != null &&
+-          city.latitude >= 17 && city.latitude <= 71 &&
+-          city.longitude >= -170 && city.longitude <= -65) {
+-        try {
+-          const inBounds = await isNwsBoundsAvailable(city.latitude, city.longitude);
+-          return { city, nwsBounds: inBounds };
+-        } catch (err) {
+-          console.warn(`[NWS bounds] ${city.name} (${city.latitude},${city.longitude}): ${err.message}`);
+-          return { city, nwsBounds: false };
++    // Fetch OM weather data
++    const omResults = await Promise.allSettled(
++      [fetchWeatherForCities(allCities).catch(() => null)]
++    );
++
++    weatherData = [];
++    if (omResults[0].status === 'fulfilled' && omResults[0].value) {
++      weatherData = omResults[0].value;
++    }
++
++    // If fetch produced empty/null data, restore from cache to avoid blank cards
++    if (!weatherData || weatherData.length === 0) {
++      console.log('[run] Fetch returned no data, restoring cached:', cachedData.length, 'cities');
++      weatherData = cachedData;
++    }
++
++    // Check NWS bounds and fetch NWS data where available — all in parallel
++    if (weatherData.length > 0) {
++      const boundsPromises = weatherData.map(async (city) => {
++        if (city.latitude != null && city.longitude != null &&
++            city.latitude >= 17 && city.latitude <= 71 &&
++            city.longitude >= -170 && city.longitude <= -65) {
++          try {
++            const inBounds = await isNwsBoundsAvailable(city.latitude, city.longitude);
++            return { city, nwsBounds: inBounds };
++          } catch (err) {
++            console.warn(`[NWS bounds] ${city.name} (${city.latitude},${city.longitude}): ${err.message}`);
++            return { city, nwsBounds: false };
++          }
+         }
++        return { city, nwsBounds: false };
++      });
++      
++      const boundsResults = await Promise.all(boundsPromises);
++      for (const { city, nwsBounds } of boundsResults) {
++        city.nwsBounds = nwsBounds;
+       }
+-      return { city, nwsBounds: false };
+-    });
+-    
+-    const boundsResults = await Promise.all(boundsPromises);
+-    for (const { city, nwsBounds } of boundsResults) {
+-      city.nwsBounds = nwsBounds;
+-    }
+-    
+-    // Queue cities that have NWS bounds for data fetching
+-    const nwsCities = weatherData.filter(c => c.nwsBounds);
+-
+-    // Fetch NWS data for all queued cities in parallel (still per-city since NWS doesn't support batching)
+-    if (nwsCities.length > 0) {
+-      const nwsResults = await Promise.allSettled(
+-        nwsCities.map(city => fetchForCity(city.latitude, city.longitude).catch(() => null))
+-      );
+-
+-      // Store NWS data on each city object — do NOT update cards yet
+-      for (let i = 0; i < nwsCities.length; i++) {
+-        const city = nwsCities[i];
+-        const result = nwsResults[i];
+-        if (result.status === 'fulfilled' && result.value && result.value.current) {
+-          const nwsAppData = nwsToAppData(city, result.value);
+-          if (nwsAppData) {
+-            city.nwsData = nwsAppData;
++      
++      const nwsCities = weatherData.filter(c => c.nwsBounds);
++
++      if (nwsCities.length > 0) {
++        const nwsResults = await Promise.allSettled(
++          nwsCities.map(city => fetchForCity(city.latitude, city.longitude).catch(() => null))
++        );
++
++        for (let i = 0; i < nwsCities.length; i++) {
++          const city = nwsCities[i];
++          const result = nwsResults[i];
++          if (result.status === 'fulfilled' && result.value && result.value.current) {
++            const nwsAppData = nwsToAppData(city, result.value);
++            if (nwsAppData) {
++              city.nwsData = nwsAppData;
++            }
+           }
+         }
+       }
+     }
+-  }
+ 
+-  // All requests complete — render once
+-  DataCacheLogSummary('location update');
+-  renderAll();
++    // All requests complete — render once
++    DataCacheLogSummary('location update');
++    renderAll();
+ 
+-  // Setup radar overlay select and start background radar updates (only if not "None")
+-  if (userLocation) {
+-    loadRadarOverlaySelect(userLocation.lat, userLocation.lon);
+-    if (_selectedRadarOverlay !== 'none') {
+-      loadRadarBackground(userLocation.lat, userLocation.lon);
+-      startRadarUpdates(userLocation.lat, userLocation.lon);
++    // Setup radar overlay select and start background radar updates (only if not "None")
++    if (userLocation) {
++      loadRadarOverlaySelect(userLocation.lat, userLocation.lon);
++      if (_selectedRadarOverlay !== 'none') {
++        loadRadarBackground(userLocation.lat, userLocation.lon);
++        startRadarUpdates(userLocation.lat, userLocation.lon);
++      }
+     }
+-  }
+ 
+-  // Start periodic background refresh of weather data
+-  startBackgroundRefresh();
++    // Start periodic background refresh of weather data
++    startBackgroundRefresh();
++  } finally {
++    _runPending = false;
++  }
+ }
+ 
+ // ===== RADAR BACKGROUND STATE =====
+@@ -390,6 +406,9 @@ function applyRadarOverlaySelection(lat, lon) {
+   _selectedRadarOverlay = sel.value;
+   localStorage.setItem('hasw_radar_overlay', _selectedRadarOverlay);
+ 
++  // Set the current layer before any conditional branches so it's correct for both cache lookup and display
++  _currentRadarLayer = RADAR_LAYERS[_selectedRadarOverlay]?.wmsLayer || null;
++
+   // If switching TO "None", stop background updates and clear radar image
+   if (isNowNone && !wasNone) {
+     stopRadarUpdates();
+@@ -401,7 +420,6 @@ function applyRadarOverlaySelection(lat, lon) {
+ 
+   // If switching FROM "None", start background updates and load image
+   if (!isNowNone && wasNone) {
+-    _currentRadarLayer = RADAR_LAYERS[_selectedRadarOverlay]?.wmsLayer || null;
+     loadRadarBackground(lat, lon);
+     startRadarUpdates(lat, lon);
+     return;
+diff --git a/js/utils.js b/js/utils.js
+index eb08d03..6913451 100644
+--- a/js/utils.js
++++ b/js/utils.js
+@@ -110,7 +110,10 @@ async function isNwsBoundsAvailable(lat, lon) {
+       if (Date.now() < entry.expiresAt) return entry.value;
+       delete _nwsBoundsCache[key];
+     } else {
+-      return entry;
++      return Promise.resolve(entry).catch(() => {
++        delete _nwsBoundsCache[key];
++        return isNwsBoundsAvailable(lat, lon);
++      });
+     }
+   }
+   const promise = (async () => {
+@@ -135,12 +138,16 @@ async function isNwsBoundsAvailable(lat, lon) {
+ 
+ // — Background Refresh —
+ let _bgRefreshTimer = null;
++let _lastRefreshCityCount = 0;
++let _bgRefreshGen = 0;
+ 
+ function getCityShortestTTL(city) {
+   let shortest = Infinity;
+   const lat = city.latitude;
+   const lon = city.longitude;
+ 
++  if (lat == null || lon == null) return MIN_BACKGROUND_REFRESH_MS;
++
+   const consolidatedKey = weatherAqiCacheKey(lat, lon);
+   const consolidatedEntry = localStorage.getItem(`hasw_cache_${consolidatedKey}`);
+   if (consolidatedEntry) {
+@@ -177,18 +184,21 @@ function getCityShortestTTL(city) {
+     if (remaining < shortest) shortest = remaining;
+   }
+ 
+-  // Radar cache — only relevant when overlay is displayed, use the active layer
+-  if (typeof RADAR_LAYERS !== 'undefined') {
+-    const activeOverlay = typeof _selectedRadarOverlay !== 'undefined' && _selectedRadarOverlay ? _selectedRadarOverlay : 'qcd-composite';
+-    const layerName = activeOverlay === 'none' || !RADAR_LAYERS[activeOverlay]
+-      ? 'conus_bref_qcd'
+-      : RADAR_LAYERS[activeOverlay].wmsLayer;
+-    const radarKey = `hasw_radar_overlay_${layerName}_${lat.toFixed(4)}_${lon.toFixed(4)}`;
+-    const radarEntry = localStorage.getItem(radarKey);
+-    if (radarEntry) {
+-      const entry = JSON.parse(radarEntry);
+-      const remaining = RADAR_CACHE_TTL - (Date.now() - entry.timestamp);
+-      if (remaining < shortest) shortest = remaining;
++  // Radar cache — only relevant when overlay is displayed (not "none")
++  if (typeof RADAR_LAYERS !== 'undefined' && typeof _selectedRadarOverlay !== 'undefined') {
++    const activeOverlay = _selectedRadarOverlay || 'qcd-composite';
++    // Skip radar TTL if overlay is "none"
++    if (activeOverlay !== 'none') {
++      const layerName = RADAR_LAYERS[activeOverlay]
++        ? RADAR_LAYERS[activeOverlay].wmsLayer
++        : activeOverlay;
++      const radarKey = `hasw_radar_overlay_${layerName}_${lat.toFixed(4)}_${lon.toFixed(4)}`;
++      const radarEntry = localStorage.getItem(radarKey);
++      if (radarEntry) {
++        const entry = JSON.parse(radarEntry);
++        const remaining = RADAR_CACHE_TTL - (Date.now() - entry.timestamp);
++        if (remaining < shortest) shortest = remaining;
++      }
+     }
+   }
+ 
+@@ -200,28 +210,52 @@ function stopBackgroundRefresh() {
+     clearInterval(_bgRefreshTimer);
+     _bgRefreshTimer = null;
+   }
++  _bgRefreshGen++;
+ }
+ 
+ function startBackgroundRefresh() {
+-  if (_bgRefreshTimer) clearInterval(_bgRefreshTimer);
++  // Capture the generation before any concurrent calls
++  const gen = _bgRefreshGen;
++
++  // Stop any existing timer first
++  stopBackgroundRefresh();
++
++  // Guard: don't start if no weather data
++  if (!weatherData || weatherData.length === 0) {
++    console.log('[BackgroundRefresh] No weather data, skipping');
++    return;
++  }
+ 
+   let shortestTTL = Infinity;
+-  if (weatherData.length > 0) {
+-    for (const city of weatherData) {
+-      const ttl = getCityShortestTTL(city);
+-      if (ttl < shortestTTL) shortestTTL = ttl;
+-    }
++  for (const city of weatherData) {
++    const ttl = getCityShortestTTL(city);
++    if (ttl < shortestTTL) shortestTTL = ttl;
+   }
+ 
++  // If no TTLs found, use minimum interval
++  if (shortestTTL === Infinity) shortestTTL = MIN_BACKGROUND_REFRESH_MS;
+   const interval = Math.max(MIN_BACKGROUND_REFRESH_MS, shortestTTL * BACKGROUND_REFRESH_FRACTION);
+ 
++  _lastRefreshCityCount = weatherData.length;
++  console.log(`[BackgroundRefresh] Starting gen=${gen}: ${weatherData.length} cities, interval=${Math.round(interval / 1000)}s (shortest TTL=${Math.round(shortestTTL / 1000)}s)`);
++
+   _bgRefreshTimer = setInterval(() => {
+-    if (isLoading || !userLocation || weatherData.length === 0) return;
++    // Skip if this timer belongs to a stale generation
++    if (_bgRefreshGen !== gen) return;
++
++    if (isLoading || !userLocation) return;
++
++    // Re-fetch only if city count changed or data is stale
++    if (weatherData.length !== _lastRefreshCityCount) {
++      _lastRefreshCityCount = weatherData.length;
++    }
+ 
+     for (const city of weatherData) {
+-      DataCache.invalidate(weatherAqiCacheKey(city.latitude, city.longitude));
+-      DataCache.invalidate(weatherCacheKey(city.latitude, city.longitude));
+-      DataCache.invalidate(aqiCacheKey(city.latitude, city.longitude));
++      if (city.latitude != null && city.longitude != null) {
++        DataCache.invalidate(weatherAqiCacheKey(city.latitude, city.longitude));
++        DataCache.invalidate(weatherCacheKey(city.latitude, city.longitude));
++        DataCache.invalidate(aqiCacheKey(city.latitude, city.longitude));
++      }
+     }
+ 
+     run();

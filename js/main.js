@@ -9,6 +9,10 @@ let _chartResizeTimer = null;
 let _maxCities = MAX_CITIES; // Default: show nearest 6 cities
 let _selectedRadarOverlay = 'qcd-composite'; // Current overlay selection
 
+// ===== RUN GUARD =====
+// Prevent concurrent run() invocations from background refresh
+let _runPending = false;
+
 // ===== RADAR MARKER TOGGLE STATE =====
 let _radarMarkersVisible = false;
 let _markerResizeTimer = null;
@@ -79,113 +83,142 @@ document.addEventListener('DOMContentLoaded', () => {
  });
 
 // ===== MAIN RUN =====
-async function run() {
-  const prevLoc = userLocation ? `${userLocation.lat.toFixed(4)},${userLocation.lon.toFixed(4)}` : null;
+async function run(isBackground = false) {
+  // For background refreshes, don't block on concurrent full refresh — just skip
+  // For full refreshes (isBackground=false), prevent concurrent runs
+  if (!isBackground && _runPending) return;
 
-  if (!userLocation) {
-    userLocation = await getLocation();
-    console.log(`[Location] Resolved: ${userLocation.lat.toFixed(2)}°, ${Math.abs(userLocation.lon).toFixed(2)}°`);
-  } else if (prevLoc) {
-    const newLoc = `${userLocation.lat.toFixed(4)},${userLocation.lon.toFixed(4)}`;
-    if (newLoc !== prevLoc) {
-      console.log(`[Location] Changed: ${prevLoc} → ${newLoc}`);
+  if (!isBackground) _runPending = true;
+
+  try {
+    const prevLoc = userLocation ? `${userLocation.lat.toFixed(4)},${userLocation.lon.toFixed(4)}` : null;
+
+    if (!userLocation) {
+      userLocation = await getLocation();
+      console.log(`[Location] Resolved: ${userLocation.lat.toFixed(2)}°, ${Math.abs(userLocation.lon).toFixed(2)}°`);
+    } else if (prevLoc) {
+      const newLoc = `${userLocation.lat.toFixed(4)},${userLocation.lon.toFixed(4)}`;
+      if (newLoc !== prevLoc) {
+        console.log(`[Location] Changed: ${prevLoc} → ${newLoc}`);
+      }
     }
-  }
 
-  const locEl = document.getElementById('user-location');
-  if (locEl) locEl.textContent = `\u{1F4CD} ${userLocation.lat.toFixed(2)}\u00B0N, ${Math.abs(userLocation.lon).toFixed(2)}\u00B0W`;
+    const locEl = document.getElementById('user-location');
+    if (locEl) locEl.textContent = `\u{1F4CD} ${userLocation.lat.toFixed(2)}\u00B0N, ${Math.abs(userLocation.lon).toFixed(2)}\u00B0W`;
 
-  _nearbyCache = null;
-  _nearbyCacheTime = 0;
+    _nearbyCache = null;
+    _nearbyCacheTime = 0;
 
-  // Load nearby cities and display the nearest _maxCities
-  const nearby = await findNearbyCities(userLocation.lat, userLocation.lon);
-  
-  // Sort by distance from user (closest first)
-  nearby.sort((a, b) => a.distance - b.distance);
-  
-  // Take only the nearest _maxCities cities
-  const allCities = nearby.slice(0, _maxCities);
+    // Load nearby cities and display the nearest _maxCities
+    const nearby = await findNearbyCities(userLocation.lat, userLocation.lon);
+    
+    // Sort by distance from user (closest first)
+    nearby.sort((a, b) => a.distance - b.distance);
+    
+    // Take only the nearest _maxCities cities
+    const allCities = nearby.slice(0, _maxCities);
 
-  if (allCities.length === 0) {
-    return;
-  }
+    if (allCities.length === 0) {
+      return;
+    }
 
-  // Render placeholder cards while requests are in flight
-  renderPlaceholderCards(allCities);
-  
-  // Fetch OM weather data
-  const omResults = await Promise.allSettled(
-    [fetchWeatherForCities(allCities).catch(() => null)]
-  );
-  
-  weatherData = [];
-  if (omResults[0].status === 'fulfilled' && omResults[0].value) {
-    weatherData = omResults[0].value;
-  }
+    // Render placeholder cards while requests are in flight
+    renderPlaceholderCards(allCities);
+    
+    // Save a snapshot of existing data before clearing, for fallback on fetch failure
+    const cachedData = weatherData.map(city => ({ ...city, weather: city.weather ? { ...city.weather } : null, nwsData: city.nwsData ? { ...city.nwsData } : null }));
 
-  // Check NWS bounds and fetch NWS data where available — all in parallel
-  if (weatherData.length > 0) {
-    // Check all bounds in parallel (only for cities within US lat/lon range).
-    // isNwsBoundsAvailable now propagates errors, so we wrap each call.
-    const boundsPromises = weatherData.map(async (city) => {
-      if (city.latitude != null && city.longitude != null &&
-          city.latitude >= 17 && city.latitude <= 71 &&
-          city.longitude >= -170 && city.longitude <= -65) {
-        try {
-          const inBounds = await isNwsBoundsAvailable(city.latitude, city.longitude);
-          return { city, nwsBounds: inBounds };
-        } catch (err) {
-          console.warn(`[NWS bounds] ${city.name} (${city.latitude},${city.longitude}): ${err.message}`);
-          return { city, nwsBounds: false };
+    // Fetch OM weather data
+    const omResults = await Promise.allSettled(
+      [fetchWeatherForCities(allCities).catch(() => null)]
+    );
+
+    let fetchedData = [];
+    if (omResults[0].status === 'fulfilled' && omResults[0].value) {
+      fetchedData = omResults[0].value;
+    }
+
+    // If fetch produced empty/null data, restore from cache to avoid blank cards
+    if (!fetchedData || fetchedData.length === 0) {
+      console.log('[run] Fetch returned no data, restoring cached:', cachedData.length, 'cities');
+      weatherData = cachedData;
+    } else {
+      weatherData = fetchedData;
+    }
+
+    // Fill any cities with null weather from cache as fallback
+    for (let i = 0; i < weatherData.length; i++) {
+      const city = weatherData[i];
+      if ((!city.weather || !city.weather.current) && cachedData[i]) {
+        const cachedCity = cachedData[i];
+        if (cachedCity.weather && cachedCity.weather.current) {
+          console.log(`[run] City ${city.name} has null weather, using cached data`);
+          city.weather = cachedCity.weather;
+          city.aqi = cachedCity.aqi || {};
         }
       }
-      return { city, nwsBounds: false };
-    });
-    
-    const boundsResults = await Promise.all(boundsPromises);
-    for (const { city, nwsBounds } of boundsResults) {
-      city.nwsBounds = nwsBounds;
     }
-    
-    // Queue cities that have NWS bounds for data fetching
-    const nwsCities = weatherData.filter(c => c.nwsBounds);
 
-    // Fetch NWS data for all queued cities in parallel (still per-city since NWS doesn't support batching)
-    if (nwsCities.length > 0) {
-      const nwsResults = await Promise.allSettled(
-        nwsCities.map(city => fetchForCity(city.latitude, city.longitude).catch(() => null))
-      );
+    // Check NWS bounds and fetch NWS data where available — all in parallel
+    if (weatherData.length > 0) {
+      const boundsPromises = weatherData.map(async (city) => {
+        if (city.latitude != null && city.longitude != null &&
+            city.latitude >= 17 && city.latitude <= 71 &&
+            city.longitude >= -170 && city.longitude <= -65) {
+          try {
+            const inBounds = await isNwsBoundsAvailable(city.latitude, city.longitude);
+            return { city, nwsBounds: inBounds };
+          } catch (err) {
+            console.warn(`[NWS bounds] ${city.name} (${city.latitude},${city.longitude}): ${err.message}`);
+            return { city, nwsBounds: false };
+          }
+        }
+        return { city, nwsBounds: false };
+      });
+      
+      const boundsResults = await Promise.all(boundsPromises);
+      for (const { city, nwsBounds } of boundsResults) {
+        city.nwsBounds = nwsBounds;
+      }
+      
+      const nwsCities = weatherData.filter(c => c.nwsBounds);
 
-      // Store NWS data on each city object — do NOT update cards yet
-      for (let i = 0; i < nwsCities.length; i++) {
-        const city = nwsCities[i];
-        const result = nwsResults[i];
-        if (result.status === 'fulfilled' && result.value && result.value.current) {
-          const nwsAppData = nwsToAppData(city, result.value);
-          if (nwsAppData) {
-            city.nwsData = nwsAppData;
+      if (nwsCities.length > 0) {
+        const nwsResults = await Promise.allSettled(
+          nwsCities.map(city => fetchForCity(city.latitude, city.longitude).catch(() => null))
+        );
+
+        for (let i = 0; i < nwsCities.length; i++) {
+          const city = nwsCities[i];
+          const result = nwsResults[i];
+          if (result.status === 'fulfilled' && result.value && result.value.current) {
+            const nwsAppData = nwsToAppData(city, result.value);
+            if (nwsAppData) {
+              city.nwsData = nwsAppData;
+            }
           }
         }
       }
     }
-  }
 
-  // All requests complete — render once
-  DataCacheLogSummary('location update');
-  renderAll();
+    // All requests complete — render once
+    DataCacheLogSummary('location update');
+    renderAll();
 
-  // Setup radar overlay select and start background radar updates (only if not "None")
-  if (userLocation) {
-    loadRadarOverlaySelect(userLocation.lat, userLocation.lon);
-    if (_selectedRadarOverlay !== 'none') {
-      loadRadarBackground(userLocation.lat, userLocation.lon);
-      startRadarUpdates(userLocation.lat, userLocation.lon);
+    // Setup radar overlay select and start background radar updates (only if not "None")
+    if (userLocation) {
+      loadRadarOverlaySelect(userLocation.lat, userLocation.lon);
+      if (_selectedRadarOverlay !== 'none') {
+        loadRadarBackground(userLocation.lat, userLocation.lon);
+        startRadarUpdates(userLocation.lat, userLocation.lon);
+      }
     }
-  }
 
-  // Start periodic background refresh of weather data
-  startBackgroundRefresh();
+    // Start periodic background refresh of weather data
+    startBackgroundRefresh();
+  } finally {
+    if (!isBackground) _runPending = false;
+  }
 }
 
 // ===== RADAR BACKGROUND STATE =====
@@ -390,6 +423,9 @@ function applyRadarOverlaySelection(lat, lon) {
   _selectedRadarOverlay = sel.value;
   localStorage.setItem('hasw_radar_overlay', _selectedRadarOverlay);
 
+  // Set the current layer before any conditional branches so it's correct for both cache lookup and display
+  _currentRadarLayer = RADAR_LAYERS[_selectedRadarOverlay]?.wmsLayer || null;
+
   // If switching TO "None", stop background updates and clear radar image
   if (isNowNone && !wasNone) {
     stopRadarUpdates();
@@ -401,7 +437,6 @@ function applyRadarOverlaySelection(lat, lon) {
 
   // If switching FROM "None", start background updates and load image
   if (!isNowNone && wasNone) {
-    _currentRadarLayer = RADAR_LAYERS[_selectedRadarOverlay]?.wmsLayer || null;
     loadRadarBackground(lat, lon);
     startRadarUpdates(lat, lon);
     return;

@@ -110,7 +110,10 @@ async function isNwsBoundsAvailable(lat, lon) {
       if (Date.now() < entry.expiresAt) return entry.value;
       delete _nwsBoundsCache[key];
     } else {
-      return entry;
+      return Promise.resolve(entry).catch(() => {
+        delete _nwsBoundsCache[key];
+        return isNwsBoundsAvailable(lat, lon);
+      });
     }
   }
   const promise = (async () => {
@@ -135,11 +138,15 @@ async function isNwsBoundsAvailable(lat, lon) {
 
 // — Background Refresh —
 let _bgRefreshTimer = null;
+let _lastRefreshCityCount = 0;
+let _bgRefreshGen = 0;
 
 function getCityShortestTTL(city) {
   let shortest = Infinity;
   const lat = city.latitude;
   const lon = city.longitude;
+
+  if (lat == null || lon == null) return MIN_BACKGROUND_REFRESH_MS;
 
   const consolidatedKey = weatherAqiCacheKey(lat, lon);
   const consolidatedEntry = localStorage.getItem(`hasw_cache_${consolidatedKey}`);
@@ -177,18 +184,21 @@ function getCityShortestTTL(city) {
     if (remaining < shortest) shortest = remaining;
   }
 
-  // Radar cache — only relevant when overlay is displayed, use the active layer
-  if (typeof RADAR_LAYERS !== 'undefined') {
-    const activeOverlay = typeof _selectedRadarOverlay !== 'undefined' && _selectedRadarOverlay ? _selectedRadarOverlay : 'qcd-composite';
-    const layerName = activeOverlay === 'none' || !RADAR_LAYERS[activeOverlay]
-      ? 'conus_bref_qcd'
-      : RADAR_LAYERS[activeOverlay].wmsLayer;
-    const radarKey = `hasw_radar_overlay_${layerName}_${lat.toFixed(4)}_${lon.toFixed(4)}`;
-    const radarEntry = localStorage.getItem(radarKey);
-    if (radarEntry) {
-      const entry = JSON.parse(radarEntry);
-      const remaining = RADAR_CACHE_TTL - (Date.now() - entry.timestamp);
-      if (remaining < shortest) shortest = remaining;
+  // Radar cache — only relevant when overlay is displayed (not "none")
+  if (typeof RADAR_LAYERS !== 'undefined' && typeof _selectedRadarOverlay !== 'undefined') {
+    const activeOverlay = _selectedRadarOverlay || 'qcd-composite';
+    // Skip radar TTL if overlay is "none"
+    if (activeOverlay !== 'none') {
+      const layerName = RADAR_LAYERS[activeOverlay]
+        ? RADAR_LAYERS[activeOverlay].wmsLayer
+        : activeOverlay;
+      const radarKey = `hasw_radar_overlay_${layerName}_${lat.toFixed(4)}_${lon.toFixed(4)}`;
+      const radarEntry = localStorage.getItem(radarKey);
+      if (radarEntry) {
+        const entry = JSON.parse(radarEntry);
+        const remaining = RADAR_CACHE_TTL - (Date.now() - entry.timestamp);
+        if (remaining < shortest) shortest = remaining;
+      }
     }
   }
 
@@ -200,31 +210,55 @@ function stopBackgroundRefresh() {
     clearInterval(_bgRefreshTimer);
     _bgRefreshTimer = null;
   }
+  _bgRefreshGen++;
 }
 
 function startBackgroundRefresh() {
-  if (_bgRefreshTimer) clearInterval(_bgRefreshTimer);
+  // Capture the generation before any concurrent calls
+  const gen = _bgRefreshGen;
 
-  let shortestTTL = Infinity;
-  if (weatherData.length > 0) {
-    for (const city of weatherData) {
-      const ttl = getCityShortestTTL(city);
-      if (ttl < shortestTTL) shortestTTL = ttl;
-    }
+  // Stop any existing timer first
+  stopBackgroundRefresh();
+
+  // Guard: don't start if no weather data
+  if (!weatherData || weatherData.length === 0) {
+    console.log('[BackgroundRefresh] No weather data, skipping');
+    return;
   }
 
+  let shortestTTL = Infinity;
+  for (const city of weatherData) {
+    const ttl = getCityShortestTTL(city);
+    if (ttl < shortestTTL) shortestTTL = ttl;
+  }
+
+  // If no TTLs found, use minimum interval
+  if (shortestTTL === Infinity) shortestTTL = MIN_BACKGROUND_REFRESH_MS;
   const interval = Math.max(MIN_BACKGROUND_REFRESH_MS, shortestTTL * BACKGROUND_REFRESH_FRACTION);
 
-  _bgRefreshTimer = setInterval(() => {
-    if (isLoading || !userLocation || weatherData.length === 0) return;
+  _lastRefreshCityCount = weatherData.length;
+  console.log(`[BackgroundRefresh] Starting gen=${gen}: ${weatherData.length} cities, interval=${Math.round(interval / 1000)}s (shortest TTL=${Math.round(shortestTTL / 1000)}s)`);
 
-    for (const city of weatherData) {
-      DataCache.invalidate(weatherAqiCacheKey(city.latitude, city.longitude));
-      DataCache.invalidate(weatherCacheKey(city.latitude, city.longitude));
-      DataCache.invalidate(aqiCacheKey(city.latitude, city.longitude));
+  _bgRefreshTimer = setInterval(() => {
+    // Skip if this timer belongs to a stale generation
+    if (_bgRefreshGen !== gen) return;
+
+    if (isLoading || !userLocation) return;
+
+    // Re-fetch only if city count changed or data is stale
+    if (weatherData.length !== _lastRefreshCityCount) {
+      _lastRefreshCityCount = weatherData.length;
     }
 
-    run();
+    for (const city of weatherData) {
+      if (city.latitude != null && city.longitude != null) {
+        DataCache.invalidate(weatherAqiCacheKey(city.latitude, city.longitude));
+        DataCache.invalidate(weatherCacheKey(city.latitude, city.longitude));
+        DataCache.invalidate(aqiCacheKey(city.latitude, city.longitude));
+      }
+    }
+
+    run(true);  // Background refresh — won't block on full refresh
   }, interval);
 }
 

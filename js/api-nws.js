@@ -795,7 +795,7 @@ function nwsToAppData(city, nwsData) {
   // NWS hourly with units=us returns Fahrenheit — convert to Celsius for storage
   const hourlyTemps = hourly.map(p => {
     const f = p.temperature;
-    return f != null ? (f - CELSIUS_TO_FAHRENHEIT_OFFSET) * CELSIUS_TO_FAHRENHEIT_FACTOR : null;
+    return f != null ? (f - CELSIUS_TO_FAHRENHEIT_OFFSET) / CELSIUS_TO_FAHRENHEIT_FACTOR : null;
   });
   const hourlyHumidity = hourly.map(p => p.relativeHumidity);
   // Parse windSpeed strings ("2 mph", "10 mph") and convert mph → km/h
