@@ -5,10 +5,41 @@ const CARD_ANIMATION_STAGGER_MS = 120;
 const OM_FADE_TRANSITION_MS = 300;
 const NWS_FADE_TRANSITION_MS = 200;
 const RENDER_CHART_DRAW_DELAY_MS = 50;
-const RENDER_ALL_CHART_DELAY_MS = 400;
 const COORD_MATCH_TOLERANCE = 0.01;
 const LARGE_ICON_SIZE_PX = 80;
 const PRECIP_DISPLAY_THRESHOLD_MM = 0.1;
+
+// NOTE: renderAll() is defined in main.js as the authoritative version.
+// This legacy stub remains for backward compatibility but is rarely called directly.
+function renderAll() {
+  const grid = document.getElementById('city-grid');
+  if (!grid) return;
+  // Only deduplicate — full rendering handled by main.js's renderAll()
+  const seenCoords = new Map();
+  const deduped = [];
+  for (const entry of weatherData) {
+    const lat = entry.latitude != null ? DataCache._roundCoord(entry.latitude) : null;
+    const lon = entry.longitude != null ? DataCache._roundCoord(entry.longitude) : null;
+    if (lat == null || lon == null) {
+      deduped.push(entry);
+      continue;
+    }
+    const coordKey = `${lat},${lon}`;
+    let isDup = false;
+    for (const [existingKey, existingEntry] of seenCoords) {
+      const [exLat, exLon] = existingKey.split(',').map(Number);
+      if (Math.abs(lat - exLat) < COORD_MATCH_TOLERANCE && Math.abs(lon - exLon) < COORD_MATCH_TOLERANCE) {
+        isDup = true;
+        break;
+      }
+    }
+    if (!isDup) {
+      seenCoords.set(coordKey, entry);
+      deduped.push(entry);
+    }
+  }
+  weatherData = deduped;
+}
 
 // --- Utilities ---
 function parseDecimalTime(timeStr, fallback) {
@@ -164,68 +195,6 @@ function findCardByCoords(lat, lon) {
     }
   }
   return null;
-}
-
-// --- Full Render ---
-
-function renderAll() {
-  const grid = document.getElementById('city-grid');
-  if (!grid) return;
-
-  const seenCoords = new Map();
-  const deduped = [];
-  for (const entry of weatherData) {
-    const lat = entry.latitude != null ? DataCache._roundCoord(entry.latitude) : null;
-    const lon = entry.longitude != null ? DataCache._roundCoord(entry.longitude) : null;
-    if (lat == null || lon == null) {
-      deduped.push(entry);
-      continue;
-    }
-    const coordKey = `${lat},${lon}`;
-    let isDup = false;
-    for (const [existingKey, existingEntry] of seenCoords) {
-      const [exLat, exLon] = existingKey.split(',').map(Number);
-      if (Math.abs(lat - exLat) < COORD_MATCH_TOLERANCE && Math.abs(lon - exLon) < COORD_MATCH_TOLERANCE) {
-        isDup = true;
-        if (!existingEntry.place_id && entry.place_id) {
-          seenCoords.set(existingKey, entry);
-          const dupIdx = deduped.findIndex(d => d === existingEntry);
-          if (dupIdx !== -1) deduped[dupIdx] = entry;
-        }
-        break;
-      }
-    }
-    if (!isDup) {
-      seenCoords.set(coordKey, entry);
-      deduped.push(entry);
-    }
-  }
-  weatherData = deduped;
-
-  grid.innerHTML = '';
-
-  weatherData.forEach((data, i) => {
-    const card = document.createElement('div');
-    card.className = 'city-card';
-    card.dataset.cityName = data.name;
-    card.dataset.placeid = data.place_id || '';
-    card.dataset.citydist = data.distance != null ? data.distance : '';
-    card.dataset.citylat = data.latitude != null ? data.latitude : '';
-    card.dataset.citylon = data.longitude != null ? data.longitude : '';
-    card.style.animationDelay = `${i * CARD_ANIMATION_STAGGER_MS}ms`;
-    card.style.animationFillMode = 'forwards';
-    card.style.overflow = 'visible';
-    const suffix = data.latitude != null && data.longitude != null ? `${data.latitude}_${data.longitude}` : undefined;
-    card.innerHTML = renderCityCard(data, suffix);
-    grid.appendChild(card);
-  });
-
-  applyBackgrounds();
-
-  setTimeout(() => {
-    drawAllCharts();
-    drawGhostCharts();
-  }, RENDER_ALL_CHART_DELAY_MS);
 }
 
 function applyBackgrounds() {

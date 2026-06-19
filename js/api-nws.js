@@ -1,7 +1,6 @@
 // ===== NWS API CLIENT =====
 // Fetches weather data from api.weather.gov (NWS) and maps it to the app's data model.
 
-const NWS_API = 'https://api.weather.gov';
 const NWS_USER_AGENT = 'hasWeather/1.0 (https://github.com/Yonneh0/hasWeather)';
 
 // ===== NWS Fetch Configuration =====
@@ -20,7 +19,7 @@ const MS_PER_HOUR = 3600000;
 const MS_PER_MINUTE = 60000;
 
 // ===== Unit Conversion Constants =====
-const METERS_PER_MILE = 1609.34;
+// METERS_PER_MILE is now defined in constants.js — imported before this file.
 const CELSIUS_TO_FAHRENHEIT_OFFSET = 32;
 const CELSIUS_TO_FAHRENHEIT_FACTOR = 9 / 5;
 const MPS_TO_KMH = 3.6;

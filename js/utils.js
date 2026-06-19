@@ -148,40 +148,60 @@ function getCityShortestTTL(city) {
 
   if (lat == null || lon == null) return MIN_BACKGROUND_REFRESH_MS;
 
+  // Check consolidated cache (weatherAqi) — primary source
   const consolidatedKey = weatherAqiCacheKey(lat, lon);
   const consolidatedEntry = localStorage.getItem(`hasw_cache_${consolidatedKey}`);
   if (consolidatedEntry) {
-    const entry = JSON.parse(consolidatedEntry);
-    const ttl = DataCache.TTL[entry.type] || DataCache.TTL.weather;
-    const remaining = ttl - (Date.now() - entry.timestamp);
-    if (remaining < shortest) shortest = remaining;
+    try {
+      const entry = JSON.parse(consolidatedEntry);
+      // Only count TTL if the weather data is actually valid (non-null current)
+      if (entry.data && entry.data.weather && entry.data.weather.current && Object.keys(entry.data.weather.current).length > 0) {
+        const ttl = DataCache.TTL[entry.type] || DataCache.TTL.weather;
+        const remaining = ttl - (Date.now() - entry.timestamp);
+        if (remaining < shortest) shortest = remaining;
+      }
+    } catch {}
   }
 
+  // Check legacy weather cache (only if consolidated is missing or invalid)
   const weatherKey = weatherCacheKey(lat, lon);
   const weatherEntry = localStorage.getItem(`hasw_cache_${weatherKey}`);
-  if (weatherEntry && !consolidatedEntry) {
-    const entry = JSON.parse(weatherEntry);
-    const ttl = DataCache.TTL[entry.type] || DataCache.TTL.weather;
-    const remaining = ttl - (Date.now() - entry.timestamp);
-    if (remaining < shortest) shortest = remaining;
+  if (weatherEntry) {
+    try {
+      const entry = JSON.parse(weatherEntry);
+      // If consolidated exists and is valid, skip legacy to avoid double-counting
+      if (!consolidatedEntry || !consolidatedEntry.includes('"type":"weatherAqi"')) {
+        const ttl = DataCache.TTL[entry.type] || DataCache.TTL.weather;
+        const remaining = ttl - (Date.now() - entry.timestamp);
+        if (remaining < shortest) shortest = remaining;
+      }
+    } catch {}
   }
 
+  // Check legacy AQI cache (only if consolidated is missing or invalid)
   const aqiKey = aqiCacheKey(lat, lon);
   const airEntry = localStorage.getItem(`hasw_cache_${aqiKey}`);
-  if (airEntry && !consolidatedEntry) {
-    const entry = JSON.parse(airEntry);
-    const ttl = DataCache.TTL[entry.type] || DataCache.TTL.airQuality;
-    const remaining = ttl - (Date.now() - entry.timestamp);
-    if (remaining < shortest) shortest = remaining;
+  if (airEntry) {
+    try {
+      const entry = JSON.parse(airEntry);
+      if (!consolidatedEntry || !consolidatedEntry.includes('"type":"weatherAqi"')) {
+        const ttl = DataCache.TTL[entry.type] || DataCache.TTL.airQuality;
+        const remaining = ttl - (Date.now() - entry.timestamp);
+        if (remaining < shortest) shortest = remaining;
+      }
+    } catch {}
   }
 
+  // Check NWS point cache
   const nwsPointKey = nwsPointCacheKey(lat, lon);
   const nwsEntry = localStorage.getItem(`hasw_cache_${nwsPointKey}`);
   if (nwsEntry) {
-    const entry = JSON.parse(nwsEntry);
-    const ttl = DataCache.TTL[entry.type] || DataCache.TTL.nwsPoint;
-    const remaining = ttl - (Date.now() - entry.timestamp);
-    if (remaining < shortest) shortest = remaining;
+    try {
+      const entry = JSON.parse(nwsEntry);
+      const ttl = DataCache.TTL[entry.type] || DataCache.TTL.nwsPoint;
+      const remaining = ttl - (Date.now() - entry.timestamp);
+      if (remaining < shortest) shortest = remaining;
+    } catch {}
   }
 
   // Radar cache — only relevant when overlay is displayed (not "none")
@@ -195,9 +215,11 @@ function getCityShortestTTL(city) {
       const radarKey = `hasw_radar_overlay_${layerName}_${lat.toFixed(4)}_${lon.toFixed(4)}`;
       const radarEntry = localStorage.getItem(radarKey);
       if (radarEntry) {
-        const entry = JSON.parse(radarEntry);
-        const remaining = RADAR_CACHE_TTL - (Date.now() - entry.timestamp);
-        if (remaining < shortest) shortest = remaining;
+        try {
+          const entry = JSON.parse(radarEntry);
+          const remaining = RADAR_CACHE_TTL - (Date.now() - entry.timestamp);
+          if (remaining < shortest) shortest = remaining;
+        } catch {}
       }
     }
   }
@@ -258,7 +280,8 @@ function startBackgroundRefresh() {
       }
     }
 
-    run(true);  // Background refresh — won't block on full refresh
+    // Pass true to indicate this is a background refresh (won't block full refresh)
+    run(true);
   }, interval);
 }
 

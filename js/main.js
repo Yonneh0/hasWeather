@@ -274,7 +274,11 @@ async function loadRadarBackground(lat, lon) {
 
 // Refresh the currently-displayed radar overlay
 async function refreshRadarBackground(lat, lon) {
+  // Only refresh if we have an active overlay and valid coordinates
   if (!_currentRadarLayer || !lat || !lon) return;
+  // Also skip if the overlay is "none" (shouldn't happen but be safe)
+  if (_selectedRadarOverlay === 'none') return;
+
   const dataUrl = await window.fetchRadarImageForOverlay(lat, lon, _currentRadarLayer);
   if (!dataUrl) return;
 
@@ -492,6 +496,8 @@ function closeAbout() {
 // ===== RENDER ALL (with card count logging) =====
 let _lastCardCount = 0;
 
+// NOTE: The renderAll() in render.js is a legacy stub — main.js's version is the authoritative one.
+// It handles deduplication, card creation, background application, and chart drawing.
 function renderAll() {
   const grid = document.getElementById('city-grid');
   if (!grid) return;

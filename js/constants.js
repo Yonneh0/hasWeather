@@ -1,4 +1,9 @@
+// ===== API Endpoints =====
+const NWS_API = 'https://api.weather.gov';
+
+// ===== Earth & Distance Constants =====
 const EARTH_RADIUS_MI = 3958.8;
+const METERS_PER_MILE = 1609.34;
 const GEOLOCATION_TIMEOUT_MS = 8000;
 const NEARBY_CACHE_TTL_MS = 600000;
 const MAX_CITIES = 6;
@@ -7,6 +12,7 @@ const HOURLY_FORECAST_SLOTS = 24;
 const CHART_DRAW_DELAY_MS = 400;
 const CHART_RESIZE_DEBOUNCE_MS = 250;
 const TOGGLE_DEBOUNCE_MS = 300;
+const RENDER_ALL_CHART_DELAY_MS = 400;
 const PARTICLE_COUNT = 30;
 const TEMP_GLOBAL_MIN = -40;
 const TEMP_GLOBAL_MAX = 80;
