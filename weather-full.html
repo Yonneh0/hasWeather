@@ -2429,73 +2429,55 @@ body.donkey-fullscreen .fav-dropdown {
 body.donkey-fullscreen .donkey-panel.donkey-hidden {
   display: none;
 }
-/* ===== ABOUT PAGE (VT100 TERMINAL) ===== */
+/* ===== ABOUT PANEL — VT100 TERMINAL STYLE ===== */
+
 .about-panel {
   position: fixed;
-  top: 80px;
+  top: 64px;
   left: 50%;
   transform: translateX(-50%);
-  width: 640px;
-  max-width: 95vw;
-  max-height: calc(100vh - 120px);
+  width: 780px;
+  max-width: 92vw;
   z-index: 200;
-  background: rgba(10, 10, 10, 0.95);
-  backdrop-filter: blur(20px) saturate(150%);
-  border: 1px solid rgba(0, 255, 0, 0.15);
-  border-radius: 16px;
-  overflow: hidden;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 0 0 60px rgba(0, 255, 0, 0.08);
-  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease, top 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease, top 0.35s cubic-bezier(0.16, 1, 0.3, 1);
   transform-origin: top center;
-  will-change: transform, opacity;
-}
-
-.about-panel.about-visible {
-  top: 80px;
-  opacity: 1;
-  pointer-events: auto;
 }
 
 .about-panel.about-hidden {
-  top: -300px;
+  top: -400px;
   opacity: 0;
   pointer-events: none;
+}
+
+.about-panel.about-visible {
+  top: 64px;
+  opacity: 1;
+  pointer-events: auto;
 }
 
 /* Header */
 .about-panel-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   padding: 0.5rem 0.8rem;
-  background: rgba(0, 0, 0, 0.5);
-  border-bottom: 1px solid rgba(0, 255, 0, 0.2);
-}
-
-.about-title {
-  font-size: 0.7rem;
-  font-weight: 700;
-  color: rgba(0, 255, 0, 0.6);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  font-family: 'Courier New', 'Lucida Console', monospace;
+  background: rgba(0, 0, 0, 0.4);
+  border-bottom: 1px solid rgba(51, 255, 51, 0.2);
 }
 
 .about-close-btn {
   background: rgba(255, 255, 255, 0.1);
-  border: 2px solid rgba(0, 255, 0, 0.3);
-  color: rgba(0, 255, 0, 0.85);
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.85);
   min-width: 36px;
   height: 36px;
   border-radius: 8px;
   cursor: pointer;
   font-size: 1.1rem;
-  font-weight: 700;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: background 0.15s, color 0.15s, border-color 0.15s;
-  font-family: 'Courier New', monospace;
 }
 
 .about-close-btn:hover {
@@ -2504,212 +2486,285 @@ body.donkey-fullscreen .donkey-panel.donkey-hidden {
   color: #ef4444;
 }
 
-/* Body - VT100 terminal content */
+/* Body */
 .about-panel-body {
-  padding: 1rem 1.2rem;
-  overflow-y: auto;
-  max-height: calc(100vh - 200px);
-  scrollbar-width: thin;
-  scrollbar-color: rgba(0, 255, 0, 0.3) rgba(0, 0, 0, 0.3);
-}
-
-.about-panel-body::-webkit-scrollbar {
-  width: 6px;
-}
-
-.about-panel-body::-webkit-scrollbar-track {
-  background: rgba(0, 0, 0, 0.3);
-  border-radius: 3px;
-}
-
-.about-panel-body::-webkit-scrollbar-thumb {
-  background: rgba(0, 255, 0, 0.3);
-  border-radius: 3px;
-}
-
-/* VT100 terminal text */
-.about-content {
-  color: #33ff33;
-  font-family: 'Courier New', 'Lucida Console', monospace;
-  font-size: 0.85rem;
-  line-height: 1.6;
-  text-shadow: 0 0 4px rgba(0, 255, 0, 0.3);
-}
-
-.about-content h1 {
-  color: #33ff33;
-  font-size: 1.8rem;
-  font-weight: 900;
-  margin: 0 0 0.6rem 0;
-  padding-bottom: 0.4rem;
-  border-bottom: 1px solid rgba(0, 255, 0, 0.3);
-  text-shadow: 0 0 8px rgba(0, 255, 0, 0.5);
-}
-
-.about-content h2 {
-  color: #33ff33;
-  font-size: 1.4rem;
-  font-weight: 700;
-  margin: 1.2rem 0 0.5rem 0;
-  text-shadow: 0 0 6px rgba(0, 255, 0, 0.4);
-}
-
-.about-content h3 {
-  color: #55ff55;
-  font-size: 1.15rem;
-  font-weight: 700;
-  margin: 1rem 0 0.4rem 0;
-}
-
-.about-content h4,
-.about-content h5,
-.about-content h6 {
-  color: #55ff55;
-  font-size: 1rem;
-  font-weight: 700;
-  margin: 0.8rem 0 0.3rem 0;
-}
-
-.about-content p {
-  margin: 0 0 0.8rem 0;
-  color: #22dd22;
-}
-
-.about-content a {
-  color: #66ff66;
-  text-decoration: underline;
-  transition: color 0.15s;
-}
-
-.about-content a:hover {
-  color: #aaffaa;
-}
-
-.about-content strong {
-  color: #88ff88;
-  font-weight: 700;
-}
-
-.about-content em {
-  color: #55ee55;
-  font-style: italic;
-}
-
-.about-content code {
-  background: rgba(0, 255, 0, 0.08);
-  padding: 0.1em 0.35em;
-  border-radius: 3px;
-  font-family: 'Courier New', monospace;
-  color: #aaffaa;
-}
-
-.about-content pre {
-  background: rgba(0, 0, 0, 0.4);
-  border: 1px solid rgba(0, 255, 0, 0.15);
-  border-radius: 6px;
-  padding: 0.8rem 1rem;
-  margin: 0.8rem 0;
-  overflow-x: auto;
-}
-
-.about-content pre code {
-  background: none;
   padding: 0;
-  color: #aaffaa;
 }
 
-/* Lists */
-.about-content ul,
-.about-content ol {
-  margin: 0.5rem 0 0.8rem 1.5rem;
-  padding-left: 0.5rem;
-}
-
-.about-content li {
-  margin-bottom: 0.3rem;
-  color: #22dd22;
-}
-
-.about-content li::marker {
+/* Content area — the VT100 terminal panel */
+.about-panel-content {
+  position: relative;
+  max-height: calc(100vh - 200px);
+  overflow-y: auto;
+  background: rgba(0, 0, 0, 0.9);
   color: #33ff33;
+  font-family: 'Courier New', 'Lucida Console', 'Consolas', monospace;
+  font-size: 0.85rem;
+  line-height: 1.65;
+  padding: 1.2rem 1.4rem;
+  text-shadow: 0 0 8px rgba(51, 255, 51, 0.35), 0 0 2px rgba(51, 255, 51, 0.2);
 }
 
-/* Nested lists */
-.about-content ul ul,
-.about-content ol ul,
-.about-content ul ol,
-.about-content ol ol {
-  margin-top: 0.3rem;
-  margin-bottom: 0;
-}
-
-/* Tables - VT100 style */
-.about-content table {
-  width: 100%;
-  border-collapse: collapse;
-  margin: 0.8rem 0;
-  font-size: 0.8rem;
-}
-
-.about-content th {
-  background: rgba(0, 255, 0, 0.1);
-  color: #33ff33;
-  font-weight: 700;
-  text-align: left;
-  padding: 0.5rem 0.7rem;
-  border: 1px solid rgba(0, 255, 0, 0.25);
-  text-shadow: 0 0 4px rgba(0, 255, 0, 0.3);
-}
-
-.about-content td {
-  padding: 0.4rem 0.7rem;
-  border: 1px solid rgba(0, 255, 0, 0.15);
-  color: #22dd22;
-}
-
-.about-content tr:nth-child(even) td {
-  background: rgba(0, 255, 0, 0.03);
-}
-
-/* Horizontal rule */
-.about-content hr {
-  border: none;
-  border-top: 1px solid rgba(0, 255, 0, 0.2);
-  margin: 1rem 0;
-}
-
-/* Scanline effect overlay */
-.about-panel-body::after {
+/* Scanline overlay */
+.about-panel-content::before {
   content: '';
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: repeating-linear-gradient(
-    0deg,
-    transparent,
-    transparent 2px,
-    rgba(0, 255, 0, 0.015) 2px,
-    rgba(0, 255, 0, 0.015) 4px
-  );
+  position: absolute;
+  inset: 0;
   pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0px,
+    transparent 2px,
+    rgba(0, 0, 0, 0.15) 2px,
+    rgba(0, 0, 0, 0.15) 4px
+  );
   z-index: 1;
 }
 
-/* Cursor blink for terminal feel */
-@keyframes aboutCursorBlink {
-  0%, 50% { opacity: 1; }
-  51%, 100% { opacity: 0; }
+/* Inner glow border */
+.about-panel-content::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 60px rgba(51, 255, 51, 0.04), inset 0 0 120px rgba(51, 255, 51, 0.02);
+  z-index: 1;
 }
 
-.about-cursor {
-  display: inline-block;
-  width: 0.6em;
-  height: 1em;
-  background: #33ff33;
-  vertical-align: text-bottom;
-  animation: aboutCursorBlink 1s step-end infinite;
+/* Scrollbar */
+.about-panel-content::-webkit-scrollbar {
+  width: 10px;
+}
+
+.about-panel-content::-webkit-scrollbar-track {
+  background: rgba(0, 30, 0, 0.5);
+  border-left: 1px solid rgba(51, 255, 51, 0.15);
+}
+
+.about-panel-content::-webkit-scrollbar-thumb {
+  background: rgba(51, 255, 51, 0.3);
+  border-radius: 5px;
+  border: 1px solid rgba(51, 255, 51, 0.15);
+}
+
+.about-panel-content::-webkit-scrollbar-thumb:hover {
+  background: rgba(51, 255, 51, 0.5);
+}
+
+/* Headings */
+.about-panel-content h1 {
+  color: #33ff33;
+  font-size: 1.6rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  margin: 0 0 0.8rem 0;
+  text-shadow: 0 0 12px rgba(51, 255, 51, 0.6), 0 0 24px rgba(51, 255, 51, 0.3);
+  border-bottom: 1px solid rgba(51, 255, 51, 0.25);
+  padding-bottom: 0.4rem;
+}
+
+.about-panel-content h2 {
+  color: #33ff33;
+  font-size: 1.25rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  margin: 1.4rem 0 0.6rem 0;
+  text-shadow: 0 0 10px rgba(51, 255, 51, 0.5), 0 0 20px rgba(51, 255, 51, 0.25);
+}
+
+.about-panel-content h3 {
+  color: #44ff44;
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin: 1rem 0 0.5rem 0;
+  text-shadow: 0 0 8px rgba(51, 255, 51, 0.4);
+}
+
+.about-panel-content h4,
+.about-panel-content h5,
+.about-panel-content h6 {
+  color: #55ff55;
+  font-size: 0.95rem;
+  font-weight: 700;
+  margin: 0.8rem 0 0.4rem 0;
+  text-shadow: 0 0 6px rgba(51, 255, 51, 0.3);
+}
+
+/* Paragraphs */
+.about-panel-content p {
+  margin: 0 0 0.7rem 0;
+  color: #33ff33;
+  text-shadow: 0 0 6px rgba(51, 255, 51, 0.25);
+}
+
+/* Links */
+.about-panel-content a {
+  color: #66ff66;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-shadow: 0 0 8px rgba(51, 255, 51, 0.4);
+}
+
+.about-panel-content a:hover {
+  color: #99ff99;
+  text-shadow: 0 0 12px rgba(51, 255, 51, 0.6);
+}
+
+/* Emphasis / italic */
+.about-panel-content em,
+.about-panel-content i {
+  color: #88ff88;
+  font-style: italic;
+}
+
+/* Bold */
+.about-panel-content strong,
+.about-panel-content b {
+  color: #66ff66;
+  text-shadow: 0 0 8px rgba(51, 255, 51, 0.4);
+}
+
+/* Unordered lists */
+.about-panel-content ul {
+  margin: 0.4rem 0 0.8rem 0;
+  padding-left: 1.4rem;
+}
+
+.about-panel-content li {
+  margin-bottom: 0.35rem;
+  color: #33ff33;
+  text-shadow: 0 0 6px rgba(51, 255, 51, 0.2);
+}
+
+.about-panel-content li::marker {
+  color: #44ff44;
+}
+
+/* Ordered lists */
+.about-panel-content ol {
+  margin: 0.4rem 0 0.8rem 0;
+  padding-left: 1.6rem;
+}
+
+.about-panel-content ol li {
+  margin-bottom: 0.35rem;
+  color: #33ff33;
+}
+
+/* Code */
+.about-panel-content code {
+  background: rgba(0, 40, 0, 0.6);
+  border: 1px solid rgba(51, 255, 51, 0.2);
+  color: #66ff66;
+  padding: 0.1rem 0.35rem;
+  border-radius: 3px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.82rem;
+  text-shadow: 0 0 6px rgba(51, 255, 51, 0.4);
+}
+
+/* Code blocks */
+.about-panel-content pre {
+  background: rgba(0, 25, 0, 0.7);
+  border: 1px solid rgba(51, 255, 51, 0.2);
+  border-radius: 4px;
+  padding: 0.8rem 1rem;
+  margin: 0.6rem 0 1rem 0;
+  overflow-x: auto;
+  text-shadow: 0 0 6px rgba(51, 255, 51, 0.3);
+}
+
+.about-panel-content pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 0.8rem;
+  line-height: 1.55;
+  color: #44ff44;
+}
+
+/* Tables */
+.about-panel-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.8rem 0 1rem 0;
+  border: 1px solid rgba(51, 255, 51, 0.2);
+}
+
+.about-panel-content th {
+  background: rgba(51, 255, 51, 0.1);
+  color: #66ff66;
+  font-weight: 700;
+  padding: 0.5rem 0.7rem;
+  text-align: left;
+  border: 1px solid rgba(51, 255, 51, 0.2);
+  text-shadow: 0 0 6px rgba(51, 255, 51, 0.4);
+}
+
+.about-panel-content td {
+  padding: 0.4rem 0.7rem;
+  border: 1px solid rgba(51, 255, 51, 0.15);
+  color: #33ff33;
+  text-shadow: 0 0 6px rgba(51, 255, 51, 0.2);
+}
+
+.about-panel-content tr:nth-child(even) {
+  background: rgba(51, 255, 51, 0.03);
+}
+
+/* Horizontal rule */
+.about-panel-content hr {
+  border: none;
+  border-top: 1px solid rgba(51, 255, 51, 0.2);
+  margin: 1rem 0;
+}
+
+/* Blockquote */
+.about-panel-content blockquote {
+  margin: 0.6rem 0 1rem 1rem;
+  padding-left: 0.8rem;
+  border-left: 3px solid rgba(51, 255, 51, 0.3);
+  color: #44ff44;
+}
+
+/* Line separator (---) */
+.about-panel-content .line-sep {
+  border: none;
+  border-top: 1px dashed rgba(51, 255, 51, 0.3);
+  margin: 1rem 0;
+}
+
+/* Flicker animation for the panel */
+@keyframes aboutFlicker {
+  0%, 97%, 100% { opacity: 1; }
+  98% { opacity: 0.85; }
+  99% { opacity: 0.95; }
+}
+
+.about-panel-content {
+  animation: aboutFlicker 4s ease-in-out infinite;
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+  .about-panel {
+    width: 96vw;
+    left: 2%;
+    transform: none;
+  }
+
+  .about-panel-content {
+    padding: 1rem;
+    font-size: 0.8rem;
+  }
+
+  .about-panel-content h1 {
+    font-size: 1.3rem;
+  }
+
+  .about-panel-content h2 {
+    font-size: 1.1rem;
+  }
 }
 </style>
 </head>
@@ -2722,16 +2777,16 @@ body.donkey-fullscreen .donkey-panel.donkey-hidden {
 
 <header class="header">
   <h1 class="logo">hasWeather</h1>
+   <button id="about-btn" class="btn btn-small" title="About hasWeather">?</button>
    <button id="unit-toggle" class="btn btn-small" title="Toggle °F/°C">°F</button>
    <div class="radar-toggle-group">
      <button id="radar-toggle-btn" class="btn btn-small radar-toggle-btn" title="View Radar" aria-label="View Radar">👁</button>
      <select id="radar-overlay-select" class="btn btn-small radar-overlay-select" title="Radar Overlay"></select>
    </div>
    <button id="refresh-btn" class="btn btn-small" title="Refresh data">⟳</button>
-    <button id="game-btn" class="btn btn-small" title="Donkey Runner Minigame">🫏</button>
-     <button id="about-btn" class="btn btn-small" title="About (README)">?</button>
-    <button id="fullscreen-btn" class="btn btn-small" title="Toggle fullscreen" style="display:none;">⛶</button>
-   <span id="user-location" class="location-display"></span>
+   <button id="game-btn" class="btn btn-small" title="Donkey Runner Minigame">🫏</button>
+   <button id="fullscreen-btn" class="btn btn-small" title="Toggle fullscreen" style="display:none;">⛶</button>
+  <span id="user-location" class="location-display"></span>
   <select id="debug-location-select" class="btn btn-small debug-location-select" title="Select test location">
     <option value="local">Local</option>
     <option value="25.2854:51.5310">Qatar</option>
@@ -2750,14 +2805,31 @@ body.donkey-fullscreen .donkey-panel.donkey-hidden {
   <!-- City cards injected here -->
 </main>
 
+<!-- About Panel (VT100 terminal style) -->
+<div id="about-panel" class="about-panel about-hidden">
+  <div class="about-panel-header">
+    <button id="about-close-btn" class="about-close-btn" title="Close">✕</button>
+  </div>
+  <div class="about-panel-body">
+    <div class="about-panel-content" id="about-content">
+      <!-- Stub content — replaced by build.js -->
+      <h1># hasWeather</h1>
+      <p>completely self-contained single file weather app, that uses public sources, with proper local caching, to provide reliable comprehensive weather information, with 0 ads.</p>
+      <p><em>— Brought to you by Carls Jr —</em></p>
+      <br>
+      <h2>[ <A HREF="README.md">View README.md</A> ]</h2>
+    </div>
+  </div>
+</div>
 
-  <script>
+
+<script>
 var LOCAL_CONFIG_REFRESH_INTERVAL_SECONDS = 31337;
 var LOCAL_SENSOR_NOTE = 'Yonneh wuz here.';
 var LOCAL_SENSOR_TIMESTAMP = '1942-06-14T09:30:00.000Z';
 
 </script>
-  <script>
+<script>
 const EARTH_RADIUS_MI = 3958.8;
 const GEOLOCATION_TIMEOUT_MS = 8000;
 const NEARBY_CACHE_TTL_MS = 600000;
@@ -2827,7 +2899,7 @@ const WMO_GRADIENTS = {
 };
 
 </script>
-  <script>
+<script>
 // ===== DATA CACHE =====
 // Unified cache for ALL API calls with configurable TTL per type and LRU eviction
 
@@ -3109,7 +3181,7 @@ const DataCache = {
 };
 
 </script>
-  <script>
+<script>
 // — Utility Functions —
 function toF(c) { return c * 9 / 5 + 32; }
 function toC(f) { return (f - 32) * 5 / 9; }
@@ -3379,7 +3451,7 @@ async function refresh() {
 }
 
 </script>
-  <script>
+<script>
 // ===== SVG WEATHER ICONS - LOUD & ANIMATED =====
 function getWeatherIcon(code, size = 64) {
   const w = WMO_CODES[code] || WMO_CODES[0];
@@ -3671,7 +3743,7 @@ function loudWeatherIcon(type, size) {
 
 
 </script>
-  <script>
+<script>
 // ===== OPEN-METEO API CLIENT =====
 // Fetches weather data and air quality from Open-Meteo APIs.
 
@@ -4109,7 +4181,7 @@ async function fetchWeatherForCities(cities) {
   }
 }
 </script>
-  <script>
+<script>
 // OpenStreetMap / Nominatim API client — fetches nearby city data from Nominatim/OSM.
 
 // ===== ENDPOINT =====
@@ -4295,7 +4367,7 @@ async function findNearbyCities(lat, lon) {
   return selected;
 }
 </script>
-  <script>
+<script>
 // ===== NWS API CLIENT =====
 // Fetches weather data from api.weather.gov (NWS) and maps it to the app's data model.
 
@@ -5139,7 +5211,7 @@ function nwsToAppData(city, nwsData) {
 
 
 </script>
-  <script>
+<script>
 // ===== WEATHER.GOV RADAR API CLIENT (SIMPLIFIED) =====
 // Fetches the current radar image from NOAA/NCEP GeoServer WMS service.
 // Caches multiple overlays in localStorage by location + layer.
@@ -5380,7 +5452,7 @@ window.RADAR_LAYERS = RADAR_LAYERS;
 window.RADAR_DEFAULT_OVERLAY = RADAR_DEFAULT_OVERLAY;
 
 </script>
-  <script>
+<script>
 // ===== RENDER =====
 
 // --- Constants ---
@@ -5937,7 +6009,7 @@ function drawGhostCharts() {
 
 
 </script>
-  <script>
+<script>
 // ===== CHART CONSTANTS =====
 const CHART_PAD_MERGED = { top: 6, right: 0, bottom: 6, left: 0 };
 const CHART_PAD_COMBINED = { top: 10, right: 10, bottom: 10, left: 10 };
@@ -6434,7 +6506,7 @@ function initParticles() {
 // ===== LOCATION PROMPT =====
 
 </script>
-    <script>
+  <script>
 // ===== NETWORK MONITOR =====
 const OUTAGE_MESSAGES = [
   "🦓 The network has left the building.",
@@ -6768,7 +6840,7 @@ function checkNetworkAndRun(runFn) {
   });
 }
 </script>
-    <script>
+  <script>
 // ===== DONKEY RUNNER MINIGAME =====
 // A Chrome-dinosaur-style endless runner with a donkey character
 
@@ -10706,15 +10778,32 @@ function toggleGame() {
   }
 }
 
-// ===== ABOUT TOGGLE =====
+// ===== ABOUT PANEL TOGGLE =====
 function toggleAbout() {
   const aboutBtn = document.getElementById('about-btn');
-  if (!aboutBtn) return;
+  const panel = document.getElementById('about-panel');
+  if (!aboutBtn || !panel) return;
 
-  if (typeof toggleAboutPanel === 'function') {
-    toggleAboutPanel();
-    aboutBtn.classList.toggle('active', ABOUT_PAGE?.visible || false);
+  const isVisible = panel.classList.contains('about-visible');
+  if (isVisible) {
+    panel.classList.remove('about-visible');
+    panel.classList.add('about-hidden');
+    aboutBtn.classList.remove('active');
+  } else {
+    panel.classList.remove('about-hidden');
+    panel.classList.add('about-visible');
+    aboutBtn.classList.add('active');
   }
+}
+
+function closeAbout() {
+  const aboutBtn = document.getElementById('about-btn');
+  const panel = document.getElementById('about-panel');
+  if (!aboutBtn || !panel) return;
+
+  panel.classList.remove('about-visible');
+  panel.classList.add('about-hidden');
+  aboutBtn.classList.remove('active');
 }
 
 // ===== RENDER ALL (with card count logging) =====
@@ -10971,370 +11060,5 @@ function onMarkerResize() {
 
 
 </script>
- <script>
-// ===== ABOUT PAGE (VT100 TERMINAL) =====
-// Parses README.md content from hidden iframe, renders in floating panel
-
-const ABOUT_PAGE = {
-  panel: null,
-  body: null,
-  iframe: null,
-  visible: false,
-  initialized: false,
-};
-
-/**
- * Parse Markdown to HTML (lightweight parser for README.md features)
- */
-function parseMarkdown(md) {
-  // Normalize line endings
-  md = md.replace(/\r\n/g, '\n');
-
-  const lines = md.split('\n');
-  let html = '';
-  let i = 0;
-  let listStack = []; // track nesting level
-
-  function closeLists() {
-    while (listStack.length > 0) {
-      const item = listStack.pop();
-      html += `</${item.type}>`;
-    }
-  }
-
-  function parseInline(line) {
-    // Inline code: `code`
-    line = line.replace(/`([^`]+)`/g, '<code>$1</code>');
-    // Bold: **text**
-    line = line.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-    // Italic: *text*
-    line = line.replace(/\*([^*]+)\*/g, '<em>$1</em>');
-    // Links: [text](url)
-    line = line.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
-    return line;
-  }
-
-  function isListItem(line) {
-    const trimmed = line.trimStart();
-    return /^[-*+]\s/.test(trimmed) || /^\d+\.\s/.test(trimmed);
-  }
-
-  function getListType(line) {
-    const trimmed = line.trimStart();
-    return /^[-*+]\s/.test(trimmed) ? 'ul' : 'ol';
-  }
-
-  function getIndentLevel(line) {
-    const spaces = line.match(/^(\s*)/);
-    return spaces ? Math.floor(spaces[1].length / 2) : 0;
-  }
-
-  function isTableLine(line) {
-    return line.includes('|') && line.trim().startsWith('|');
-  }
-
-  function parseTable(startIdx) {
-    let tableLines = [];
-    let j = startIdx;
-    while (j < lines.length && (lines[j].trim().startsWith('|') || lines[j].trim() === '')) {
-      if (lines[j].trim() === '') {
-        // Allow empty lines within a table
-        if (j + 1 < lines.length && lines[j + 1].trim().startsWith('|')) {
-          j++;
-          continue;
-        }
-        break;
-      }
-      // Stop at separator line (---|---)
-      if (/^\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?$/.test(lines[j])) {
-        break;
-      }
-      tableLines.push(lines[j]);
-      j++;
-    }
-
-    if (tableLines.length < 2) return null;
-
-    function parseRow(row) {
-      const cells = row.trim().replace(/^\||\|$/g, '').split('|');
-      return cells.map(c => c.trim());
-    }
-
-    let tableHtml = '<table>';
-    // Header
-    tableHtml += '<thead><tr>';
-    const headerCells = parseRow(tableLines[0]);
-    for (const cell of headerCells) {
-      tableHtml += `<th>${parseInline(cell)}</th>`;
-    }
-    tableHtml += '</tr></thead>';
-
-    // Body
-    tableHtml += '<tbody>';
-    for (let t = 2; t < tableLines.length; t++) {
-      const row = parseRow(tableLines[t]);
-      tableHtml += '<tr>';
-      for (const cell of row) {
-        tableHtml += `<td>${parseInline(cell)}</td>`;
-      }
-      tableHtml += '</tr>';
-    }
-    tableHtml += '</tbody></table>';
-
-    return { html: tableHtml, endIdx: j };
-  }
-
-  while (i < lines.length) {
-    const line = lines[i];
-    const trimmed = line.trim();
-
-    // Skip empty lines
-    if (trimmed === '') {
-      i++;
-      continue;
-    }
-
-    // Headers
-    const headerMatch = trimmed.match(/^(#{1,6})\s+(.+)/);
-    if (headerMatch) {
-      closeLists();
-      const level = headerMatch[1].length;
-      html += `<h${level}>${parseInline(headerMatch[2])}</h${level}>`;
-      i++;
-      continue;
-    }
-
-    // Horizontal rule
-    if (/^(-{3,}|\*{3,}|_{3,})$/.test(trimmed)) {
-      closeLists();
-      html += '<hr>';
-      i++;
-      continue;
-    }
-
-    // Tables
-    if (isTableLine(line) && !isListItem(line)) {
-      const result = parseTable(i);
-      if (result) {
-        closeLists();
-        html += result.html;
-        i = result.endIdx;
-        continue;
-      }
-    }
-
-    // Lists
-    if (isListItem(line)) {
-      const listType = getListType(line);
-      const indentLevel = getIndentLevel(line);
-
-      // Adjust list stack for nesting
-      while (listStack.length > 0 && listStack[listStack.length - 1].indent >= indentLevel) {
-        closeLists();
-      }
-
-      if (listStack.length === 0 || listStack[listStack.length - 1].type !== listType) {
-        html += `<${listType}>`;
-        listStack.push({ type: listType, indent: indentLevel });
-      }
-
-      // Check for nested list item on next line
-      const content = line.trim().replace(/^[-*+]\s/, '').replace(/^\d+\.\s/, '');
-      html += `<li>${parseInline(content)}</li>`;
-      i++;
-
-      // Continue collecting list items at this level or deeper
-      while (i < lines.length) {
-        const nextLine = lines[i];
-        const nextTrimmed = nextLine.trim();
-
-        if (nextTrimmed === '') {
-          // Peek ahead to see if more list items follow
-          let peek = i + 1;
-          while (peek < lines.length && lines[peek].trim() === '') peek++;
-          if (peek < lines.length && isListItem(lines[peek])) {
-            i++;
-            continue;
-          }
-          break;
-        }
-
-        if (isListItem(nextLine)) {
-          const nextType = getListType(nextLine);
-          const nextIndent = getIndentLevel(nextLine);
-
-          // If indent is higher, it's a nested list
-          if (nextIndent > listStack[listStack.length - 1].indent) {
-            break;
-          }
-
-          // Same type continues the list
-          html += `<li>${parseInline(nextLine.trim().replace(/^[-*+]\s/, '').replace(/^\d+\.\s/, ''))}</li>`;
-          i++;
-        } else {
-          break;
-        }
-      }
-      continue;
-    }
-
-    // Paragraph (catch-all for remaining lines)
-    let paraLines = [];
-    while (i < lines.length && lines[i].trim() !== '' && !isListItem(lines[i]) && !lines[i].trim().match(/^#{1,6}\s/) && !isTableLine(lines[i])) {
-      paraLines.push(parseInline(lines[i]));
-      i++;
-    }
-    if (paraLines.length > 0) {
-      html += `<p>${paraLines.join('<br>')}</p>`;
-    }
-  }
-
-  closeLists();
-  return html;
-}
-
-/**
- * Strip HTML tags from a string (converts <b>text</b> → text).
- */
-function stripHtml(html) {
-  const tmp = document.createElement('div');
-  tmp.innerHTML = html;
-  return tmp.textContent || tmp.innerText || '';
-}
-
-/**
- * Initialize the about panel and load README.md content.
- */
-function initAboutPanel() {
-  // Create hidden iframe if it doesn't exist (srcdoc set by build.js, src used for raw file://)
-  let iframe = document.getElementById('about-iframe');
-  if (iframe) {
-    ABOUT_PAGE.iframe = iframe;
-  } else {
-    iframe = document.createElement('iframe');
-    iframe.id = 'about-iframe';
-    iframe.src = 'README.md';
-    iframe.style.cssText = 'position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;visibility:hidden;';
-    document.body.appendChild(iframe);
-    ABOUT_PAGE.iframe = iframe;
-  }
-
-  // Create panel if it doesn't exist
-  let panel = document.getElementById('about-panel');
-  if (panel) {
-    ABOUT_PAGE.panel = panel;
-  } else {
-    panel = document.createElement('div');
-    panel.id = 'about-panel';
-    panel.className = 'about-panel about-hidden';
-    panel.innerHTML = `
-      <div class="about-panel-header">
-        <span class="about-title">README.md</span>
-        <button class="about-close-btn" id="about-close-btn" aria-label="Close About">×</button>
-      </div>
-      <div class="about-panel-body">
-        <div class="about-content" id="about-content">Loading README...</div>
-      </div>
-    `;
-    document.body.appendChild(panel);
-    ABOUT_PAGE.panel = panel;
-  }
-
-  ABOUT_PAGE.body = document.getElementById('about-panel-body');
-  const contentEl = document.getElementById('about-content');
-  const closeBtn = document.getElementById('about-close-btn');
-
-  // Close button handler
-  closeBtn.addEventListener('click', () => {
-    toggleAboutPanel(false);
-  });
-
-  // Load content
-  loadAboutContent(contentEl);
-}
-
-/**
- * Load README.md content. Priority order:
- *   1. Injected div from build.js (most reliable — same-origin, no fetch)
- *   2. Raw iframe src text via XHR (same origin as parent)
- *   3. Fallback
- */
-async function loadAboutContent(contentEl) {
-  let markdown = '';
-
-  // Method 1: Injected div from build.js — always works, no network
-  const sourceDiv = document.getElementById('about-readme-source');
-  if (sourceDiv && sourceDiv.textContent.trim()) {
-    markdown = sourceDiv.textContent;
-    console.log('[About] Loaded README.md from injected div (' + markdown.length + ' chars)');
-  }
-
-  // Method 2: Read raw iframe text via XHR (same-origin, no CORS issues)
-  if (!markdown.trim() && ABOUT_PAGE.iframe) {
-    try {
-      const xhr = new XMLHttpRequest();
-      markdown = await new Promise((resolve, reject) => {
-        xhr.open('GET', ABOUT_PAGE.iframe.src || 'README.md', true);
-        xhr.onload = () => resolve(xhr.responseText);
-        xhr.onerror = () => reject(new Error('XHR failed'));
-        xhr.send();
-      });
-      if (markdown.trim()) {
-        console.log('[About] Loaded README.md from iframe XHR (' + markdown.length + ' chars)');
-      }
-    } catch (e) {
-      console.warn('[About] Failed to read iframe via XHR:', e);
-    }
-  }
-
-  if (!markdown.trim()) {
-    markdown = `# About HasWeather
-
-A weather dashboard application.
-
-*Click the **X** button or press **Esc** to close.*`;
-    console.log('[About] Using fallback README content');
-  }
-
-  // Parse and render
-  contentEl.innerHTML = parseMarkdown(markdown);
-  ABOUT_PAGE.initialized = true;
-}
-
-/**
- * Toggle the about panel visibility
- */
-function toggleAboutPanel(forceState) {
-  if (!ABOUT_PAGE.panel) initAboutPanel();
-  if (!ABOUT_PAGE.initialized) return;
-
-  const panel = ABOUT_PAGE.panel;
-  const wasVisible = ABOUT_PAGE.visible;
-
-  if (forceState !== undefined) {
-    ABOUT_PAGE.visible = forceState;
-  } else {
-    ABOUT_PAGE.visible = !ABOUT_PAGE.visible;
-  }
-
-  if (ABOUT_PAGE.visible) {
-    panel.classList.remove('about-hidden');
-    panel.classList.add('about-visible');
-  } else {
-    panel.classList.remove('about-visible');
-    panel.classList.add('about-hidden');
-  }
-}
-
-// Initialize on DOM ready
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initAboutPanel);
-} else {
-  initAboutPanel();
-}
-
-// Expose for external use
-window.ABOUT_PAGE = ABOUT_PAGE;
-</script>
- </body>
- </html>
+</body>
+</html>
