@@ -2729,7 +2729,7 @@ body.donkey-fullscreen .donkey-panel.donkey-hidden {
    </div>
    <button id="refresh-btn" class="btn btn-small" title="Refresh data">⟳</button>
     <button id="game-btn" class="btn btn-small" title="Donkey Runner Minigame">🫏</button>
-    <button id="about-btn" class="btn btn-small" title="About (README)" style="display:none;">?</button>
+     <button id="about-btn" class="btn btn-small" title="About (README)">?</button>
     <button id="fullscreen-btn" class="btn btn-small" title="Toggle fullscreen" style="display:none;">⛶</button>
    <span id="user-location" class="location-display"></span>
   <select id="debug-location-select" class="btn btn-small debug-location-select" title="Select test location">
@@ -11246,28 +11246,28 @@ function initAboutPanel() {
 
 /**
  * Load README.md content from the iframe and parse it.
- * Handles CORS issues on file:// protocol by reading from injected div.
+ * Handles CORS issues on file:// protocol by reading from injected div first.
  */
 async function loadAboutContent(contentEl) {
   let markdown = '';
 
-  // Method 1: Try fetch (works for http/https)
-  try {
-    const response = await fetch('README.md');
-    if (response.ok) {
-      markdown = await response.text();
-      console.log('[About] Loaded README.md via fetch');
-    }
-  } catch (err) {
-    console.warn('[About] Failed to load README.md via fetch:', err);
+  // Method 1 (priority): Try injected div from build.js — works for file:// and http
+  const sourceDiv = document.getElementById('about-readme-source');
+  if (sourceDiv && sourceDiv.textContent.trim()) {
+    markdown = sourceDiv.textContent;
+    console.log('[About] Loaded README.md from injected div');
   }
 
-  // Method 2: If fetch didn't produce content, try injected div from build.js
+  // Method 2: Try fetch (works for http/https, may fail on file://)
   if (!markdown.trim()) {
-    const sourceDiv = document.getElementById('about-readme-source');
-    if (sourceDiv && sourceDiv.textContent.trim()) {
-      markdown = sourceDiv.textContent;
-      console.log('[About] Loaded README.md from injected div');
+    try {
+      const response = await fetch('README.md');
+      if (response.ok) {
+        markdown = await response.text();
+        console.log('[About] Loaded README.md via fetch');
+      }
+    } catch (err) {
+      console.warn('[About] Failed to load README.md via fetch:', err);
     }
   }
 
