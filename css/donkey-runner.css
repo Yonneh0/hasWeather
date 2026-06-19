@@ -135,6 +135,23 @@
 /* Body */
 .donkey-panel-body {
   padding: 0.3rem 0.8rem 0.8rem;
+  position: relative;
+}
+
+/* Scanline overlay — same style as about panel */
+.donkey-panel-body::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0px,
+    transparent 2px,
+    rgba(0, 0, 0, 0.15) 2px,
+    rgba(0, 0, 0, 0.15) 4px
+  );
+  z-index: 1;
 }
 
 /* Sound toggle button - muted state (inherits header button base styles) */

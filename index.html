@@ -16,6 +16,7 @@
 
 <header class="header">
   <h1 class="logo">hasWeather</h1>
+   <button id="about-btn" class="btn btn-small" title="About hasWeather">?</button>
    <button id="unit-toggle" class="btn btn-small" title="Toggle °F/°C">°F</button>
    <div class="radar-toggle-group">
      <button id="radar-toggle-btn" class="btn btn-small radar-toggle-btn" title="View Radar" aria-label="View Radar">👁</button>
@@ -42,6 +43,26 @@
 <main id="city-grid" class="city-grid">
   <!-- City cards injected here -->
 </main>
+
+<!-- About Panel (VT100 terminal style) -->
+<div id="about-panel" class="about-panel about-hidden">
+  <div class="about-panel-header">
+    <span class="about-title">About hasWeather</span>
+    <button id="about-close-btn" class="about-close-btn" title="Close">✕</button>
+  </div>
+  <div class="about-panel-body">
+    <div class="about-inner-panel" id="about-content">
+      <!-- START README.md -->
+      <h1># hasWeather</h1>
+      <p>completely self-contained single file weather app, that uses public sources, with proper local caching, to provide reliable comprehensive weather information, with 0 ads.</p>
+      <p><em>— Brought to you by Carls Jr —</em></p>
+      <br>
+      <h2>[ <A HREF="README.md">View README.md</A> ]</h2>
+      <!-- END README.md -->
+    </div>
+    </div>
+  </div>
+</div>
 
 
 <script src="weather-local.js"></script>

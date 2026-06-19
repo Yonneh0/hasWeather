@@ -21,12 +21,18 @@ document.addEventListener('DOMContentLoaded', () => {
   const unitBtn = document.getElementById('unit-toggle');
   const refreshBtn = document.getElementById('refresh-btn');
   const gameBtn = document.getElementById('game-btn');
+  const aboutBtn = document.getElementById('about-btn');
   const radarToggleBtn = document.getElementById('radar-toggle-btn');
 
   if (unitBtn) unitBtn.addEventListener('click', toggleUnit);
   if (refreshBtn) refreshBtn.addEventListener('click', refresh);
   if (gameBtn) gameBtn.addEventListener('click', toggleGame);
+  if (aboutBtn) aboutBtn.addEventListener('click', toggleAbout);
   if (radarToggleBtn) radarToggleBtn.addEventListener('click', toggleRadarMarkers);
+
+  // About panel close button
+  const aboutCloseBtn = document.getElementById('about-close-btn');
+  if (aboutCloseBtn) aboutCloseBtn.addEventListener('click', closeAbout);
 
   // Chart redraw on resize (includes ghost charts)
   window.addEventListener('resize', () => {
@@ -418,6 +424,34 @@ function toggleGame() {
     DONKEY_RUNNER.toggle();
     gameBtn.classList.add('active');
   }
+}
+
+// ===== ABOUT PANEL TOGGLE =====
+function toggleAbout() {
+  const aboutBtn = document.getElementById('about-btn');
+  const panel = document.getElementById('about-panel');
+  if (!aboutBtn || !panel) return;
+
+  const isVisible = panel.classList.contains('about-visible');
+  if (isVisible) {
+    panel.classList.remove('about-visible');
+    panel.classList.add('about-hidden');
+    aboutBtn.classList.remove('active');
+  } else {
+    panel.classList.remove('about-hidden');
+    panel.classList.add('about-visible');
+    aboutBtn.classList.add('active');
+  }
+}
+
+function closeAbout() {
+  const aboutBtn = document.getElementById('about-btn');
+  const panel = document.getElementById('about-panel');
+  if (!aboutBtn || !panel) return;
+
+  panel.classList.remove('about-visible');
+  panel.classList.add('about-hidden');
+  aboutBtn.classList.remove('active');
 }
 
 // ===== RENDER ALL (with card count logging) =====

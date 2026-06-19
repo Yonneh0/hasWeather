@@ -27,6 +27,7 @@ completely self-contained single file weather app, that uses public sources, wit
 - **Ghost Chart Overlay** — When NWS data is available, parallel NWS data shown as blue-tinted ghost elements: ghost temperature, ghost weather icon, ghost details grid values, ghost hourly forecast, and ghost merged chart canvas
 - **Cross-source Data Model** — Three states: `open-meteo` (OM-only), `nws` (NWS-only), `enhanced` (OM base + NWS supplemental). Field-level merging where missing OM fields are filled from NWS cache and vice versa
 - **Donkey Runner Minigame** — Chrome dinosaur-style endless runner with extensive features: animated donkey character, backflip on rare jumps, double-jump with fart sound effect, stumble mechanic (donkey trips for 2 seconds), property damage bonus (+100 points when knocking obstacles while stumbling), near-miss detection (+50 points), snarky message system (50+ messages across 20 event types), procedural sound effects (jump, double-jump/fart, game over, milestone, near-miss, land, ceiling), day/night cycle, air-based obstacles (jet, falling rock, drone), obstacle count tracking on game over screen with SVG icons, post-game stats breakdown (run time, air time, jump stats), corner stat blocks, fullscreen mode, sound toggle with localStorage persistence
+- **About Panel** — Click the `?` button in the header to open a floating VT100-terminal-styled panel with green-on-black CRT styling, scanline effects, and flicker animation. The panel renders the full README.md content (headings, lists, tables, code blocks) parsed at build time by `build.js`, so it works perfectly from `file:///` with zero fetch/XHR/CORS. Styled to match the Donkey Runner game panel aesthetic with a close button.
 - Zero external dependencies — pure vanilla HTML/CSS/JS
 
 ## Tech Stack
@@ -73,7 +74,9 @@ Output: `weather.html` — the one true file.
 
 ### .git/ - 11 items - GIT Folder
 
-### css/ - 6 items - Directory
+### css/ - 7 items - Directory
+
+#### css/about.css - ~300 lines - Cascading Style Sheet (css) — About panel VT100 terminal styling (green text, scanlines, flicker animation, CRT effects)
 
 #### css/base.css - 29 lines - Cascading Style Sheet (css) — reset & base styles (body, particle-canvas)
 
@@ -144,7 +147,7 @@ Output: `weather.html` — the one true file.
 
 ### README.md - 281 lines — you are here
 
-### build.js - 250 lines — build script (inlines CSS/JS into weather.html)
+### build.js - ~410 lines — build script (inlines CSS/JS into weather.html, parses README.md via markdownToHtml() and injects rendered content into about panel markers, outputs weather.html/weather-full.html/weather-prod.html)
 
 ### favicon.ico - 130985 bytes - ICO Image (ico) — site favicon
 

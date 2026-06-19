@@ -13,6 +13,168 @@ const path = require('path');
 const { minify } = require('html-minifier-terser');
 const { execSync } = require('child_process');
 
+// --- Simple Markdown → HTML parser (no external deps) ---
+  function markdownToHtml(md) {
+    // Normalize Windows CRLF to LF so regexes work correctly
+    md = md.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    const lines = md.split('\n');
+  let html = '';
+  let inList = null;       // 'ul' or 'ol'
+  let inPre = false;
+  let preContent = '';
+  let inTable = false;
+  let tableRows = [];
+  let codeInline = false;
+  let codeBuf = '';
+
+  function flushList() {
+    if (inList) { html += `</${inList}>\n`; inList = null; }
+  }
+
+  function flushTable() {
+    if (!inTable || tableRows.length === 0) return;
+    html += '<table>\n';
+    tableRows.forEach((row, i) => {
+      const tag = i === 0 ? 'th' : 'td';
+      html += '  <tr>';
+      row.forEach(cell => {
+        html += ` <${tag}>${cell}</${tag}>`;
+      });
+      html += '</tr>\n';
+    });
+    html += '</table>\n';
+    tableRows = [];
+    inTable = false;
+  }
+
+  function escapeHtml(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  function inlineParse(s) {
+    // Bold + italic
+    s = s.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
+    // Bold
+    s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    s = s.replace(/__(.+?)__/g, '<strong>$1</strong>');
+    // Italic
+    s = s.replace(/\*(.+?)\*/g, '<em>$1</em>');
+    s = s.replace(/_(.+?)_/g, '<em>$1</em>');
+    // Inline code
+    s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
+    // Links
+    s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+    // Restore # heading markers that were escaped by escapeHtml
+    s = s.replace(/&#35;/g, '#');
+    return s;
+  }
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    // Code blocks (``` ... ```)
+    if (line.trim().startsWith('```')) {
+      if (inPre) {
+        html += `<pre><code>${escapeHtml(codeBuf)}</code></pre>\n`;
+        inPre = false;
+        codeBuf = '';
+      } else {
+        flushList();
+        flushTable();
+        inPre = true;
+      }
+      continue;
+    }
+    if (inPre) {
+      codeBuf += line + '\n';
+      continue;
+    }
+
+    // Horizontal rule (---, ***, ___)
+    if (/^\s*([-*_]\s*){3,}$/.test(line)) {
+      flushList();
+      flushTable();
+      html += '<hr class="line-sep">\n';
+      continue;
+    }
+
+    // Table rows
+    if (line.includes('|') && /^\|/.test(line.trim())) {
+      flushList();
+      const cells = line.split('|').filter((_, ci, arr) => ci > 0 && ci < arr.length - 1).map(c => inlineParse(escapeHtml(c.trim())));
+      const isSep = /^\|[\s\-:|]+\|$/.test(line.trim());
+      if (isSep) continue; // skip separator line
+      if (!inTable) { inTable = true; tableRows = []; }
+      tableRows.push(cells);
+      continue;
+    } else if (inTable) {
+      flushTable();
+    }
+
+    // Headings
+    const headingMatch = line.match(/^(#{1,6})\s+(.+)$/);
+    if (headingMatch) {
+      flushList();
+      const level = headingMatch[1].length;
+      html += `<h${level}>${inlineParse(escapeHtml(headingMatch[2]))}</h${level}>\n`;
+      continue;
+    }
+
+    // Unordered list item
+    if (/^\s*[-*+]\s/.test(line)) {
+      if (inList !== 'ul') { flushList(); inList = 'ul'; html += '<ul>\n'; }
+      html += `  <li>${inlineParse(escapeHtml(line.replace(/^\s*[-*+]\s+/, '')))}</li>\n`;
+      continue;
+    }
+
+    // Ordered list item
+    if (/^\s*\d+\.\s/.test(line)) {
+      if (inList !== 'ol') { flushList(); inList = 'ol'; html += '<ol>\n'; }
+      html += `  <li>${inlineParse(escapeHtml(line.replace(/^\s*\d+\.\s+/, '')))}</li>\n`;
+      continue;
+    }
+
+    // Blank line
+    if (line.trim() === '') {
+      flushList();
+      continue;
+    }
+
+    // Paragraph
+    flushList();
+    html += `<p>${inlineParse(escapeHtml(line))}</p>\n`;
+  }
+
+  // Flush remaining
+  if (inPre) { html += `<pre><code>${escapeHtml(codeBuf)}</code></pre>\n`; }
+  flushList();
+  flushTable();
+
+  return html;
+}
+
+// --- Inject README.md into about panel stub content ---
+function injectAboutContent(html, callNum) {
+  const readmePath = path.join(ROOT, 'README.md');
+  if (!fs.existsSync(readmePath)) {
+    console.log('[build] README.md not found, skipping about panel injection');
+    return html;
+  }
+
+  const md = fs.readFileSync(readmePath, 'utf8');
+  const rendered = markdownToHtml(md);
+
+  // Replace everything between <!-- START README.md --> and <!-- END README.md --> markers.
+  const re = /<!--\s*START README\.md\s*-->([\s\S]*?)<!--\s*END README\.md\s*-->/;
+  const newContent = `<!-- START README.md -->\n${rendered}<!-- END README.md -->`;
+
+  const beforeMatch = re.test(html);
+  html = html.replace(re, newContent);
+  console.log(`[build] injectAboutContent call #${callNum}: marker found=${beforeMatch}, rendered md length=${rendered.length}`);
+
+  return html;
+}
+
 // --- Configuration ---
 const ROOT = __dirname;
 const INPUT_HTML = path.join(ROOT, 'index.html');
@@ -166,7 +328,9 @@ async function main() {
     }
   );
 
-  // --- Step 6: Write the output (weather.html - complete debug version) ---
+  // --- Step 6: Inject README.md into about panel, then write output ---
+  html = injectAboutContent(html, 1);
+
   try {
     fs.writeFileSync(OUTPUT_HTML, html, 'utf8');
   } catch (err) {
@@ -177,7 +341,7 @@ async function main() {
   logFileEntry('Output:', OUTPUT_HTML);
 
   // --- Step 7: Generate weather-full.html (with embedded favicon) ---
-  let fullHtml = html;
+  let fullHtml = injectAboutContent(html, 2);
 
   // Read favicon as base64
   if (fs.existsSync(FAVICON_PATH)) {
@@ -208,7 +372,7 @@ async function main() {
   console.log('');
 
   // --- Step 8: Generate weather-prod.html (minified, no favicon) ---
-  const prodHtml = await minify(html, {
+  const prodHtml = await minify(injectAboutContent(html, 3), {
     collapseWhitespace: true,
     removeComments: true,
     removeRedundantAttributes: true,
