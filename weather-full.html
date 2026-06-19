@@ -11194,10 +11194,19 @@ function parseMarkdown(md) {
 }
 
 /**
- * Initialize the about panel and load README.md content
+ * Strip HTML tags from a string (converts <b>text</b> → text).
+ */
+function stripHtml(html) {
+  const tmp = document.createElement('div');
+  tmp.innerHTML = html;
+  return tmp.textContent || tmp.innerText || '';
+}
+
+/**
+ * Initialize the about panel and load README.md content.
  */
 function initAboutPanel() {
-  // Create hidden iframe if it doesn't exist
+  // Create hidden iframe if it doesn't exist (srcdoc set by build.js, src used for raw file://)
   let iframe = document.getElementById('about-iframe');
   if (iframe) {
     ABOUT_PAGE.iframe = iframe;
@@ -11224,7 +11233,7 @@ function initAboutPanel() {
         <button class="about-close-btn" id="about-close-btn" aria-label="Close About">×</button>
       </div>
       <div class="about-panel-body">
-        <div class="about-content" id="about-content">Loading...</div>
+        <div class="about-content" id="about-content">Loading README...</div>
       </div>
     `;
     document.body.appendChild(panel);
@@ -11240,60 +11249,51 @@ function initAboutPanel() {
     toggleAboutPanel(false);
   });
 
-  // Load content from iframe
+  // Load content
   loadAboutContent(contentEl);
 }
 
 /**
- * Load README.md content from the iframe and parse it.
- * Handles CORS issues on file:// protocol by reading from injected div first.
+ * Load README.md content. Priority order:
+ *   1. Injected div from build.js (most reliable — same-origin, no fetch)
+ *   2. Raw iframe src text via XHR (same origin as parent)
+ *   3. Fallback
  */
 async function loadAboutContent(contentEl) {
   let markdown = '';
 
-  // Method 1 (priority): Try injected div from build.js — works for file:// and http
+  // Method 1: Injected div from build.js — always works, no network
   const sourceDiv = document.getElementById('about-readme-source');
   if (sourceDiv && sourceDiv.textContent.trim()) {
     markdown = sourceDiv.textContent;
-    console.log('[About] Loaded README.md from injected div');
+    console.log('[About] Loaded README.md from injected div (' + markdown.length + ' chars)');
   }
 
-  // Method 2: Try fetch (works for http/https, may fail on file://)
-  if (!markdown.trim()) {
+  // Method 2: Read raw iframe text via XHR (same-origin, no CORS issues)
+  if (!markdown.trim() && ABOUT_PAGE.iframe) {
     try {
-      const response = await fetch('README.md');
-      if (response.ok) {
-        markdown = await response.text();
-        console.log('[About] Loaded README.md via fetch');
-      }
-    } catch (err) {
-      console.warn('[About] Failed to load README.md via fetch:', err);
-    }
-  }
-
-  // Method 3: Try reading iframe content directly
-  if (!markdown.trim()) {
-    try {
-      const iframe = ABOUT_PAGE.iframe;
-      if (iframe.contentDocument && iframe.contentDocument.body) {
-        const rawContent = iframe.contentDocument.body.innerHTML || iframe.contentDocument.body.textContent;
-        if (rawContent && rawContent.trim() !== '') {
-          markdown = rawContent;
-          console.log('[About] Loaded README.md from iframe body');
-        }
+      const xhr = new XMLHttpRequest();
+      markdown = await new Promise((resolve, reject) => {
+        xhr.open('GET', ABOUT_PAGE.iframe.src || 'README.md', true);
+        xhr.onload = () => resolve(xhr.responseText);
+        xhr.onerror = () => reject(new Error('XHR failed'));
+        xhr.send();
+      });
+      if (markdown.trim()) {
+        console.log('[About] Loaded README.md from iframe XHR (' + markdown.length + ' chars)');
       }
     } catch (e) {
-      console.warn('[About] Failed to read iframe body:', e);
+      console.warn('[About] Failed to read iframe via XHR:', e);
     }
   }
 
   if (!markdown.trim()) {
-    // Fallback content
     markdown = `# About HasWeather
 
 A weather dashboard application.
 
 *Click the **X** button or press **Esc** to close.*`;
+    console.log('[About] Using fallback README content');
   }
 
   // Parse and render
