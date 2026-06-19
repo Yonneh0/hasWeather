@@ -2916,6 +2916,7 @@ body.donkey-fullscreen .donkey-panel.donkey-hidden {
   <li><strong>Ghost Chart Overlay</strong> — When NWS data is available, parallel NWS data shown as blue-tinted ghost elements: ghost temperature, ghost weather icon, ghost details grid values, ghost hourly forecast, and ghost merged chart canvas</li>
   <li><strong>Cross-source Data Model</strong> — Three states: <code>open-meteo</code> (OM-only), <code>nws</code> (NWS-only), <code>enhanced</code> (OM base + NWS supplemental). Field-level merging where missing OM fields are filled from NWS cache and vice versa</li>
   <li><strong>Donkey Runner Minigame</strong> — Chrome dinosaur-style endless runner with extensive features: animated donkey character, backflip on rare jumps, double-jump with fart sound effect, stumble mechanic (donkey trips for 2 seconds), property damage bonus (+100 points when knocking obstacles while stumbling), near-miss detection (+50 points), snarky message system (50+ messages across 20 event types), procedural sound effects (jump, double-jump/fart, game over, milestone, near-miss, land, ceiling), day/night cycle, air-based obstacles (jet, falling rock, drone), obstacle count tracking on game over screen with SVG icons, post-game stats breakdown (run time, air time, jump stats), corner stat blocks, fullscreen mode, sound toggle with localStorage persistence</li>
+  <li><strong>About Panel</strong> — Click the <code>?</code> button in the header to open a floating VT100-terminal-styled panel with green-on-black CRT styling, scanline effects, and flicker animation. The panel renders the full README.md content (headings, lists, tables, code blocks) parsed at build time by <code>build.js</code>, so it works perfectly from <code>file:///</code> with zero fetch/XHR/CORS. Styled to match the Donkey Runner game panel aesthetic with a close button.</li>
   <li>Zero external dependencies — pure vanilla HTML/CSS/JS</li>
 </ul>
 <h2>Tech Stack</h2>
@@ -2948,7 +2949,8 @@ node build.js
 <p>Output: <code>weather.html</code> — the one true file.</p>
 <h2>Project Structure (hasWeather/)</h2>
 <h3>.git/ - 11 items - GIT Folder</h3>
-<h3>css/ - 6 items - Directory</h3>
+<h3>css/ - 7 items - Directory</h3>
+<h4>css/about.css - ~300 lines - Cascading Style Sheet (css) — About panel VT100 terminal styling (green text, scanlines, flicker animation, CRT effects)</h4>
 <h4>css/base.css - 29 lines - Cascading Style Sheet (css) — reset &amp; base styles (body, particle-canvas)</h4>
 <h4>css/card-components.css - 912 lines - Cascading Style Sheet (css) — card display components (city card, hourly forecast, canvas charts)</h4>
 <h4>css/donkey-runner.css - 777 lines - Cascading Style Sheet (css) — minigame panel styling &amp; animations</h4>
@@ -2991,7 +2993,7 @@ node build.js
 <h3>.gitignore - 2 lines</h3>
 <h3>AGENTS.md - 2 lines — I wouldn't let your agent read this. Very bad advice.</h3>
 <h3>README.md - 281 lines — you are here</h3>
-<h3>build.js - 250 lines — build script (inlines CSS/JS into weather.html)</h3>
+<h3>build.js - ~410 lines — build script (inlines CSS/JS into weather.html, parses README.md via markdownToHtml() and injects rendered content into about panel markers, outputs weather.html/weather-full.html/weather-prod.html)</h3>
 <h3>favicon.ico - 130985 bytes - ICO Image (ico) — site favicon</h3>
 <h3>has.png - 61909 bytes - PNG Image (png) — Half-Assed Solutions Official Unoffocial Mascott</h3>
 <h3>hasWeather-low.png - 11568 bytes - PNG Image (png) — Favicon, minimized, in png flavor</h3>
