@@ -3197,7 +3197,12 @@ var LOCAL_SENSOR_TIMESTAMP = '1942-06-14T09:30:00.000Z';
 
 </script>
 <script>
+// ===== API Endpoints =====
+const NWS_API = 'https://api.weather.gov';
+
+// ===== Earth & Distance Constants =====
 const EARTH_RADIUS_MI = 3958.8;
+const METERS_PER_MILE = 1609.34;
 const GEOLOCATION_TIMEOUT_MS = 8000;
 const NEARBY_CACHE_TTL_MS = 600000;
 const MAX_CITIES = 6;
@@ -3206,6 +3211,7 @@ const HOURLY_FORECAST_SLOTS = 24;
 const CHART_DRAW_DELAY_MS = 400;
 const CHART_RESIZE_DEBOUNCE_MS = 250;
 const TOGGLE_DEBOUNCE_MS = 300;
+const RENDER_ALL_CHART_DELAY_MS = 400;
 const PARTICLE_COUNT = 30;
 const TEMP_GLOBAL_MIN = -40;
 const TEMP_GLOBAL_MAX = 80;
@@ -3699,40 +3705,60 @@ function getCityShortestTTL(city) {
 
   if (lat == null || lon == null) return MIN_BACKGROUND_REFRESH_MS;
 
+  // Check consolidated cache (weatherAqi) — primary source
   const consolidatedKey = weatherAqiCacheKey(lat, lon);
   const consolidatedEntry = localStorage.getItem(`hasw_cache_${consolidatedKey}`);
   if (consolidatedEntry) {
-    const entry = JSON.parse(consolidatedEntry);
-    const ttl = DataCache.TTL[entry.type] || DataCache.TTL.weather;
-    const remaining = ttl - (Date.now() - entry.timestamp);
-    if (remaining < shortest) shortest = remaining;
+    try {
+      const entry = JSON.parse(consolidatedEntry);
+      // Only count TTL if the weather data is actually valid (non-null current)
+      if (entry.data && entry.data.weather && entry.data.weather.current && Object.keys(entry.data.weather.current).length > 0) {
+        const ttl = DataCache.TTL[entry.type] || DataCache.TTL.weather;
+        const remaining = ttl - (Date.now() - entry.timestamp);
+        if (remaining < shortest) shortest = remaining;
+      }
+    } catch {}
   }
 
+  // Check legacy weather cache (only if consolidated is missing or invalid)
   const weatherKey = weatherCacheKey(lat, lon);
   const weatherEntry = localStorage.getItem(`hasw_cache_${weatherKey}`);
-  if (weatherEntry && !consolidatedEntry) {
-    const entry = JSON.parse(weatherEntry);
-    const ttl = DataCache.TTL[entry.type] || DataCache.TTL.weather;
-    const remaining = ttl - (Date.now() - entry.timestamp);
-    if (remaining < shortest) shortest = remaining;
+  if (weatherEntry) {
+    try {
+      const entry = JSON.parse(weatherEntry);
+      // If consolidated exists and is valid, skip legacy to avoid double-counting
+      if (!consolidatedEntry || !consolidatedEntry.includes('"type":"weatherAqi"')) {
+        const ttl = DataCache.TTL[entry.type] || DataCache.TTL.weather;
+        const remaining = ttl - (Date.now() - entry.timestamp);
+        if (remaining < shortest) shortest = remaining;
+      }
+    } catch {}
   }
 
+  // Check legacy AQI cache (only if consolidated is missing or invalid)
   const aqiKey = aqiCacheKey(lat, lon);
   const airEntry = localStorage.getItem(`hasw_cache_${aqiKey}`);
-  if (airEntry && !consolidatedEntry) {
-    const entry = JSON.parse(airEntry);
-    const ttl = DataCache.TTL[entry.type] || DataCache.TTL.airQuality;
-    const remaining = ttl - (Date.now() - entry.timestamp);
-    if (remaining < shortest) shortest = remaining;
+  if (airEntry) {
+    try {
+      const entry = JSON.parse(airEntry);
+      if (!consolidatedEntry || !consolidatedEntry.includes('"type":"weatherAqi"')) {
+        const ttl = DataCache.TTL[entry.type] || DataCache.TTL.airQuality;
+        const remaining = ttl - (Date.now() - entry.timestamp);
+        if (remaining < shortest) shortest = remaining;
+      }
+    } catch {}
   }
 
+  // Check NWS point cache
   const nwsPointKey = nwsPointCacheKey(lat, lon);
   const nwsEntry = localStorage.getItem(`hasw_cache_${nwsPointKey}`);
   if (nwsEntry) {
-    const entry = JSON.parse(nwsEntry);
-    const ttl = DataCache.TTL[entry.type] || DataCache.TTL.nwsPoint;
-    const remaining = ttl - (Date.now() - entry.timestamp);
-    if (remaining < shortest) shortest = remaining;
+    try {
+      const entry = JSON.parse(nwsEntry);
+      const ttl = DataCache.TTL[entry.type] || DataCache.TTL.nwsPoint;
+      const remaining = ttl - (Date.now() - entry.timestamp);
+      if (remaining < shortest) shortest = remaining;
+    } catch {}
   }
 
   // Radar cache — only relevant when overlay is displayed (not "none")
@@ -3746,9 +3772,11 @@ function getCityShortestTTL(city) {
       const radarKey = `hasw_radar_overlay_${layerName}_${lat.toFixed(4)}_${lon.toFixed(4)}`;
       const radarEntry = localStorage.getItem(radarKey);
       if (radarEntry) {
-        const entry = JSON.parse(radarEntry);
-        const remaining = RADAR_CACHE_TTL - (Date.now() - entry.timestamp);
-        if (remaining < shortest) shortest = remaining;
+        try {
+          const entry = JSON.parse(radarEntry);
+          const remaining = RADAR_CACHE_TTL - (Date.now() - entry.timestamp);
+          if (remaining < shortest) shortest = remaining;
+        } catch {}
       }
     }
   }
@@ -3809,7 +3837,8 @@ function startBackgroundRefresh() {
       }
     }
 
-    run(true);  // Background refresh — won't block on full refresh
+    // Pass true to indicate this is a background refresh (won't block full refresh)
+    run(true);
   }, interval);
 }
 
@@ -4786,7 +4815,6 @@ async function findNearbyCities(lat, lon) {
 // ===== NWS API CLIENT =====
 // Fetches weather data from api.weather.gov (NWS) and maps it to the app's data model.
 
-const NWS_API = 'https://api.weather.gov';
 const NWS_USER_AGENT = 'hasWeather/1.0 (https://github.com/Yonneh0/hasWeather)';
 
 // ===== NWS Fetch Configuration =====
@@ -4805,7 +4833,7 @@ const MS_PER_HOUR = 3600000;
 const MS_PER_MINUTE = 60000;
 
 // ===== Unit Conversion Constants =====
-const METERS_PER_MILE = 1609.34;
+// METERS_PER_MILE is now defined in constants.js — imported before this file.
 const CELSIUS_TO_FAHRENHEIT_OFFSET = 32;
 const CELSIUS_TO_FAHRENHEIT_FACTOR = 9 / 5;
 const MPS_TO_KMH = 3.6;
@@ -5875,10 +5903,41 @@ const CARD_ANIMATION_STAGGER_MS = 120;
 const OM_FADE_TRANSITION_MS = 300;
 const NWS_FADE_TRANSITION_MS = 200;
 const RENDER_CHART_DRAW_DELAY_MS = 50;
-const RENDER_ALL_CHART_DELAY_MS = 400;
 const COORD_MATCH_TOLERANCE = 0.01;
 const LARGE_ICON_SIZE_PX = 80;
 const PRECIP_DISPLAY_THRESHOLD_MM = 0.1;
+
+// NOTE: renderAll() is defined in main.js as the authoritative version.
+// This legacy stub remains for backward compatibility but is rarely called directly.
+function renderAll() {
+  const grid = document.getElementById('city-grid');
+  if (!grid) return;
+  // Only deduplicate — full rendering handled by main.js's renderAll()
+  const seenCoords = new Map();
+  const deduped = [];
+  for (const entry of weatherData) {
+    const lat = entry.latitude != null ? DataCache._roundCoord(entry.latitude) : null;
+    const lon = entry.longitude != null ? DataCache._roundCoord(entry.longitude) : null;
+    if (lat == null || lon == null) {
+      deduped.push(entry);
+      continue;
+    }
+    const coordKey = `${lat},${lon}`;
+    let isDup = false;
+    for (const [existingKey, existingEntry] of seenCoords) {
+      const [exLat, exLon] = existingKey.split(',').map(Number);
+      if (Math.abs(lat - exLat) < COORD_MATCH_TOLERANCE && Math.abs(lon - exLon) < COORD_MATCH_TOLERANCE) {
+        isDup = true;
+        break;
+      }
+    }
+    if (!isDup) {
+      seenCoords.set(coordKey, entry);
+      deduped.push(entry);
+    }
+  }
+  weatherData = deduped;
+}
 
 // --- Utilities ---
 function parseDecimalTime(timeStr, fallback) {
@@ -6034,68 +6093,6 @@ function findCardByCoords(lat, lon) {
     }
   }
   return null;
-}
-
-// --- Full Render ---
-
-function renderAll() {
-  const grid = document.getElementById('city-grid');
-  if (!grid) return;
-
-  const seenCoords = new Map();
-  const deduped = [];
-  for (const entry of weatherData) {
-    const lat = entry.latitude != null ? DataCache._roundCoord(entry.latitude) : null;
-    const lon = entry.longitude != null ? DataCache._roundCoord(entry.longitude) : null;
-    if (lat == null || lon == null) {
-      deduped.push(entry);
-      continue;
-    }
-    const coordKey = `${lat},${lon}`;
-    let isDup = false;
-    for (const [existingKey, existingEntry] of seenCoords) {
-      const [exLat, exLon] = existingKey.split(',').map(Number);
-      if (Math.abs(lat - exLat) < COORD_MATCH_TOLERANCE && Math.abs(lon - exLon) < COORD_MATCH_TOLERANCE) {
-        isDup = true;
-        if (!existingEntry.place_id && entry.place_id) {
-          seenCoords.set(existingKey, entry);
-          const dupIdx = deduped.findIndex(d => d === existingEntry);
-          if (dupIdx !== -1) deduped[dupIdx] = entry;
-        }
-        break;
-      }
-    }
-    if (!isDup) {
-      seenCoords.set(coordKey, entry);
-      deduped.push(entry);
-    }
-  }
-  weatherData = deduped;
-
-  grid.innerHTML = '';
-
-  weatherData.forEach((data, i) => {
-    const card = document.createElement('div');
-    card.className = 'city-card';
-    card.dataset.cityName = data.name;
-    card.dataset.placeid = data.place_id || '';
-    card.dataset.citydist = data.distance != null ? data.distance : '';
-    card.dataset.citylat = data.latitude != null ? data.latitude : '';
-    card.dataset.citylon = data.longitude != null ? data.longitude : '';
-    card.style.animationDelay = `${i * CARD_ANIMATION_STAGGER_MS}ms`;
-    card.style.animationFillMode = 'forwards';
-    card.style.overflow = 'visible';
-    const suffix = data.latitude != null && data.longitude != null ? `${data.latitude}_${data.longitude}` : undefined;
-    card.innerHTML = renderCityCard(data, suffix);
-    grid.appendChild(card);
-  });
-
-  applyBackgrounds();
-
-  setTimeout(() => {
-    drawAllCharts();
-    drawGhostCharts();
-  }, RENDER_ALL_CHART_DELAY_MS);
 }
 
 function applyBackgrounds() {
@@ -11045,7 +11042,11 @@ async function loadRadarBackground(lat, lon) {
 
 // Refresh the currently-displayed radar overlay
 async function refreshRadarBackground(lat, lon) {
+  // Only refresh if we have an active overlay and valid coordinates
   if (!_currentRadarLayer || !lat || !lon) return;
+  // Also skip if the overlay is "none" (shouldn't happen but be safe)
+  if (_selectedRadarOverlay === 'none') return;
+
   const dataUrl = await window.fetchRadarImageForOverlay(lat, lon, _currentRadarLayer);
   if (!dataUrl) return;
 
@@ -11263,6 +11264,8 @@ function closeAbout() {
 // ===== RENDER ALL (with card count logging) =====
 let _lastCardCount = 0;
 
+// NOTE: The renderAll() in render.js is a legacy stub — main.js's version is the authoritative one.
+// It handles deduplication, card creation, background application, and chart drawing.
 function renderAll() {
   const grid = document.getElementById('city-grid');
   if (!grid) return;
