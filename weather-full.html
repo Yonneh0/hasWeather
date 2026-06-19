@@ -2429,25 +2429,22 @@ body.donkey-fullscreen .fav-dropdown {
 body.donkey-fullscreen .donkey-panel.donkey-hidden {
   display: none;
 }
-
-</style>
-<style>
-/* ===== ABOUT PANEL (VT100 TERMINAL STYLE) ===== */
+/* ===== ABOUT PAGE (VT100 TERMINAL) ===== */
 .about-panel {
   position: fixed;
   top: 80px;
   left: 50%;
   transform: translateX(-50%);
-  width: 720px;
+  width: 640px;
   max-width: 95vw;
-  height: 600px;
-  max-height: 80vh;
+  max-height: calc(100vh - 120px);
   z-index: 200;
-  background: rgba(10, 10, 10, 0.97);
-  border: 1px solid rgba(0, 255, 65, 0.3);
+  background: rgba(10, 10, 10, 0.95);
+  backdrop-filter: blur(20px) saturate(150%);
+  border: 1px solid rgba(0, 255, 0, 0.15);
   border-radius: 16px;
   overflow: hidden;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 40px rgba(0, 255, 65, 0.08);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 0 0 60px rgba(0, 255, 0, 0.08);
   transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease, top 0.4s cubic-bezier(0.16, 1, 0.3, 1);
   transform-origin: top center;
   will-change: transform, opacity;
@@ -2465,43 +2462,40 @@ body.donkey-fullscreen .donkey-panel.donkey-hidden {
   pointer-events: none;
 }
 
-/* Header - full width titlebar */
-.about-header {
+/* Header */
+.about-panel-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0.5rem 0.8rem;
-  background: rgba(0, 0, 0, 0.6);
-  border-bottom: 1px solid rgba(0, 255, 65, 0.2);
-  gap: 0.6rem;
+  background: rgba(0, 0, 0, 0.5);
+  border-bottom: 1px solid rgba(0, 255, 0, 0.2);
 }
 
-.about-header h2 {
-  font-family: 'Courier New', Courier, monospace;
-  color: #00ff41;
-  font-size: 0.95rem;
+.about-title {
+  font-size: 0.7rem;
   font-weight: 700;
+  color: rgba(0, 255, 0, 0.6);
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  margin: 0;
-  text-shadow: 0 0 8px rgba(0, 255, 65, 0.4);
+  font-family: 'Courier New', 'Lucida Console', monospace;
 }
 
 .about-close-btn {
-  font-size: 1.1rem;
-  font-weight: 700;
   background: rgba(255, 255, 255, 0.1);
-  border: 2px solid rgba(255, 255, 255, 0.2);
-  color: rgba(255, 255, 255, 0.85);
+  border: 2px solid rgba(0, 255, 0, 0.3);
+  color: rgba(0, 255, 0, 0.85);
   min-width: 36px;
   height: 36px;
   border-radius: 8px;
   cursor: pointer;
+  font-size: 1.1rem;
+  font-weight: 700;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: background 0.15s, color 0.15s, border-color 0.15s;
-  flex-shrink: 0;
+  font-family: 'Courier New', monospace;
 }
 
 .about-close-btn:hover {
@@ -2510,182 +2504,212 @@ body.donkey-fullscreen .donkey-panel.donkey-hidden {
   color: #ef4444;
 }
 
-/* Content area */
-.about-content {
+/* Body - VT100 terminal content */
+.about-panel-body {
   padding: 1rem 1.2rem;
   overflow-y: auto;
-  overflow-x: hidden;
-  height: calc(100% - 42px);
-  color: #00ff41;
-  font-family: 'Courier New', Courier, monospace;
+  max-height: calc(100vh - 200px);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 255, 0, 0.3) rgba(0, 0, 0, 0.3);
+}
+
+.about-panel-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.about-panel-body::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 3px;
+}
+
+.about-panel-body::-webkit-scrollbar-thumb {
+  background: rgba(0, 255, 0, 0.3);
+  border-radius: 3px;
+}
+
+/* VT100 terminal text */
+.about-content {
+  color: #33ff33;
+  font-family: 'Courier New', 'Lucida Console', monospace;
   font-size: 0.85rem;
   line-height: 1.6;
-  text-shadow: 0 0 4px rgba(0, 255, 65, 0.2);
+  text-shadow: 0 0 4px rgba(0, 255, 0, 0.3);
 }
 
-/* Scrollbar styling */
-.about-content::-webkit-scrollbar {
-  width: 8px;
-}
-
-.about-content::-webkit-scrollbar-track {
-  background: rgba(0, 0, 0, 0.3);
-  border-radius: 4px;
-}
-
-.about-content::-webkit-scrollbar-thumb {
-  background: rgba(0, 255, 65, 0.3);
-  border-radius: 4px;
-}
-
-.about-content::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 255, 65, 0.5);
-}
-
-/* CRT scanline effect overlay */
-.about-content::after {
-  content: '';
-  position: absolute;
-  top: 42px;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  pointer-events: none;
-  background: repeating-linear-gradient(
-    to bottom,
-    transparent,
-    transparent 2px,
-    rgba(0, 0, 0, 0.1) 2px,
-    rgba(0, 0, 0, 0.1) 4px
-  );
-  z-index: 1;
-}
-
-/* Markdown-rendered elements */
 .about-content h1 {
-  color: #00ff41;
-  font-size: 1.6rem;
+  color: #33ff33;
+  font-size: 1.8rem;
   font-weight: 900;
-  margin: 1.2em 0 0.6em 0;
-  padding-bottom: 0.3em;
-  border-bottom: 1px solid rgba(0, 255, 65, 0.3);
-  text-shadow: 0 0 10px rgba(0, 255, 65, 0.5);
+  margin: 0 0 0.6rem 0;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid rgba(0, 255, 0, 0.3);
+  text-shadow: 0 0 8px rgba(0, 255, 0, 0.5);
 }
 
 .about-content h2 {
-  color: #00e83b;
-  font-size: 1.3rem;
+  color: #33ff33;
+  font-size: 1.4rem;
   font-weight: 700;
-  margin: 1em 0 0.5em 0;
-  text-shadow: 0 0 6px rgba(0, 255, 65, 0.4);
+  margin: 1.2rem 0 0.5rem 0;
+  text-shadow: 0 0 6px rgba(0, 255, 0, 0.4);
 }
 
 .about-content h3 {
-  color: #00d234;
-  font-size: 1.1rem;
+  color: #55ff55;
+  font-size: 1.15rem;
   font-weight: 700;
-  margin: 0.8em 0 0.4em 0;
+  margin: 1rem 0 0.4rem 0;
+}
+
+.about-content h4,
+.about-content h5,
+.about-content h6 {
+  color: #55ff55;
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 0.8rem 0 0.3rem 0;
 }
 
 .about-content p {
-  margin: 0.6em 0;
+  margin: 0 0 0.8rem 0;
+  color: #22dd22;
 }
 
 .about-content a {
-  color: #4dff6e;
+  color: #66ff66;
   text-decoration: underline;
-  text-shadow: 0 0 4px rgba(77, 255, 110, 0.3);
+  transition: color 0.15s;
 }
 
 .about-content a:hover {
-  color: #80ff96;
+  color: #aaffaa;
 }
 
-/* Lists */
-.about-content ul, .about-content ol {
-  margin: 0.5em 0 0.5em 1.2em;
-  padding-left: 0.5em;
-}
-
-.about-content li {
-  margin: 0.3em 0;
-}
-
-.about-content li::marker {
-  color: #00e83b;
-}
-
-/* Bold */
 .about-content strong {
-  color: #66ff88;
+  color: #88ff88;
   font-weight: 700;
 }
 
-/* Inline code */
-.about-content code {
-  background: rgba(0, 255, 65, 0.1);
-  border: 1px solid rgba(0, 255, 65, 0.2);
-  padding: 0.1em 0.35em;
-  border-radius: 4px;
-  font-size: 0.85em;
-  color: #4dff6e;
+.about-content em {
+  color: #55ee55;
+  font-style: italic;
 }
 
-/* Code blocks */
+.about-content code {
+  background: rgba(0, 255, 0, 0.08);
+  padding: 0.1em 0.35em;
+  border-radius: 3px;
+  font-family: 'Courier New', monospace;
+  color: #aaffaa;
+}
+
 .about-content pre {
-  background: rgba(0, 0, 0, 0.5);
-  border: 1px solid rgba(0, 255, 65, 0.2);
-  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(0, 255, 0, 0.15);
+  border-radius: 6px;
   padding: 0.8rem 1rem;
-  margin: 0.8em 0;
+  margin: 0.8rem 0;
   overflow-x: auto;
 }
 
 .about-content pre code {
   background: none;
-  border: none;
   padding: 0;
-  font-size: 0.82rem;
-  line-height: 1.5;
+  color: #aaffaa;
 }
 
-/* Tables */
+/* Lists */
+.about-content ul,
+.about-content ol {
+  margin: 0.5rem 0 0.8rem 1.5rem;
+  padding-left: 0.5rem;
+}
+
+.about-content li {
+  margin-bottom: 0.3rem;
+  color: #22dd22;
+}
+
+.about-content li::marker {
+  color: #33ff33;
+}
+
+/* Nested lists */
+.about-content ul ul,
+.about-content ol ul,
+.about-content ul ol,
+.about-content ol ol {
+  margin-top: 0.3rem;
+  margin-bottom: 0;
+}
+
+/* Tables - VT100 style */
 .about-content table {
   width: 100%;
   border-collapse: collapse;
-  margin: 0.8em 0;
-  font-size: 0.82rem;
-}
-
-.about-content th, .about-content td {
-  padding: 0.45em 0.6em;
-  text-align: left;
-  border: 1px solid rgba(0, 255, 65, 0.2);
+  margin: 0.8rem 0;
+  font-size: 0.8rem;
 }
 
 .about-content th {
-  background: rgba(0, 255, 65, 0.12);
+  background: rgba(0, 255, 0, 0.1);
+  color: #33ff33;
   font-weight: 700;
-  color: #4dff6e;
+  text-align: left;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid rgba(0, 255, 0, 0.25);
+  text-shadow: 0 0 4px rgba(0, 255, 0, 0.3);
+}
+
+.about-content td {
+  padding: 0.4rem 0.7rem;
+  border: 1px solid rgba(0, 255, 0, 0.15);
+  color: #22dd22;
 }
 
 .about-content tr:nth-child(even) td {
-  background: rgba(0, 255, 65, 0.03);
+  background: rgba(0, 255, 0, 0.03);
 }
 
-/* Horizontal rules */
+/* Horizontal rule */
 .about-content hr {
   border: none;
-  border-top: 1px solid rgba(0, 255, 65, 0.3);
-  margin: 1em 0;
+  border-top: 1px solid rgba(0, 255, 0, 0.2);
+  margin: 1rem 0;
 }
 
-/* Blockquotes */
-.about-content blockquote {
-  border-left: 3px solid rgba(0, 255, 65, 0.4);
-  margin: 0.6em 0;
-  padding: 0.4em 0 0.4em 1em;
-  color: #80ff96;
+/* Scanline effect overlay */
+.about-panel-body::after {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 255, 0, 0.015) 2px,
+    rgba(0, 255, 0, 0.015) 4px
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Cursor blink for terminal feel */
+@keyframes aboutCursorBlink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+.about-cursor {
+  display: inline-block;
+  width: 0.6em;
+  height: 1em;
+  background: #33ff33;
+  vertical-align: text-bottom;
+  animation: aboutCursorBlink 1s step-end infinite;
 }
 </style>
 </head>
@@ -2704,10 +2728,10 @@ body.donkey-fullscreen .donkey-panel.donkey-hidden {
      <select id="radar-overlay-select" class="btn btn-small radar-overlay-select" title="Radar Overlay"></select>
    </div>
    <button id="refresh-btn" class="btn btn-small" title="Refresh data">⟳</button>
-   <button id="about-btn" class="btn btn-small" title="About">?</button>
-   <button id="game-btn" class="btn btn-small" title="Donkey Runner Minigame">🫏</button>
-   <button id="fullscreen-btn" class="btn btn-small" title="Toggle fullscreen" style="display:none;">⛶</button>
-  <span id="user-location" class="location-display"></span>
+    <button id="game-btn" class="btn btn-small" title="Donkey Runner Minigame">🫏</button>
+    <button id="about-btn" class="btn btn-small" title="About (README)" style="display:none;">?</button>
+    <button id="fullscreen-btn" class="btn btn-small" title="Toggle fullscreen" style="display:none;">⛶</button>
+   <span id="user-location" class="location-display"></span>
   <select id="debug-location-select" class="btn btn-small debug-location-select" title="Select test location">
     <option value="local">Local</option>
     <option value="25.2854:51.5310">Qatar</option>
@@ -2727,13 +2751,13 @@ body.donkey-fullscreen .donkey-panel.donkey-hidden {
 </main>
 
 
-<script>
+  <script>
 var LOCAL_CONFIG_REFRESH_INTERVAL_SECONDS = 31337;
 var LOCAL_SENSOR_NOTE = 'Yonneh wuz here.';
 var LOCAL_SENSOR_TIMESTAMP = '1942-06-14T09:30:00.000Z';
 
 </script>
-<script>
+  <script>
 const EARTH_RADIUS_MI = 3958.8;
 const GEOLOCATION_TIMEOUT_MS = 8000;
 const NEARBY_CACHE_TTL_MS = 600000;
@@ -2803,7 +2827,7 @@ const WMO_GRADIENTS = {
 };
 
 </script>
-<script>
+  <script>
 // ===== DATA CACHE =====
 // Unified cache for ALL API calls with configurable TTL per type and LRU eviction
 
@@ -3085,7 +3109,7 @@ const DataCache = {
 };
 
 </script>
-<script>
+  <script>
 // — Utility Functions —
 function toF(c) { return c * 9 / 5 + 32; }
 function toC(f) { return (f - 32) * 5 / 9; }
@@ -3355,7 +3379,7 @@ async function refresh() {
 }
 
 </script>
-<script>
+  <script>
 // ===== SVG WEATHER ICONS - LOUD & ANIMATED =====
 function getWeatherIcon(code, size = 64) {
   const w = WMO_CODES[code] || WMO_CODES[0];
@@ -3647,7 +3671,7 @@ function loudWeatherIcon(type, size) {
 
 
 </script>
-<script>
+  <script>
 // ===== OPEN-METEO API CLIENT =====
 // Fetches weather data and air quality from Open-Meteo APIs.
 
@@ -4085,7 +4109,7 @@ async function fetchWeatherForCities(cities) {
   }
 }
 </script>
-<script>
+  <script>
 // OpenStreetMap / Nominatim API client — fetches nearby city data from Nominatim/OSM.
 
 // ===== ENDPOINT =====
@@ -4271,7 +4295,7 @@ async function findNearbyCities(lat, lon) {
   return selected;
 }
 </script>
-<script>
+  <script>
 // ===== NWS API CLIENT =====
 // Fetches weather data from api.weather.gov (NWS) and maps it to the app's data model.
 
@@ -5115,7 +5139,7 @@ function nwsToAppData(city, nwsData) {
 
 
 </script>
-<script>
+  <script>
 // ===== WEATHER.GOV RADAR API CLIENT (SIMPLIFIED) =====
 // Fetches the current radar image from NOAA/NCEP GeoServer WMS service.
 // Caches multiple overlays in localStorage by location + layer.
@@ -5356,7 +5380,7 @@ window.RADAR_LAYERS = RADAR_LAYERS;
 window.RADAR_DEFAULT_OVERLAY = RADAR_DEFAULT_OVERLAY;
 
 </script>
-<script>
+  <script>
 // ===== RENDER =====
 
 // --- Constants ---
@@ -5913,7 +5937,7 @@ function drawGhostCharts() {
 
 
 </script>
-<script>
+  <script>
 // ===== CHART CONSTANTS =====
 const CHART_PAD_MERGED = { top: 6, right: 0, bottom: 6, left: 0 };
 const CHART_PAD_COMBINED = { top: 10, right: 10, bottom: 10, left: 10 };
@@ -6410,7 +6434,7 @@ function initParticles() {
 // ===== LOCATION PROMPT =====
 
 </script>
-  <script>
+    <script>
 // ===== NETWORK MONITOR =====
 const OUTAGE_MESSAGES = [
   "🦓 The network has left the building.",
@@ -6744,7 +6768,7 @@ function checkNetworkAndRun(runFn) {
   });
 }
 </script>
-  <script>
+    <script>
 // ===== DONKEY RUNNER MINIGAME =====
 // A Chrome-dinosaur-style endless runner with a donkey character
 
@@ -10258,291 +10282,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
 </script>
  <script>
-/* ===== ABOUT PANEL — VT100 Terminal Style ===== */
-
-// README.md content — embedded at build time by build.js
-// If not embedded (development), fetch from file
-const ABOUT_README_CONTENT = ABOUT_README_EMBEDDED || null;
-
-(function() {
-  'use strict';
-
-  // --- DOM refs ---
-  let panel, closeBtn, contentEl;
-
-  function init() {
-    // Create panel elements
-    panel = document.createElement('div');
-    panel.className = 'about-panel about-hidden';
-    panel.id = 'about-panel';
-    panel.setAttribute('aria-label', 'About');
-
-    // Header
-    const header = document.createElement('div');
-    header.className = 'about-header';
-    header.innerHTML = '<h2>About</h2>';
-
-    closeBtn = document.createElement('button');
-    closeBtn.className = 'about-close-btn';
-    closeBtn.textContent = '\u00d7'; // ×
-    closeBtn.title = 'Close';
-    closeBtn.addEventListener('click', closeAbout);
-    header.appendChild(closeBtn);
-    panel.appendChild(header);
-
-    // Content
-    contentEl = document.createElement('div');
-    contentEl.className = 'about-content';
-    panel.appendChild(contentEl);
-
-    document.body.appendChild(panel);
-
-    // Open button in header
-    const openBtn = document.getElementById('about-btn');
-    if (openBtn) {
-      openBtn.addEventListener('click', openAbout);
-    }
-
-    // Load and render content
-    loadContent();
-  }
-
-  function loadContent() {
-    let md;
-    if (ABOUT_README_CONTENT) {
-      md = ABOUT_README_CONTENT;
-    } else {
-      // Development mode: fetch README.md
-      fetch('README.md')
-        .then(r => r.text())
-        .then(text => { renderContent(text); })
-        .catch(() => {
-          contentEl.innerHTML = '<p>Failed to load README.md</p>';
-        });
-      return;
-    }
-    renderContent(md);
-  }
-
-  // --- Simple Markdown Parser (no dependencies) ---
-  function parseMarkdown(md) {
-    const lines = md.split('\n');
-    let html = '';
-    let inList = false;
-    let listType = '';
-    let inCodeBlock = false;
-    let codeContent = '';
-    let codeLang = '';
-    let inTable = false;
-    let tableRows = [];
-    let paragraphBuffer = '';
-
-    function flushParagraph() {
-      if (paragraphBuffer.trim()) {
-        html += '<p>' + processInline(paragraphBuffer.trim()) + '</p>\n';
-        paragraphBuffer = '';
-      }
-    }
-
-    function flushList() {
-      if (inList) {
-        html += `</${listType}>\n`;
-        inList = false;
-        listType = '';
-      }
-    }
-
-    function flushTable() {
-      if (tableRows.length > 0) {
-        html += '<table>';
-        tableRows.forEach((row, i) => {
-          if (i === 0) {
-            html += '<thead><tr>' + row.map(c => '<th>' + processInline(c.trim()) + '</th>').join('') + '</tr></thead>\n';
-          } else if (i === 1 && row.every(c => /^[\s-:]+$/.test(c))) {
-            // separator row, skip
-          } else {
-            html += '<tbody><tr>' + row.map(c => '<td>' + processInline(c.trim()) + '</td>').join('') + '</tr></tbody>\n';
-          }
-        });
-        html += '</table>\n';
-        tableRows = [];
-      }
-    }
-
-    function closeBlockElements() {
-      flushParagraph();
-      flushList();
-      flushTable();
-    }
-
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-
-      // Code blocks (fenced with ``` or ~~~)
-      if (/^(`{3,}|~{3,})(\w*)/.test(line)) {
-        if (!inCodeBlock) {
-          flushParagraph();
-          flushList();
-          flushTable();
-          inCodeBlock = true;
-          codeLang = line.replace(/^(`{3,}|~{3,})(\w*).*/, '$2');
-          codeContent = '';
-        } else {
-          html += '<pre><code>' + escapeHtml(codeContent) + '</code></pre>\n';
-          inCodeBlock = false;
-          codeContent = '';
-        }
-        continue;
-      }
-
-      if (inCodeBlock) {
-        codeContent += line + '\n';
-        continue;
-      }
-
-      // Empty line
-      if (line.trim() === '') {
-        closeBlockElements();
-        continue;
-      }
-
-      // Horizontal rule
-      if (/^(-{3,}|_{3,}|\*{3,})$/.test(line.trim())) {
-        flushParagraph();
-        flushList();
-        html += '<hr>\n';
-        continue;
-      }
-
-      // Headers
-      const headerMatch = line.match(/^(#{1,6})\s+(.+)/);
-      if (headerMatch) {
-        flushParagraph();
-        flushList();
-        const level = headerMatch[1].length;
-        html += `<h${level}>${processInline(headerMatch[2])}</h${level}>\n`;
-        continue;
-      }
-
-      // Table row detection (contains |)
-      if (line.includes('|') && !line.startsWith('|')) {
-        flushParagraph();
-        flushList();
-      }
-      if (line.trim().startsWith('|')) {
-        const cells = line.split('|').slice(1, -1);
-        tableRows.push(cells);
-        inTable = true;
-        // Check if next non-empty line is not a table row -> flush
-        let j = i + 1;
-        while (j < lines.length && lines[j].trim() === '') j++;
-        if (j >= lines.length || !lines[j].trim().startsWith('|')) {
-          flushTable();
-        }
-        continue;
-      } else if (inTable) {
-        flushTable();
-      }
-
-      // Unordered list
-      if (/^\s*[-*+]\s/.test(line)) {
-        closeBlockElements();
-        if (!inList || listType !== 'ul') {
-          flushParagraph();
-          html += '<ul>\n';
-          inList = true;
-          listType = 'ul';
-        }
-        html += '<li>' + processInline(line.replace(/^\s*[-*+]\s/, '')) + '</li>\n';
-        continue;
-      }
-
-      // Ordered list
-      if (/^\s*\d+\.\s/.test(line)) {
-        closeBlockElements();
-        if (!inList || listType !== 'ol') {
-          flushParagraph();
-          html += '<ol>\n';
-          inList = true;
-          listType = 'ol';
-        }
-        html += '<li>' + processInline(line.replace(/^\s*\d+\.\s/, '')) + '</li>\n';
-        continue;
-      }
-
-      if (inList) flushList();
-
-      // Paragraph (buffer lines until block ends)
-      paragraphBuffer += line + ' ';
-    }
-
-    // Close any open blocks
-    if (inCodeBlock) {
-      html += '<pre><code>' + escapeHtml(codeContent) + '</code></pre>\n';
-    }
-    closeBlockElements();
-
-    return html;
-  }
-
-  function processInline(text) {
-    // Escape HTML entities first
-    text = escapeHtml(text);
-
-    // Inline code (``...`` before `...`)
-    text = text.replace(/``(.+?)``/g, '<code>$1</code>');
-    text = text.replace(/`([^`]+)`/g, '<code>$1</code>');
-
-    // Bold (**...** or __...__)
-    text = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-    text = text.replace(/__(.+?)__/g, '<strong>$1</strong>');
-
-    // Links [text](url)
-    text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
-
-    return text;
-  }
-
-  function escapeHtml(str) {
-    var amp = String.fromCharCode(38); // &
-    var lt = String.fromCharCode(60);  // <
-    var gt = String.fromCharCode(62);  // >
-    var quot = String.fromCharCode(34); // "
-    return str
-      .replace(new RegExp(amp, 'g'), amp + 'amp;')
-      .replace(new RegExp(lt, 'g'), amp + 'lt;')
-      .replace(new RegExp(gt, 'g'), amp + 'gt;')
-      .replace(new RegExp(quot, 'g'), amp + 'quot;');
-  }
-
-  function renderContent(md) {
-    contentEl.innerHTML = parseMarkdown(md);
-  }
-
-  // --- Panel controls ---
-  function openAbout() {
-    panel.classList.remove('about-hidden');
-    panel.classList.add('about-visible');
-  }
-
-  function closeAbout() {
-    panel.classList.remove('about-visible');
-    panel.classList.add('about-hidden');
-  }
-
-  // Expose for external access
-  window.aboutOpen = openAbout;
-  window.aboutClose = closeAbout;
-
-  // Initialize when DOM is ready
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
-    init();
-  }
-})();
-</script>
- <script>
 // ===== STATE =====
 let userLocation = null;
 let unit = 'F';
@@ -10566,11 +10305,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const unitBtn = document.getElementById('unit-toggle');
   const refreshBtn = document.getElementById('refresh-btn');
   const gameBtn = document.getElementById('game-btn');
+  const aboutBtn = document.getElementById('about-btn');
   const radarToggleBtn = document.getElementById('radar-toggle-btn');
 
   if (unitBtn) unitBtn.addEventListener('click', toggleUnit);
   if (refreshBtn) refreshBtn.addEventListener('click', refresh);
   if (gameBtn) gameBtn.addEventListener('click', toggleGame);
+  if (aboutBtn) aboutBtn.addEventListener('click', toggleAbout);
   if (radarToggleBtn) radarToggleBtn.addEventListener('click', toggleRadarMarkers);
 
   // Chart redraw on resize (includes ghost charts)
@@ -10965,6 +10706,17 @@ function toggleGame() {
   }
 }
 
+// ===== ABOUT TOGGLE =====
+function toggleAbout() {
+  const aboutBtn = document.getElementById('about-btn');
+  if (!aboutBtn) return;
+
+  if (typeof toggleAboutPanel === 'function') {
+    toggleAboutPanel();
+    aboutBtn.classList.toggle('active', ABOUT_PAGE?.visible || false);
+  }
+}
+
 // ===== RENDER ALL (with card count logging) =====
 let _lastCardCount = 0;
 
@@ -11219,5 +10971,380 @@ function onMarkerResize() {
 
 
 </script>
-</body>
-</html>
+ <script>
+// ===== ABOUT PAGE (VT100 TERMINAL) =====
+// Parses README.md content from hidden iframe, renders in floating panel
+
+const ABOUT_PAGE = {
+  panel: null,
+  body: null,
+  iframe: null,
+  visible: false,
+  initialized: false,
+};
+
+/**
+ * Parse Markdown to HTML (lightweight parser for README.md features)
+ */
+function parseMarkdown(md) {
+  // Normalize line endings
+  md = md.replace(/\r\n/g, '\n');
+
+  const lines = md.split('\n');
+  let html = '';
+  let i = 0;
+  let listStack = []; // track nesting level
+
+  function closeLists() {
+    while (listStack.length > 0) {
+      const item = listStack.pop();
+      html += `</${item.type}>`;
+    }
+  }
+
+  function parseInline(line) {
+    // Inline code: `code`
+    line = line.replace(/`([^`]+)`/g, '<code>$1</code>');
+    // Bold: **text**
+    line = line.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    // Italic: *text*
+    line = line.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+    // Links: [text](url)
+    line = line.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+    return line;
+  }
+
+  function isListItem(line) {
+    const trimmed = line.trimStart();
+    return /^[-*+]\s/.test(trimmed) || /^\d+\.\s/.test(trimmed);
+  }
+
+  function getListType(line) {
+    const trimmed = line.trimStart();
+    return /^[-*+]\s/.test(trimmed) ? 'ul' : 'ol';
+  }
+
+  function getIndentLevel(line) {
+    const spaces = line.match(/^(\s*)/);
+    return spaces ? Math.floor(spaces[1].length / 2) : 0;
+  }
+
+  function isTableLine(line) {
+    return line.includes('|') && line.trim().startsWith('|');
+  }
+
+  function parseTable(startIdx) {
+    let tableLines = [];
+    let j = startIdx;
+    while (j < lines.length && (lines[j].trim().startsWith('|') || lines[j].trim() === '')) {
+      if (lines[j].trim() === '') {
+        // Allow empty lines within a table
+        if (j + 1 < lines.length && lines[j + 1].trim().startsWith('|')) {
+          j++;
+          continue;
+        }
+        break;
+      }
+      // Stop at separator line (---|---)
+      if (/^\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?$/.test(lines[j])) {
+        break;
+      }
+      tableLines.push(lines[j]);
+      j++;
+    }
+
+    if (tableLines.length < 2) return null;
+
+    function parseRow(row) {
+      const cells = row.trim().replace(/^\||\|$/g, '').split('|');
+      return cells.map(c => c.trim());
+    }
+
+    let tableHtml = '<table>';
+    // Header
+    tableHtml += '<thead><tr>';
+    const headerCells = parseRow(tableLines[0]);
+    for (const cell of headerCells) {
+      tableHtml += `<th>${parseInline(cell)}</th>`;
+    }
+    tableHtml += '</tr></thead>';
+
+    // Body
+    tableHtml += '<tbody>';
+    for (let t = 2; t < tableLines.length; t++) {
+      const row = parseRow(tableLines[t]);
+      tableHtml += '<tr>';
+      for (const cell of row) {
+        tableHtml += `<td>${parseInline(cell)}</td>`;
+      }
+      tableHtml += '</tr>';
+    }
+    tableHtml += '</tbody></table>';
+
+    return { html: tableHtml, endIdx: j };
+  }
+
+  while (i < lines.length) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    // Skip empty lines
+    if (trimmed === '') {
+      i++;
+      continue;
+    }
+
+    // Headers
+    const headerMatch = trimmed.match(/^(#{1,6})\s+(.+)/);
+    if (headerMatch) {
+      closeLists();
+      const level = headerMatch[1].length;
+      html += `<h${level}>${parseInline(headerMatch[2])}</h${level}>`;
+      i++;
+      continue;
+    }
+
+    // Horizontal rule
+    if (/^(-{3,}|\*{3,}|_{3,})$/.test(trimmed)) {
+      closeLists();
+      html += '<hr>';
+      i++;
+      continue;
+    }
+
+    // Tables
+    if (isTableLine(line) && !isListItem(line)) {
+      const result = parseTable(i);
+      if (result) {
+        closeLists();
+        html += result.html;
+        i = result.endIdx;
+        continue;
+      }
+    }
+
+    // Lists
+    if (isListItem(line)) {
+      const listType = getListType(line);
+      const indentLevel = getIndentLevel(line);
+
+      // Adjust list stack for nesting
+      while (listStack.length > 0 && listStack[listStack.length - 1].indent >= indentLevel) {
+        closeLists();
+      }
+
+      if (listStack.length === 0 || listStack[listStack.length - 1].type !== listType) {
+        html += `<${listType}>`;
+        listStack.push({ type: listType, indent: indentLevel });
+      }
+
+      // Check for nested list item on next line
+      const content = line.trim().replace(/^[-*+]\s/, '').replace(/^\d+\.\s/, '');
+      html += `<li>${parseInline(content)}</li>`;
+      i++;
+
+      // Continue collecting list items at this level or deeper
+      while (i < lines.length) {
+        const nextLine = lines[i];
+        const nextTrimmed = nextLine.trim();
+
+        if (nextTrimmed === '') {
+          // Peek ahead to see if more list items follow
+          let peek = i + 1;
+          while (peek < lines.length && lines[peek].trim() === '') peek++;
+          if (peek < lines.length && isListItem(lines[peek])) {
+            i++;
+            continue;
+          }
+          break;
+        }
+
+        if (isListItem(nextLine)) {
+          const nextType = getListType(nextLine);
+          const nextIndent = getIndentLevel(nextLine);
+
+          // If indent is higher, it's a nested list
+          if (nextIndent > listStack[listStack.length - 1].indent) {
+            break;
+          }
+
+          // Same type continues the list
+          html += `<li>${parseInline(nextLine.trim().replace(/^[-*+]\s/, '').replace(/^\d+\.\s/, ''))}</li>`;
+          i++;
+        } else {
+          break;
+        }
+      }
+      continue;
+    }
+
+    // Paragraph (catch-all for remaining lines)
+    let paraLines = [];
+    while (i < lines.length && lines[i].trim() !== '' && !isListItem(lines[i]) && !lines[i].trim().match(/^#{1,6}\s/) && !isTableLine(lines[i])) {
+      paraLines.push(parseInline(lines[i]));
+      i++;
+    }
+    if (paraLines.length > 0) {
+      html += `<p>${paraLines.join('<br>')}</p>`;
+    }
+  }
+
+  closeLists();
+  return html;
+}
+
+/**
+ * Initialize the about panel and load README.md content
+ */
+function initAboutPanel() {
+  // Create hidden iframe if it doesn't exist
+  let iframe = document.getElementById('about-iframe');
+  if (iframe) {
+    ABOUT_PAGE.iframe = iframe;
+  } else {
+    iframe = document.createElement('iframe');
+    iframe.id = 'about-iframe';
+    iframe.src = 'README.md';
+    iframe.style.cssText = 'position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;visibility:hidden;';
+    document.body.appendChild(iframe);
+    ABOUT_PAGE.iframe = iframe;
+  }
+
+  // Create panel if it doesn't exist
+  let panel = document.getElementById('about-panel');
+  if (panel) {
+    ABOUT_PAGE.panel = panel;
+  } else {
+    panel = document.createElement('div');
+    panel.id = 'about-panel';
+    panel.className = 'about-panel about-hidden';
+    panel.innerHTML = `
+      <div class="about-panel-header">
+        <span class="about-title">README.md</span>
+        <button class="about-close-btn" id="about-close-btn" aria-label="Close About">×</button>
+      </div>
+      <div class="about-panel-body">
+        <div class="about-content" id="about-content">Loading...</div>
+      </div>
+    `;
+    document.body.appendChild(panel);
+    ABOUT_PAGE.panel = panel;
+  }
+
+  ABOUT_PAGE.body = document.getElementById('about-panel-body');
+  const contentEl = document.getElementById('about-content');
+  const closeBtn = document.getElementById('about-close-btn');
+
+  // Close button handler
+  closeBtn.addEventListener('click', () => {
+    toggleAboutPanel(false);
+  });
+
+  // Load content from iframe
+  loadAboutContent(contentEl);
+}
+
+/**
+ * Load README.md content from the iframe and parse it
+ */
+function loadAboutContent(contentEl) {
+  const iframe = ABOUT_PAGE.iframe;
+
+  function tryLoad() {
+    try {
+      let rawContent = '';
+
+      // Try to get content from iframe's document
+      if (iframe.contentDocument && iframe.contentDocument.body) {
+        rawContent = iframe.contentDocument.body.innerHTML;
+      } else if (iframe.contentWindow && iframe.contentWindow.document) {
+        const doc = iframe.contentWindow.document;
+        rawContent = doc.body ? doc.body.innerHTML : '';
+      }
+
+      // If iframe content is empty or we can't read it, try fetch as fallback
+      if (!rawContent || rawContent.trim() === '') {
+        fetch('README.md')
+          .then(r => r.text())
+          .then(text => {
+            contentEl.innerHTML = parseMarkdown(text);
+          })
+          .catch(() => {
+            contentEl.innerHTML = '<p>Could not load README.md</p>';
+          });
+      } else {
+        // Parse the HTML content from iframe and render in VT100 style
+        // The iframe loaded Markdown as plain text, parse it
+        fetch('README.md')
+          .then(r => r.text())
+          .then(text => {
+            contentEl.innerHTML = parseMarkdown(text);
+          })
+          .catch(() => {
+            contentEl.textContent = rawContent;
+          });
+      }
+
+      ABOUT_PAGE.initialized = true;
+    } catch (e) {
+      // Cross-origin or other error, fallback to fetch
+      fetch('README.md')
+        .then(r => r.text())
+        .then(text => {
+          contentEl.innerHTML = parseMarkdown(text);
+        })
+        .catch(() => {
+          contentEl.textContent = 'Could not load README.md';
+        });
+      ABOUT_PAGE.initialized = true;
+    }
+  }
+
+  // Wait for iframe to load
+  if (iframe.src && iframe.src !== '' && iframe.src !== 'about:blank') {
+    iframe.addEventListener('load', () => {
+      setTimeout(tryLoad, 100);
+    });
+  }
+
+  // Also try immediately in case already loaded
+  setTimeout(tryLoad, 200);
+}
+
+/**
+ * Toggle the about panel visibility
+ */
+function toggleAboutPanel(forceState) {
+  if (!ABOUT_PAGE.panel) initAboutPanel();
+  if (!ABOUT_PAGE.initialized) return;
+
+  const panel = ABOUT_PAGE.panel;
+  const wasVisible = ABOUT_PAGE.visible;
+
+  if (forceState !== undefined) {
+    ABOUT_PAGE.visible = forceState;
+  } else {
+    ABOUT_PAGE.visible = !ABOUT_PAGE.visible;
+  }
+
+  if (ABOUT_PAGE.visible) {
+    panel.classList.remove('about-hidden');
+    panel.classList.add('about-visible');
+  } else {
+    panel.classList.remove('about-visible');
+    panel.classList.add('about-hidden');
+  }
+}
+
+// Initialize on DOM ready
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initAboutPanel);
+} else {
+  initAboutPanel();
+}
+
+// Expose for external use
+window.ABOUT_PAGE = ABOUT_PAGE;
+</script>
+ </body>
+ </html>
