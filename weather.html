@@ -2840,236 +2840,7 @@ body.donkey-fullscreen .donkey-panel.donkey-hidden {
     font-size: 1.1rem;
   }
 }
-/* ===== Activity Tracker Toasts ===== */
 
-#activity-toast-stack {
-  position: fixed;
-  bottom: 20px;
-  left: 20px;
-  z-index: 9999;
-  display: flex;
-  flex-direction: column-reverse;
-  gap: 8px;
-  pointer-events: none;
-  max-height: calc(100vh - 40px);
-  overflow: hidden;
-}
-
-.activity-toast {
-  pointer-events: auto;
-  background: rgba(15, 15, 25, 0.85);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
-  padding: 10px 14px;
-  min-width: 260px;
-  max-width: 380px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4), 0 1px 4px rgba(0, 0, 0, 0.2);
-  transition: opacity 0.6s ease-out, transform 0.6s ease-out;
-  will-change: opacity, transform;
-}
-
-.activity-toast.toast-fading {
-  opacity: 0;
-  transform: translateY(10px);
-}
-
-.activity-toast.toast-entering {
-  animation: toast-slide-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
-@keyframes toast-slide-in {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.toast-inner {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-}
-
-.toast-status {
-  flex-shrink: 0;
-  width: 22px;
-  height: 22px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 14px;
-  line-height: 1;
-}
-
-.toast-status.status-pending {
-  color: #f59e0b;
-}
-
-.toast-status.status-success {
-  color: #22c55e;
-}
-
-.toast-status.status-failed {
-  color: #ef4444;
-}
-
-.toast-status.status-background {
-  color: #3b82f6;
-  animation: status-pulse 1.5s ease-in-out infinite;
-}
-
-@keyframes status-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
-}
-
-.toast-content {
-  flex: 1;
-  min-width: 0;
-}
-
-.toast-description {
-  color: #e2e8f0;
-  font-size: 13px;
-  line-height: 1.4;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  margin-bottom: 6px;
-}
-
-.toast-meta {
-  color: #94a3b8;
-  font-size: 11px;
-  line-height: 1.2;
-}
-
-.toast-progress {
-  height: 3px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 2px;
-  overflow: hidden;
-  margin-bottom: 4px;
-}
-
-.toast-progress-bar {
-  height: 100%;
-  border-radius: 2px;
-  transition: width 0.3s ease-out;
-}
-
-.toast-progress-bar.progress-pending {
-  background: #f59e0b;
-}
-
-.toast-progress-bar.progress-success {
-  background: #22c55e;
-  width: 100%;
-}
-
-.toast-progress-bar.progress-failed {
-  background: #ef4444;
-  width: 100%;
-}
-
-.toast-progress-bar.progress-background {
-  background: #3b82f6;
-  animation: progress-pulse 2s ease-in-out infinite;
-}
-
-@keyframes progress-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.6; }
-}
-
-.toast-cancel {
-  flex-shrink: 0;
-  width: 22px;
-  height: 22px;
-  background: rgba(255, 255, 255, 0.08);
-  border: none;
-  border-radius: 50%;
-  color: #94a3b8;
-  font-size: 16px;
-  line-height: 1;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 0.2s, color 0.2s;
-  margin-top: -2px;
-}
-
-.toast-cancel:hover {
-  background: rgba(255, 255, 255, 0.15);
-  color: #e2e8f0;
-}
-
-/* Spinner for pending toasts */
-.toast-spinner {
-  width: 16px;
-  height: 16px;
-  border: 2px solid rgba(245, 158, 11, 0.3);
-  border-top-color: #f59e0b;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-/* Success checkmark */
-.toast-check {
-  color: #22c55e;
-  font-size: 16px;
-}
-
-/* Failed X */
-.toast-x {
-  color: #ef4444;
-  font-size: 16px;
-}
-
-/* Background refresh indicator */
-.toast-bg-dot {
-  width: 8px;
-  height: 8px;
-  background: #3b82f6;
-  border-radius: 50%;
-  animation: bg-pulse 2s ease-in-out infinite;
-}
-
-@keyframes bg-pulse {
-  0%, 100% { transform: scale(1); opacity: 1; }
-  50% { transform: scale(1.3); opacity: 0.6; }
-}
-
-/* Responsive adjustments */
-@media (max-width: 600px) {
-  #activity-toast-stack {
-    bottom: 10px;
-    left: 10px;
-    right: 10px;
-  }
-
-  .activity-toast {
-    min-width: unset;
-    max-width: 100%;
-  }
-}
-
-/* Position above donkey runner if visible */
-.donkey-runner:not(.donkey-hidden) ~ #activity-toast-stack,
-#activity-toast-stack.above-donkey {
-  /* Adjusted dynamically by JS */
-}
 </style>
 </head>
 <body translate="no">
@@ -3419,13 +3190,13 @@ WIZMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMmmmmmmMMMMMMMMMMMMMMMMMMMMMMMMM*MJJ
 </div>
 
 
-  <script>
+<script>
 var LOCAL_CONFIG_REFRESH_INTERVAL_SECONDS = 31337;
 var LOCAL_SENSOR_NOTE = 'Yonneh wuz here.';
 var LOCAL_SENSOR_TIMESTAMP = '1942-06-14T09:30:00.000Z';
 
 </script>
-  <script>
+<script>
 // ===== API Endpoints =====
 const NWS_API = 'https://api.weather.gov';
 
@@ -3501,7 +3272,7 @@ const WMO_GRADIENTS = {
 };
 
 </script>
-  <script>
+<script>
 // ===== DATA CACHE =====
 // Unified cache for ALL API calls with configurable TTL per type and LRU eviction
 
@@ -3783,7 +3554,7 @@ const DataCache = {
 };
 
 </script>
-  <script>
+<script>
 // — Utility Functions —
 function toF(c) { return c * 9 / 5 + 32; }
 function toC(f) { return (f - 32) * 5 / 9; }
@@ -3927,9 +3698,6 @@ let _bgRefreshTimer = null;
 let _lastRefreshCityCount = 0;
 let _bgRefreshGen = 0;
 
-// Track the background refresh toast
-let _bgRefreshToast = null;
-
 function getCityShortestTTL(city) {
   let shortest = Infinity;
   const lat = city.latitude;
@@ -4050,10 +3818,6 @@ function startBackgroundRefresh() {
   _lastRefreshCityCount = weatherData.length;
   console.log(`[BackgroundRefresh] Starting gen=${gen}: ${weatherData.length} cities, interval=${Math.round(interval / 1000)}s (shortest TTL=${Math.round(shortestTTL / 1000)}s)`);
 
-  // Track background refresh with ActivityTracker
-  const bgDesc = `Weather cache refresh (${weatherData.length} cities)`;
-  _bgRefreshToast = ActivityTracker.trackBackgroundRefresh('weather', interval, () => run(true));
-
   _bgRefreshTimer = setInterval(() => {
     // Skip if this timer belongs to a stale generation
     if (_bgRefreshGen !== gen) return;
@@ -4117,7 +3881,7 @@ async function refresh() {
 }
 
 </script>
-  <script>
+<script>
 // ===== SVG WEATHER ICONS - LOUD & ANIMATED =====
 function getWeatherIcon(code, size = 64) {
   const w = WMO_CODES[code] || WMO_CODES[0];
@@ -4409,431 +4173,7 @@ function loudWeatherIcon(type, size) {
 
 
 </script>
-  <script>
-// ===== ACTIVITY TRACKER (Background Toast Notifications) =====
-// Tracks API requests and background cache refreshes as animated toast notifications.
-// Toasts stack in the bottom-left corner with smooth fade-out transitions.
-
-const ActivityTracker = (() => {
-  // ===== STATE =====
-  const _toasts = new Map();          // id → toast data
-  let _nextId = 0;
-  const MAX_VISIBLE = 6;
-  const FADE_OUT_SUCCESS_MS = 1500;   // auto-hide after success
-  const FADE_OUT_FAIL_MS = 3000;      // auto-hide after failure
-
-  // ===== DOM =====
-  let _stackEl = null;
-
-  function getStack() {
-    if (!_stackEl) {
-      _stackEl = document.createElement('div');
-      _stackEl.id = 'activity-toast-stack';
-      document.body.appendChild(_stackEl);
-    }
-    return _stackEl;
-  }
-
-  // ===== TOAST CREATION =====
-  function createToast(description, options = {}) {
-    const id = ++_nextId;
-    const {
-      status = 'pending',
-      meta = '',
-      cancelable = true,
-      onCreated,
-      onCanceled,
-    } = options;
-
-    const toastData = {
-      id,
-      description,
-      status,
-      meta,
-      cancelable,
-      onCancel: onCanceled,
-      createdAt: Date.now(),
-      _abortController: null,
-      _cancelFn: null,
-    };
-
-    // Create DOM element
-    const el = document.createElement('div');
-    el.className = `activity-toast toast-entering`;
-    el.dataset.id = id;
-
-    let statusIcon = '';
-    if (status === 'pending') {
-      statusIcon = '<div class="toast-spinner"></div>';
-    } else if (status === 'success') {
-      statusIcon = '<span class="toast-check">✓</span>';
-    } else if (status === 'failed') {
-      statusIcon = '<span class="toast-x">✕</span>';
-    } else if (status === 'background') {
-      statusIcon = '<div class="toast-bg-dot"></div>';
-    }
-
-    let progressClass = 'progress-pending';
-    if (status === 'success') progressClass = 'progress-success';
-    else if (status === 'failed') progressClass = 'progress-failed';
-    else if (status === 'background') progressClass = 'progress-background';
-
-    const cancelBtn = cancelable
-      ? `<button class="toast-cancel" aria-label="Cancel" title="Cancel">×</button>`
-      : '';
-
-    el.innerHTML = `
-      <div class="toast-inner">
-        <span class="toast-status status-${status}">${statusIcon}</span>
-        <div class="toast-content">
-          <div class="toast-description" title="${escapeHTML(description)}">${escapeHTML(description)}</div>
-          ${meta ? `<div class="toast-meta">${escapeHTML(meta)}</div>` : ''}
-          <div class="toast-progress">
-            <div class="toast-progress-bar ${progressClass}" style="width: 0%"></div>
-          </div>
-        </div>
-        ${cancelBtn}
-      </div>
-    `;
-
-    // Cancel button handler
-    if (cancelable) {
-      const cancelBtnEl = el.querySelector('.toast-cancel');
-      cancelBtnEl.addEventListener('click', () => cancelToast(id));
-    }
-
-    onCreated?.(id, el);
-    _toasts.set(id, toastData);
-
-    // Add to DOM and manage stack size
-    getStack().appendChild(el);
-    trimStack();
-
-    // Remove entering animation class after animation completes
-    setTimeout(() => {
-      el.classList.remove('toast-entering');
-    }, 400);
-
-    return {
-      id,
-      cancel: () => cancelToast(id),
-      complete: (metaText) => completeToast(id, metaText),
-      fail: (metaText) => failToast(id, metaText),
-      updateProgress: (pct) => updateToastProgress(id, pct),
-      el,
-    };
-  }
-
-  function trimStack() {
-    const stack = getStack();
-    let toastEls = Array.from(stack.querySelectorAll('.activity-toast:not(.toast-fading)'));
-    while (toastEls.length > MAX_VISIBLE) {
-      const oldest = toastEls[0];
-      const id = parseInt(oldest.dataset.id, 10);
-      fadeOutAndRemove(id);
-      toastEls.shift();
-    }
-  }
-
-  function updateToastProgress(id, pct) {
-    const toast = _toasts.get(id);
-    if (!toast) return;
-    const el = toast.el;
-    if (!el) return;
-    const bar = el.querySelector('.toast-progress-bar');
-    if (bar) {
-      bar.style.width = `${Math.max(0, Math.min(100, pct))}%`;
-    }
-  }
-
-  function cancelToast(id) {
-    const toast = _toasts.get(id);
-    if (!toast) return;
-
-    // Abort underlying fetch if available
-    if (toast._abortController) {
-      toast._abortController.abort();
-    }
-
-    toast.status = 'cancelled';
-    const el = toast.el;
-    if (el) {
-      const statusEl = el.querySelector('.toast-status');
-      if (statusEl) {
-        statusEl.innerHTML = '<span class="toast-x">✕</span>';
-        statusEl.className = 'toast-status status-failed';
-      }
-      const bar = el.querySelector('.toast-progress-bar');
-      if (bar) {
-        bar.className = 'toast-progress-bar progress-failed';
-        bar.style.width = '100%';
-      }
-    }
-
-    toast.onCancel?.(id);
-    setTimeout(() => fadeOutAndRemove(id), 500);
-  }
-
-  function completeToast(id, metaText) {
-    const toast = _toasts.get(id);
-    if (!toast) return;
-    toast.status = 'success';
-    const el = toast.el;
-    if (el) {
-      const statusEl = el.querySelector('.toast-status');
-      if (statusEl) {
-        statusEl.innerHTML = '<span class="toast-check">✓</span>';
-        statusEl.className = 'toast-status status-success';
-      }
-      const bar = el.querySelector('.toast-progress-bar');
-      if (bar) {
-        bar.className = 'toast-progress-bar progress-success';
-        bar.style.width = '100%';
-      }
-      if (metaText) {
-        const metaEl = el.querySelector('.toast-meta');
-        if (metaEl) metaEl.textContent = metaText;
-      }
-    }
-    setTimeout(() => fadeOutAndRemove(id), FADE_OUT_SUCCESS_MS);
-  }
-
-  function failToast(id, metaText) {
-    const toast = _toasts.get(id);
-    if (!toast) return;
-    toast.status = 'failed';
-    const el = toast.el;
-    if (el) {
-      const statusEl = el.querySelector('.toast-status');
-      if (statusEl) {
-        statusEl.innerHTML = '<span class="toast-x">✕</span>';
-        statusEl.className = 'toast-status status-failed';
-      }
-      const bar = el.querySelector('.toast-progress-bar');
-      if (bar) {
-        bar.className = 'toast-progress-bar progress-failed';
-        bar.style.width = '100%';
-      }
-      if (metaText) {
-        const metaEl = el.querySelector('.toast-meta');
-        if (metaEl) metaEl.textContent = metaText;
-      }
-    }
-    setTimeout(() => fadeOutAndRemove(id), FADE_OUT_FAIL_MS);
-  }
-
-  function fadeOutAndRemove(id) {
-    const toast = _toasts.get(id);
-    if (!toast) return;
-    const el = toast.el;
-    if (!el) {
-      _toasts.delete(id);
-      return;
-    }
-
-    el.classList.add('toast-fading');
-    setTimeout(() => {
-      if (el.parentNode) {
-        el.parentNode.removeChild(el);
-      }
-      _toasts.delete(id);
-    }, 600);
-  }
-
-  // ===== FETCH WRAPPING =====
-  let _originalFetch = window.fetch;
-  let _fetchWrapped = false;
-
-  function wrapFetch() {
-    if (_fetchWrapped) return;
-    _fetchWrapped = true;
-
-    window.fetch = async (...args) => {
-      const url = args[0];
-      const urlStr = typeof url === 'string' ? url : url?.url || '';
-      let host = '';
-      try { host = new URL(urlStr).host; } catch {}
-
-      const toast = createToast(
-        `${urlStr.length > 60 ? urlStr.substring(0, 60) + '…' : urlStr}`,
-        { meta: host, cancelable: true }
-      );
-
-      const controller = new AbortController();
-      toast._abortController = controller;
-
-      // Replace signal if provided
-      let fetchArgs = [...args];
-      if (fetchArgs[1] && fetchArgs[1].signal) {
-        // Create a combined abort controller
-        const origController = fetchArgs[1].signal;
-        const combined = new AbortController();
-        toast._abortController = combined;
-        origController.addEventListener('abort', () => combined.abort());
-        fetchArgs[1] = { ...fetchArgs[1], signal: combined.signal };
-      }
-
-      try {
-        const startTime = Date.now();
-        let progressRAF = null;
-
-        // Animate progress bar
-        function animateProgress() {
-          const elapsed = Date.now() - startTime;
-          // Estimate max duration (fetches usually complete within 10-15s)
-          const maxMs = 12000;
-          const pct = Math.min(90, (elapsed / maxMs) * 100);
-          updateToastProgress(toast.id, pct);
-          progressRAF = requestAnimationFrame(animateProgress);
-        }
-        animateProgress();
-
-        const result = await _originalFetch(...fetchArgs);
-
-        cancelAnimationFrame(progressRAF);
-        updateToastProgress(toast.id, 100);
-
-        if (result.ok) {
-          completeToast(toast.id, `${result.status} ${result.statusText}`);
-        } else {
-          failToast(toast.id, `HTTP ${result.status}`);
-        }
-
-        return result;
-      } catch (err) {
-        cancelAnimationFrame(progressRAF);
-        if (err.name === 'AbortError') {
-          // Toast was cancelled by user
-        } else {
-          failToast(toast.id, err.message || 'Network error');
-        }
-        throw err;
-      }
-    };
-  }
-
-  function unwrapFetch() {
-    if (_fetchWrapped) {
-      window.fetch = _originalFetch;
-      _fetchWrapped = false;
-    }
-  }
-
-  // ===== BACKGROUND REFRESH TRACKING =====
-  const _bgRefreshTimers = new Map(); // cacheType → { timerId, toastId, cancelFn }
-
-  function trackBackgroundRefresh(cacheType, ttlMs, refreshFn) {
-    const description = `Refreshing ${cacheType} cache`;
-    const toast = createToast(description, {
-      status: 'background',
-      meta: `Next in ${formatDuration(ttlMs)}`,
-      cancelable: false,
-    });
-
-    let elapsed = 0;
-    let progressRAF = null;
-    function updateBgProgress() {
-      elapsed += 100;
-      const pct = (elapsed / ttlMs) * 100;
-      updateToastProgress(toast.id, pct);
-      if (pct < 95) {
-        progressRAF = requestAnimationFrame(updateBgProgress);
-      }
-    }
-    progressRAF = requestAnimationFrame(updateBgProgress);
-
-    // Run refresh
-    Promise.resolve(refreshFn()).catch(err => {
-      console.warn(`[ActivityTracker] Background refresh failed for ${cacheType}:`, err);
-    }).finally(() => {
-      // Reset for next cycle
-      elapsed = 0;
-      toast.updateProgress(0);
-      updateToastProgress(toast.id, 0);
-      cancelAnimationFrame(progressRAF);
-      progressRAF = requestAnimationFrame(updateBgProgress);
-
-      // Update meta with last refresh info
-      const metaEl = toast.el?.querySelector('.toast-meta');
-      if (metaEl) {
-        metaEl.textContent = `Refreshed · Next in ${formatDuration(ttlMs)}`;
-      }
-    });
-
-    return { toastId: toast.id, cancel: () => toast.cancel() };
-  }
-
-  // Track a single recurring background refresh — replaces any existing toast for the same cache type
-  function trackRecurringBackgroundRefresh(cacheType, ttlMs, refreshFn) {
-    // Cancel any existing toast for this cache type
-    const existing = _bgRefreshTimers.get(cacheType);
-    if (existing) {
-      existing.cancelFn();
-    }
-
-    const result = trackBackgroundRefresh(cacheType, ttlMs, refreshFn);
-    _bgRefreshTimers.set(cacheType, {
-      ...result,
-      cancelFn: result.cancel,
-    });
-
-    return result;
-  }
-
-  function startBackgroundRefreshLoop(refreshFn, description, cacheType, ttlMs) {
-    const timerKey = `bg_${cacheType}_${description}`;
-    // Clear existing if present
-    const existing = _bgRefreshTimers.get(timerKey);
-    if (existing) {
-      clearInterval(existing.timerId);
-      fadeOutAndRemove(existing.toastId);
-    }
-
-    const { toastId, cancel } = trackBackgroundRefresh(cacheType, ttlMs, refreshFn);
-
-    // Set up recurring timer
-    const timerId = setInterval(() => {
-      trackBackgroundRefresh(cacheType, ttlMs, refreshFn);
-    }, ttlMs);
-
-    _bgRefreshTimers.set(timerKey, { timerId, toastId });
-
-    return {
-      stop: () => {
-        clearInterval(timerId);
-        _bgRefreshTimers.delete(timerKey);
-        fadeOutAndRemove(toastId);
-      },
-    };
-  }
-
-  // ===== UTILITY =====
-  function formatDuration(ms) {
-    if (ms >= 60000) return `${Math.floor(ms / 60000)}m`;
-    if (ms >= 1000) return `${Math.round(ms / 1000)}s`;
-    return `${ms}ms`;
-  }
-
-  // ===== PUBLIC API =====
-  return {
-    createToast,
-    wrapFetch,
-    unwrapFetch,
-    trackBackgroundRefresh,
-    trackRecurringBackgroundRefresh,
-    startBackgroundRefreshLoop,
-    getToastCount: () => _toasts.size,
-  };
-})();
-
-// ===== HELPER =====
-function escapeHTML(str) {
-  const div = document.createElement('div');
-  div.textContent = str;
-  return div.innerHTML;
-}
-</script>
-  <script>
+<script>
 // ===== OPEN-METEO API CLIENT =====
 // Fetches weather data and air quality from Open-Meteo APIs.
 
@@ -5285,7 +4625,7 @@ async function fetchWeatherForCities(cities) {
   }
 }
 </script>
-  <script>
+<script>
 // OpenStreetMap / Nominatim API client — fetches nearby city data from Nominatim/OSM.
 
 // ===== ENDPOINT =====
@@ -5471,7 +4811,7 @@ async function findNearbyCities(lat, lon) {
   return selected;
 }
 </script>
-  <script>
+<script>
 // ===== NWS API CLIENT =====
 // Fetches weather data from api.weather.gov (NWS) and maps it to the app's data model.
 
@@ -6314,7 +5654,7 @@ function nwsToAppData(city, nwsData) {
 
 
 </script>
-  <script>
+<script>
 // ===== WEATHER.GOV RADAR API CLIENT (SIMPLIFIED) =====
 // Fetches the current radar image from NOAA/NCEP GeoServer WMS service.
 // Caches multiple overlays in localStorage by location + layer.
@@ -6555,7 +5895,7 @@ window.RADAR_LAYERS = RADAR_LAYERS;
 window.RADAR_DEFAULT_OVERLAY = RADAR_DEFAULT_OVERLAY;
 
 </script>
-  <script>
+<script>
 // ===== RENDER =====
 
 // --- Constants ---
@@ -7081,7 +6421,7 @@ function drawGhostCharts() {
 
 
 </script>
-  <script>
+<script>
 // ===== CHART CONSTANTS =====
 const CHART_PAD_MERGED = { top: 6, right: 0, bottom: 6, left: 0 };
 const CHART_PAD_COMBINED = { top: 10, right: 10, bottom: 10, left: 10 };
@@ -7578,7 +6918,7 @@ function initParticles() {
 // ===== LOCATION PROMPT =====
 
 </script>
-    <script>
+  <script>
 // ===== NETWORK MONITOR =====
 const OUTAGE_MESSAGES = [
   "🦓 The network has left the building.",
@@ -7912,7 +7252,7 @@ function checkNetworkAndRun(runFn) {
   });
 }
 </script>
-    <script>
+  <script>
 // ===== DONKEY RUNNER MINIGAME =====
 // A Chrome-dinosaur-style endless runner with a donkey character
 
@@ -11448,11 +10788,6 @@ let _markerResizeTimer = null;
 // ===== INIT =====
 document.addEventListener('DOMContentLoaded', () => {
   console.log('[App] Initializing...');
-
-  // Wrap window.fetch so all API requests are tracked automatically
-  ActivityTracker.wrapFetch();
-  console.log('[ActivityTracker] Fetch wrapping enabled');
-
   initParticles();
 
   const unitBtn = document.getElementById('unit-toggle');
@@ -11636,13 +10971,6 @@ async function run(isBackground = false) {
 
     // All requests complete — render once
     DataCacheLogSummary('location update');
-
-    // Track the main run completion
-    ActivityTracker.createToast('Location data loaded', {
-      status: 'success',
-      meta: `${allCities.length} cities rendered`,
-    });
-
     renderAll();
 
     // Setup radar overlay select and start background radar updates (only if not "None")
@@ -11654,18 +10982,8 @@ async function run(isBackground = false) {
       }
     }
 
-    // Track initial radar background load
-    if (userLocation && _selectedRadarOverlay !== 'none' && _currentRadarLayer) {
-      ActivityTracker.createToast('Loading radar overlay', {
-        status: 'success',
-        meta: RADAR_LAYERS[_selectedRadarOverlay]?.label || _selectedRadarOverlay,
-      });
-    }
-
-    // Start periodic background refresh of weather data (only on initial load)
-    if (!isBackground) {
-      startBackgroundRefresh();
-    }
+    // Start periodic background refresh of weather data
+    startBackgroundRefresh();
   } finally {
     if (!isBackground) _runPending = false;
   }
@@ -11770,12 +11088,8 @@ function makeWhiteTransparent(dataUrl, callback) {
 }
 
 // Start radar background updates (only if overlay is displayed)
-let _radarToastCancel = null;
-
 function startRadarUpdates(lat, lon) {
   if (_radarUpdateTimer) clearInterval(_radarUpdateTimer);
-  // Cancel any existing radar toast
-  if (_radarToastCancel) { _radarToastCancel(); _radarToastCancel = null; }
 
   // Use the shortest TTL from all city data to determine refresh interval
   let shortestTTL = Infinity;
@@ -11791,15 +11105,6 @@ function startRadarUpdates(lat, lon) {
   _radarUpdateTimer = setInterval(() => refreshRadarBackground(lat, lon), interval);
 
   console.log(`[Radar] Background updates every ${Math.round(interval / 1000)}s (shortest TTL: ${Math.round(shortestTTL / 1000)}s)`);
-
-  // Track radar background updates with ActivityTracker (recurring — replaces previous toast)
-  const overlayLabel = RADAR_LAYERS[_selectedRadarOverlay]?.label || _selectedRadarOverlay;
-  const radarResult = ActivityTracker.trackRecurringBackgroundRefresh(
-    'radar',
-    interval,
-    () => refreshRadarBackground(lat, lon)
-  );
-  _radarToastCancel = radarResult.cancel;
 }
 
 // Stop radar background updates
@@ -11808,7 +11113,6 @@ function stopRadarUpdates() {
     clearInterval(_radarUpdateTimer);
     _radarUpdateTimer = null;
   }
-  if (_radarToastCancel) { _radarToastCancel(); _radarToastCancel = null; }
 }
 
 // ===== RADAR COMBO BOX =====
