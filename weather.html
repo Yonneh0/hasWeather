@@ -2406,46 +2406,6 @@ body {
   color: #FFD700;
   text-shadow: 0 0 12px rgba(255, 215, 0, 0.6), 0 0 24px rgba(255, 215, 0, 0.3);
 }
-
-/* ===== FULLSCREEN MODE ===== */
-/* When game is in fullscreen, hide all other page content */
-body.donkey-fullscreen .header,
-body.donkey-fullscreen #city-grid,
-body.donkey-fullscreen #location-prompt,
-body.donkey-fullscreen #particle-canvas,
-body.donkey-fullscreen .fav-dropdown {
-  opacity: 0;
-  pointer-events: none;
-}
-
-/* Fullscreen game panel - fills the viewport with responsive constraints */
-.donkey-panel.fullscreen {
-  position: fixed;
-  top: 16px;
-  right: 16px;
-  bottom: 16px;
-  left: 16px;
-  width: auto;
-  height: auto;
-  z-index: 9999;
-  border-radius: 12px;
-  box-shadow: 0 0 60px rgba(0, 0, 0, 0.8);
-  transform-origin: center center;
-  transition: none;
-}
-
-.donkey-panel.fullscreen .donkey-panel-body {
-  padding: 0 0.6rem 0.6rem;
-}
-
-.donkey-panel.fullscreen .donkey-play-area {
-  height: 180px;
-}
-
-/* When game is closed but body has fullscreen class, still hide content */
-body.donkey-fullscreen .donkey-panel.donkey-hidden {
-  display: none;
-}
 /* ===== ABOUT PANEL — VT100 TERMINAL STYLE ===== */
 
 .about-panel {
@@ -2907,7 +2867,6 @@ body.donkey-fullscreen .donkey-panel.donkey-hidden {
   <li>localStorage-based caching with configurable TTLs per data type (15 min for weather/AQI, 24h for geocoding/IP, 10 min for nearby cities) and LRU eviction (default: 500 entries per type)</li>
   <li>Nearby city discovery via Nominatim with bearing-based diversity selection (automatic display of up to 6 nearest cities, Open-Meteo feature_code categorization for state capitals, regional capitals, nearest cities)</li>
   <li>°F/°C unit toggle with debouncing</li>
-  <li>Fullscreen toggle button (hidden by default, shown when supported)</li>
   <li>Animated SVG weather icons (20+ weather types with glow, rotation, drift, shake, bob, and particle animations)</li>
   <li>Canvas-based charts — merged chart (temperature area fill + precipitation bars + wind line), combined chart (humidity fill + wind line + precipitation bars) with live min/max/avg stats, and ghost NWS overlay charts</li>
   <li>Automatic API retry with exponential backoff (3 retries, 1s/2s/4s) for network resilience</li>
@@ -2920,7 +2879,7 @@ body.donkey-fullscreen .donkey-panel.donkey-hidden {
   <li><strong>Local Sensor Bar</strong> — Real-time local weather station data display (temperature, feels-like, dewpoint, wind speed/gust/direction, humidity, pressure, GPS coordinates, UV index, visibility, rainfall, solar radiation, soil moisture) with auto-refresh and TTL expiry</li>
   <li><strong>Ghost Chart Overlay</strong> — When NWS data is available, parallel NWS data shown as blue-tinted ghost elements: ghost temperature, ghost weather icon, ghost details grid values, ghost hourly forecast, and ghost merged chart canvas</li>
   <li><strong>Cross-source Data Model</strong> — Three states: <code>open-meteo</code> (OM-only), <code>nws</code> (NWS-only), <code>enhanced</code> (OM base + NWS supplemental). Field-level merging where missing OM fields are filled from NWS cache and vice versa</li>
-  <li><strong>Donkey Runner Minigame</strong> — Chrome dinosaur-style endless runner with extensive features: animated donkey character, backflip on rare jumps, double-jump with fart sound effect, stumble mechanic (donkey trips for 2 seconds), property damage bonus (+100 points when knocking obstacles while stumbling), near-miss detection (+50 points), snarky message system (50+ messages across 20 event types), procedural sound effects (jump, double-jump/fart, game over, milestone, near-miss, land, ceiling), day/night cycle, air-based obstacles (jet, falling rock, drone), obstacle count tracking on game over screen with SVG icons, post-game stats breakdown (run time, air time, jump stats), corner stat blocks, fullscreen mode, sound toggle with localStorage persistence</li>
+  <li><strong>Donkey Runner Minigame</strong> — Chrome dinosaur-style endless runner with extensive features: animated donkey character, backflip on rare jumps, double-jump with fart sound effect, stumble mechanic (donkey trips for 2 seconds), property damage bonus (+100 points when knocking obstacles while stumbling), near-miss detection (+50 points), snarky message system (50+ messages across 20 event types), procedural sound effects (jump, double-jump/fart, game over, milestone, near-miss, land, ceiling), day/night cycle, air-based obstacles (jet, falling rock, drone), obstacle count tracking on game over screen with SVG icons, post-game stats breakdown (run time, air time, jump stats), corner stat blocks, sound toggle with localStorage persistence</li>
   <li><strong>About Panel</strong> — Click the <code>?</code> button in the header to open a floating VT100-terminal-styled panel with green-on-black CRT styling, scanline effects, and flicker animation. The panel renders the full README.md content (headings, lists, tables, code blocks) parsed at build time by <code>build.js</code>, so it works perfectly from <code>file:///</code> with zero fetch/XHR/CORS. Styled to match the Donkey Runner game panel aesthetic with a close button.</li>
   <li>Zero external dependencies — pure vanilla HTML/CSS/JS</li>
 </ul>
@@ -3138,7 +3097,6 @@ node build.js
   <li><strong>Obstacle count tracking</strong> — Game over screen shows counts for each obstacle type with SVG icons</li>
   <li><strong>Post-game stats breakdown</strong> — Run time, air time, air percentage, total jumps, double jumps, ignored jumps, max speed, distance, near misses, property damage count</li>
   <li><strong>Corner stat blocks</strong> — Compact stat displays positioned at card corners during game over</li>
-  <li><strong>Fullscreen mode</strong> — Toggle fullscreen view for immersive gameplay</li>
   <li><strong>Sound toggle</strong> — Enable/disable sound effects (persisted in localStorage)</li>
   <li><strong>Speed lines</strong> — Visual speed indicator at high speeds</li>
   <li><strong>Particle effects</strong> — Jump, landing, knock, ceiling impact, and double-jump particles</li>
@@ -7876,10 +7834,6 @@ const DONKEY_RUNNER = {
 
   nearMissActive: false,
 
-  // Fullscreen state
-  isFullscreen: false,
-  fullscreenScale: 1,
-  fullscreenBtnEl: null,
 
   // Snarky message system
   snarkyMessages: {
@@ -7945,7 +7899,6 @@ const DONKEY_RUNNER = {
         <div class="donkey-header-highscore">
           <span class="donkey-highscore" id="donkey-highscore">HI ${String(this.highScore).padStart(5, '0')}</span>
         </div>
-        <button class="donkey-fullscreen-btn" id="donkey-fullscreen-btn" title="Toggle fullscreen">⛶</button>
         <button class="donkey-close-btn" title="Close game">✕</button>
       </div>
       <div class="donkey-panel-body">
@@ -8072,15 +8025,6 @@ const DONKEY_RUNNER = {
     const dsHighScoreVal = document.getElementById('ds-highscore-val');
     if (dsHighScoreVal) {
       dsHighScoreVal.textContent = String(this.highScore).padStart(5, '0');
-    }
-
-    // Fullscreen button handler
-    this.fullscreenBtnEl = document.getElementById('donkey-fullscreen-btn');
-    if (this.fullscreenBtnEl) {
-      this.fullscreenBtnEl.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.toggleFullscreen();
-      });
     }
 
     // Sound toggle button — check localStorage for saved preference
@@ -8684,10 +8628,6 @@ const DONKEY_RUNNER = {
     this.obstacles = [];
     this.gamePanel.classList.remove('donkey-visible');
     this.gamePanel.classList.add('donkey-hidden');
-    // Exit fullscreen if active
-    if (this.isFullscreen) {
-      this.closeFullscreen();
-    }
     if (typeof adjustOutagePosition === 'function') adjustOutagePosition();
   },
 
@@ -8711,59 +8651,6 @@ const DONKEY_RUNNER = {
       this.drawIdle();
       if (typeof adjustOutagePosition === 'function') adjustOutagePosition();
     }
-  },
-
-  toggleFullscreen() {
-    if (this.isFullscreen) {
-      this.closeFullscreen();
-    } else {
-      this.enterFullscreen();
-    }
-  },
-
-  enterFullscreen() {
-    if (this.isFullscreen) return;
-    this.isFullscreen = true;
-    this.gamePanel.classList.add('fullscreen');
-    document.body.classList.add('donkey-fullscreen');
-    this.updateFullscreenScale();
-    // Update button icon to "exit fullscreen"
-    if (this.fullscreenBtnEl) {
-      this.fullscreenBtnEl.textContent = '⛶';
-      this.fullscreenBtnEl.title = 'Exit fullscreen';
-    }
-    // Listen for window resize to recalculate scale
-    window.addEventListener('resize', this._resizeHandler || (this._resizeHandler = () => this.updateFullscreenScale()));
-  },
-
-  closeFullscreen() {
-    if (!this.isFullscreen) return;
-    this.isFullscreen = false;
-    this.gamePanel.classList.remove('fullscreen');
-    document.body.classList.remove('donkey-fullscreen');
-    this.gamePanel.style.removeProperty('--fullscreen-scale');
-    this.gamePanel.style.removeProperty('transform');
-    if (this.fullscreenBtnEl) {
-      this.fullscreenBtnEl.textContent = '⛶';
-      this.fullscreenBtnEl.title = 'Toggle fullscreen';
-    }
-    if (this._resizeHandler) {
-      window.removeEventListener('resize', this._resizeHandler);
-      this._resizeHandler = null;
-    }
-  },
-
-  updateFullscreenScale() {
-    if (!this.isFullscreen) return;
-    // Use full panel dimensions (including header) for scaling calculation
-    const panelWidth = this.gamePanel.offsetWidth;
-    const panelHeight = this.gamePanel.offsetHeight;
-    const padding = 20; // 10px padding on each side
-    const scaleX = (window.innerWidth - padding) / panelWidth;
-    const scaleY = (window.innerHeight - padding) / panelHeight;
-    this.fullscreenScale = Math.min(scaleX, scaleY);
-    this.gamePanel.style.setProperty('--fullscreen-scale', this.fullscreenScale);
-    this.gamePanel.style.transform = `scale(${this.fullscreenScale})`;
   },
 
   loop() {
@@ -8939,7 +8826,9 @@ const DONKEY_RUNNER = {
     this.donkey.wasGrounded = this.donkey.grounded;
 
     this.obstacleTimer += deltaTime * 60;
-    const targetInterval = 35 + Math.round(45 * Math.pow((12 - this.speed) / 7, 2));
+    const baseInterval = 25 + Math.round(45 * Math.pow((12 - this.speed) / 7, 2));
+    // Add ±25% random variance to obstacle spacing for more natural feel
+    const targetInterval = baseInterval * (0.75 + Math.random() * 0.5);
     if (this.obstacleTimer >= targetInterval) {
       this.spawnObstacle();
       this.obstacleTimer = 0;
@@ -8979,8 +8868,9 @@ const DONKEY_RUNNER = {
           // Knock aside: remove obstacle, spawn particles
           this.knockObstacle(obs, i);
           this.showSnarkyMessage('property-damage');
-        } else if (Math.random() < 0.5) {
+        } else if (this.score <= this.highScore && Math.random() < 0.5) {
           // Dumb Luck! 50% chance to survive by knocking obstacle away
+          // Only allow when score is at or below high score (prevents score inflation via luck)
           this.triggerDumbLuck(obs, i);
         } else {
           // Record the killer obstacle type for the table
