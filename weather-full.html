@@ -3209,6 +3209,11 @@ const MAX_CITIES = 6;
 const MIN_CITY_DISTANCE_MI = 8;
 const HOURLY_FORECAST_SLOTS = 24;
 const CHART_DRAW_DELAY_MS = 400;
+
+// ===== Location Refresh Constants =====
+const IP_LOCATION_REFRESH_MS = 30 * 60 * 1000; // 30 min — check if user's IP changed
+const GEOLOCATION_BACKGROUND_REFRESH_MS = 5 * 60 * 1000; // 5 min — periodically refresh browser location
+const COORD_CHANGE_THRESHOLD_MI = 0.5; // minimum distance change to trigger update (half mile)
 const CHART_RESIZE_DEBOUNCE_MS = 250;
 const TOGGLE_DEBOUNCE_MS = 300;
 const RENDER_ALL_CHART_DELAY_MS = 400;
@@ -3605,6 +3610,8 @@ const DEFAULT_LON = -83.95081;
 const IP_API_URL = 'https://ipinfo.io/json';
 const MIN_BACKGROUND_REFRESH_MS = 60 * 1000;
 const BACKGROUND_REFRESH_FRACTION = 0.8;
+// Location refresh intervals defined in constants.js:
+// COORD_CHANGE_THRESHOLD_MI, IP_LOCATION_REFRESH_MS, GEOLOCATION_BACKGROUND_REFRESH_MS
 
 function bearingToCompass(deg) {
   const dirs = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
@@ -3628,31 +3635,372 @@ function isDaytime(hour, sunrise, sunset) {
 }
 
 // — Location —
-async function getLocation() {
-  if (userLocation) return userLocation;
+// Pending promise to prevent concurrent fetches (similar pattern to _nwsBoundsCache)
+let _locationPendingPromise = null;
+// Timers for background location refresh
+let _ipLocationRefreshTimer = null;
+let _geolocationRefreshTimer = null;
 
+/**
+ * Compare two coordinates by distance. Returns true if the distance exceeds the threshold.
+ */
+function coordDistanceExceedsThreshold(lat1, lon1, lat2, lon2) {
+  const dist = haversine(lat1, lon1, lat2, lon2);
+  const changed = dist > COORD_CHANGE_THRESHOLD_MI;
+  if (changed) {
+    console.log(`[Location] Distance check: ${dist.toFixed(2)} mi > ${COORD_CHANGE_THRESHOLD_MI} mi threshold`);
+  }
+  return changed;
+}
+
+/**
+ * Validate if the cached IP location is still current by comparing against ipinfo.io.
+ * Returns true if the location has changed (needs update), false otherwise.
+ */
+async function validateIpLocation() {
   const cachedIP = DataCache.get('ip_location', 'ipLocation');
-  if (cachedIP) return cachedIP;
+  if (!cachedIP) {
+    console.log('[Location] No cached IP location — needs refresh');
+    return true;
+  }
+
+  console.log(`[Location] Validating IP location (cached: ${cachedIP.lat.toFixed(2)}, ${cachedIP.lon.toFixed(2)})`);
 
   try {
+    const res = await fetch(IP_API_URL);
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+    const data = await res.json();
+    const ipLat = parseFloat(data.loc?.split(',')[0] ?? data.lat);
+    const ipLon = parseFloat(data.loc?.split(',')[1] ?? data.lon);
+
+    console.log(`[Location] Current IP: ${data.ip}, lat/lon: (${ipLat.toFixed(2)}, ${ipLon.toFixed(2)})`);
+
+    // Check if the IP has changed (ipinfo returns the IP address)
+    const cachedIPAddr = DataCache.get('ip_address', 'ipAddress');
+    const currentIP = data.ip;
+    if (cachedIPAddr && cachedIPAddr !== currentIP) {
+      console.log(`[Location] ⚠️ IP changed: ${cachedIPAddr} → ${currentIP}`);
+      return true;
+    }
+
+    // Check if the location has moved beyond threshold
+    const latChanged = coordDistanceExceedsThreshold(cachedIP.lat, cachedIP.lon, ipLat, ipLon);
+    if (latChanged) {
+      console.log(`[Location] ⚠️ Location changed — cached: (${cachedIP.lat.toFixed(2)}, ${cachedIP.lon.toFixed(2)}), current IP: (${ipLat.toFixed(2)}, ${ipLon.toFixed(2)})`);
+      return true;
+    }
+
+    console.log('[Location] ✓ IP location validated — no change');
+    return false; // Location is still valid
+  } catch (err) {
+    // If validation fails, assume location might have changed
+    console.warn('[Location] ✗ Validation failed:', err.message);
+    return true;
+  }
+}
+
+async function getLocation() {
+  if (userLocation) {
+    console.log('[Location] Already resolved:', `(${userLocation.lat.toFixed(2)}, ${userLocation.lon.toFixed(2)})`);
+    return userLocation;
+  }
+
+  const cachedIP = DataCache.get('ip_location', 'ipLocation');
+  if (cachedIP) {
+    console.log(`[Location] ✓ Using cached IP location: (${cachedIP.lat.toFixed(2)}, ${cachedIP.lon.toFixed(2)})`);
+    return cachedIP;
+  }
+
+  // If another call is already fetching, wait for it instead of duplicating
+  if (_locationPendingPromise) {
+    console.log('[Location] Concurrent fetch pending — waiting...');
+    return _locationPendingPromise;
+  }
+
+  console.log('[Location] No cached location — starting geolocation fetch...');
+
+  _locationPendingPromise = (async () => {
+    try {
+      console.log('[Location] Attempting browser geolocation...');
+      const pos = await new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: GEOLOCATION_TIMEOUT_MS });
+      });
+      const { latitude, longitude } = pos.coords;
+      console.log(`[Location] ✓ Browser geolocation successful: (${latitude.toFixed(2)}, ${longitude.toFixed(2)})`);
+      return { lat: latitude, lon: longitude };
+    } catch (geocErr) {
+      console.warn('[Location] ✗ Browser geolocation failed:', geocErr.message);
+
+      try {
+        console.log('[Location] Falling back to IP-based location...');
+        const res = await fetch(IP_API_URL);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        const lat = parseFloat(data.loc?.split(',')[0] ?? data.lat);
+        const lon = parseFloat(data.loc?.split(',')[1] ?? data.lon);
+        const loc = { lat, lon };
+        console.log(`[Location] ✓ IP-based location: ${data.ip} → (${lat.toFixed(2)}, ${lon.toFixed(2)})`);
+        // Also cache the IP address to detect future changes
+        DataCache.set('ip_address', data.ip, 'ipAddress');
+        DataCache.set('ip_location', loc, 'ipLocation');
+        return loc;
+      } catch (ipErr) {
+        console.error('[Location] ✗ IP fallback also failed — using default:', ipErr.message);
+        return { lat: DEFAULT_LAT, lon: DEFAULT_LON };
+      }
+    } finally {
+      // Clear the pending promise after resolution
+      _locationPendingPromise = null;
+    }
+  })();
+
+  return _locationPendingPromise;
+}
+
+/**
+ * Periodically check if the user's browser location has changed significantly.
+ * If it has, update userLocation and invalidate weather caches.
+ */
+async function checkGeolocationChange() {
+  if (!userLocation) {
+    console.log('[Geolocation] No user location — skipping check');
+    return false;
+  }
+
+  try {
+    console.log(`[Geolocation] Checking position (cached: ${userLocation.lat.toFixed(2)}, ${userLocation.lon.toFixed(2)})`);
     const pos = await new Promise((resolve, reject) => {
       navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: GEOLOCATION_TIMEOUT_MS });
     });
     const { latitude, longitude } = pos.coords;
-    return { lat: latitude, lon: longitude };
-  } catch {
-    try {
-      const res = await fetch(IP_API_URL);
-      const data = await res.json();
-      const lat = parseFloat(data.loc?.split(',')[0] ?? data.lat);
-      const lon = parseFloat(data.loc?.split(',')[1] ?? data.lon);
-      const loc = { lat, lon };
-      DataCache.set('ip_location', loc, 'ipLocation');
-      return loc;
-    } catch {
-      return { lat: DEFAULT_LAT, lon: DEFAULT_LON };
+    console.log(`[Geolocation] New position: (${latitude.toFixed(2)}, ${longitude.toFixed(2)})`);
+
+    // Check if the position has changed beyond threshold
+    if (coordDistanceExceedsThreshold(userLocation.lat, userLocation.lon, latitude, longitude)) {
+      console.log(`[Geolocation] ⚠️ Position changed — old: (${userLocation.lat.toFixed(2)}, ${userLocation.lon.toFixed(2)}), new: (${latitude.toFixed(2)}, ${longitude.toFixed(2)})`);
+      // Invalidate caches for both old and new locations before updating
+      const oldNearbyKey = `nearby_${DataCache._roundCoord(userLocation.lat)}_${DataCache._roundCoord(userLocation.lon)}`;
+      DataCache.invalidate(oldNearbyKey);
+      userLocation = { lat: latitude, lon: longitude };
+      // Invalidate weather cache keys for the new location too (they'll be fetched fresh)
+      const newWeatherKey = `hasw_cache_${weatherAqiCacheKey(latitude, longitude)}`;
+      DataCache.invalidate(newWeatherKey);
+      console.log('[Geolocation] ✓ Location updated — caches invalidated');
+      return true;
     }
+
+    console.log('[Geolocation] ✓ Position unchanged');
+  } catch (err) {
+    // Geolocation error — just log it, don't update location
+    console.warn('[Geolocation] ✗ Check failed:', err.message);
   }
+  return false;
+}
+
+/**
+ * Calculate the elapsed time since the cached IP location entry was created.
+ * Returns null if there's no valid cache entry.
+ */
+function getIpLocationElapsed() {
+  const raw = localStorage.getItem('hasw_cache_ip_location');
+  if (!raw) return null;
+  try {
+    const entry = JSON.parse(raw);
+    if (entry.type !== 'ipLocation') return null;
+    return Date.now() - entry.timestamp;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Stop the background IP location validation timer.
+ */
+function stopIpLocationRefresh() {
+  if (_ipLocationRefreshTimer) {
+    console.log('[Location] Stopping IP validation timer');
+    clearInterval(_ipLocationRefreshTimer);
+    _ipLocationRefreshTimer = null;
+  }
+}
+
+/**
+ * Start the background IP location validation timer.
+ * Periodically checks if the user's IP/location has changed since it was cached.
+ * Interval is based on elapsed time since the cache was created, capped so it never
+ * exceeds a reasonable maximum (60 minutes). This ensures validation happens even when
+ * the cache is fresh — we don't want to wait hours before detecting an IP change.
+ */
+function startIpLocationRefresh() {
+  stopIpLocationRefresh();
+
+  // Only start if we have a valid userLocation
+  if (!userLocation) {
+    console.log('[Location] Cannot start IP validation — no user location');
+    return;
+  }
+
+  const elapsed = getIpLocationElapsed();
+  let interval;
+
+  if (elapsed != null && elapsed > 0) {
+    // Start validating after 15 minutes from cache creation, then increase frequency
+    // as the cache ages — but cap at 60 minutes max interval.
+    // After 30 min: validate every 30 min, after 60 min: every hour, etc.
+    const ipLocationTTL = DataCache.TTL.ipLocation || 24 * 60 * 60 * 1000;
+    const timeSinceCache = elapsed / ipLocationTTL; // fraction of TTL elapsed
+
+    if (timeSinceCache < 0.1) {
+      // Less than 10% of TTL — validate every 15 minutes
+      interval = 15 * 60 * 1000;
+    } else if (timeSinceCache < 0.3) {
+      // 10-30% of TTL — validate every 20 minutes
+      interval = 20 * 60 * 1000;
+    } else if (timeSinceCache < 0.5) {
+      // 30-50% of TTL — validate every 30 minutes
+      interval = 30 * 60 * 1000;
+    } else if (timeSinceCache < 0.8) {
+      // 50-80% of TTL — validate every hour
+      interval = 60 * 60 * 1000;
+    } else {
+      // Over 80% of TTL — validate every 30 minutes (cache is about to expire)
+      interval = 30 * 60 * 1000;
+    }
+    console.log(`[Location] ✓ IP validation timer started — every ${Math.round(interval / 1000)}s (elapsed: ${Math.round(elapsed / 60000)} min of TTL)`);
+  } else {
+    // No valid cache entry — validate frequently
+    interval = MIN_BACKGROUND_REFRESH_MS;
+    console.log(`[Location] ✓ IP validation timer started — every ${Math.round(interval / 1000)}s (no cache TTL, using minimum)`);
+  }
+
+  _ipLocationRefreshTimer = setInterval(async () => {
+    const locationChanged = await validateIpLocation();
+    if (locationChanged) {
+      console.log('[Location] ⚠️ IP location validation failed — invalidating cache and forcing refresh');
+      // Invalidate the cached IP location so next getLocation() call re-fetches
+      DataCache.invalidate('ip_location');
+      DataCache.invalidate('ip_address');
+      userLocation = null;
+    }
+    // Recalculate interval based on current elapsed time after each validation
+    const newElapsed = getIpLocationElapsed();
+    if (newElapsed != null && newElapsed > 0) {
+      const newTTL = DataCache.TTL.ipLocation || 24 * 60 * 60 * 1000;
+      const newTimeSinceCache = newElapsed / newTTL;
+
+      let newInterval;
+      if (newTimeSinceCache < 0.1) newInterval = 15 * 60 * 1000;
+      else if (newTimeSinceCache < 0.3) newInterval = 20 * 60 * 1000;
+      else if (newTimeSinceCache < 0.5) newInterval = 30 * 60 * 1000;
+      else newInterval = 60 * 60 * 1000;
+
+      // Only restart timer if interval changed significantly (> 25% difference)
+      if (Math.abs(newInterval - interval) / interval > 0.25) {
+        clearInterval(_ipLocationRefreshTimer);
+        interval = newInterval;
+        _ipLocationRefreshTimer = setInterval(arguments.callee, interval);
+      }
+    }
+  }, interval);
+}
+
+/**
+ * Stop the background geolocation refresh timer.
+ */
+function stopGeolocationRefresh() {
+  if (_geolocationRefreshTimer) {
+    console.log('[Geolocation] Stopping background refresh timer');
+    clearInterval(_geolocationRefreshTimer);
+    _geolocationRefreshTimer = null;
+  }
+}
+
+/**
+ * Start the background geolocation refresh timer.
+ * Periodically checks if the user's browser location has changed significantly.
+ * Interval is based on elapsed time since the cache was created, capped at 5 minutes.
+ */
+function startGeolocationRefresh() {
+  stopGeolocationRefresh();
+
+  // Only start if we have a valid userLocation
+  if (!userLocation) {
+    console.log('[Geolocation] Cannot start background refresh — no user location');
+    return;
+  }
+
+  const elapsed = getIpLocationElapsed();
+  let interval;
+
+  if (elapsed != null && elapsed > 0) {
+    // Start checking every 5 minutes from cache creation, decreasing frequency as
+    // the cache ages — but never less than 15 minutes.
+    const ipLocationTTL = DataCache.TTL.ipLocation || 24 * 60 * 60 * 1000;
+    const timeSinceCache = elapsed / ipLocationTTL;
+
+    if (timeSinceCache < 0.1) {
+      // Less than 10% of TTL — check every 5 minutes
+      interval = 5 * 60 * 1000;
+    } else if (timeSinceCache < 0.3) {
+      // 10-30% of TTL — check every 8 minutes
+      interval = 8 * 60 * 1000;
+    } else if (timeSinceCache < 0.5) {
+      // 30-50% of TTL — check every 10 minutes
+      interval = 10 * 60 * 1000;
+    } else if (timeSinceCache < 0.8) {
+      // 50-80% of TTL — check every 15 minutes
+      interval = 15 * 60 * 1000;
+    } else {
+      // Over 80% of TTL — check every 10 minutes (cache is about to expire)
+      interval = 10 * 60 * 1000;
+    }
+    console.log(`[Geolocation] ✓ Background refresh timer started — every ${Math.round(interval / 1000)}s (elapsed: ${Math.round(elapsed / 60000)} min of TTL)`);
+  } else {
+    // No valid cache entry — check frequently
+    interval = MIN_BACKGROUND_REFRESH_MS;
+    console.log(`[Geolocation] ✓ Background refresh timer started — every ${Math.round(interval / 1000)}s (no cache TTL, using minimum)`);
+  }
+
+  _geolocationRefreshTimer = setInterval(async () => {
+    const positionChanged = await checkGeolocationChange();
+    if (positionChanged) {
+      console.log('[Geolocation] ⚠️ Position changed — invalidating location cache, forcing refresh');
+      // Re-fetch weather data for the new location
+      DataCache.invalidate('ip_location');
+      DataCache.invalidate('ip_address');
+    }
+    // Recalculate interval based on current elapsed time after each check
+    const newElapsed = getIpLocationElapsed();
+    if (newElapsed != null && newElapsed > 0) {
+      const newTTL = DataCache.TTL.ipLocation || 24 * 60 * 60 * 1000;
+      const newTimeSinceCache = newElapsed / newTTL;
+
+      let newInterval;
+      if (newTimeSinceCache < 0.1) newInterval = 5 * 60 * 1000;
+      else if (newTimeSinceCache < 0.3) newInterval = 8 * 60 * 1000;
+      else if (newTimeSinceCache < 0.5) newInterval = 10 * 60 * 1000;
+      else if (newTimeSinceCache < 0.8) newInterval = 15 * 60 * 1000;
+      else newInterval = 10 * 60 * 1000;
+
+      // Only restart timer if interval changed significantly (> 25% difference)
+      if (Math.abs(newInterval - interval) / interval > 0.25) {
+        clearInterval(_geolocationRefreshTimer);
+        interval = newInterval;
+        _geolocationRefreshTimer = setInterval(arguments.callee, interval);
+      }
+    }
+  }, interval);
+}
+
+/**
+ * Stop all background location refresh timers.
+ */
+function stopAllLocationRefresh() {
+  console.log('[Location] Stopping all location timers');
+  stopIpLocationRefresh();
+  stopGeolocationRefresh();
 }
 
 // — NWS Bounds Check —
@@ -3790,18 +4138,25 @@ function stopBackgroundRefresh() {
     _bgRefreshTimer = null;
   }
   _bgRefreshGen++;
+  // Also stop location timers when background refresh stops
+  stopAllLocationRefresh();
 }
 
 function startBackgroundRefresh() {
   // Capture the generation before any concurrent calls
   const gen = _bgRefreshGen;
 
-  // Stop any existing timer first
+  // Stop any existing timer first (also stops location timers)
   stopBackgroundRefresh();
 
-  // Guard: don't start if no weather data
+  // Guard: don't start if no weather data — but keep location timers running if we have a userLocation
   if (!weatherData || weatherData.length === 0) {
     console.log('[BackgroundRefresh] No weather data, skipping');
+    // Restart location timers since they were stopped above
+    if (userLocation) {
+      startIpLocationRefresh();
+      startGeolocationRefresh();
+    }
     return;
   }
 
@@ -3862,10 +4217,11 @@ async function refresh() {
   btn.classList.add('spinning');
   btn.disabled = true;
 
-  // Stop existing background timer before re-fetching
+  // Stop existing background timers before re-fetching
   stopBackgroundRefresh();
 
   DataCache.invalidate('ip_location');
+  DataCache.invalidate('ip_address');
   _nearbyCache = null;
   _nearbyCacheTime = 0;
   if (userLocation) {
@@ -4817,6 +5173,10 @@ async function findNearbyCities(lat, lon) {
 
 const NWS_USER_AGENT = 'hasWeather/1.0 (https://github.com/Yonneh0/hasWeather)';
 
+// ===== Pending Request Tracker =====
+// Prevents duplicate /points/ requests when multiple parallel calls hit the same cache key simultaneously.
+const _nwsPendingRequests = new Map();
+
 // ===== NWS Fetch Configuration =====
 const NWS_FETCH_TIMEOUT_MS = 10000;
 const NWS_RATE_LIMIT_RETRIES = 3;
@@ -4983,30 +5343,52 @@ async function nwsFetch(url, maxRetries = 3) {
 // Step 1: Resolve a lat/lon to a WFO grid
 async function resolvePoint(lat, lon) {
   const cacheKey = nwsPointCacheKey(lat, lon);
+  
+  // Check cache first — if it exists, return immediately
   const cached = DataCache.get(cacheKey, 'nwsPoint');
   if (cached) return cached;
 
+  // Check for a pending request with the same cache key — if one exists, wait for it
+  const existingPending = _nwsPendingRequests.get(cacheKey);
+  if (existingPending) {
+    // Pending request will populate the cache when it resolves
+    return existingPending;
+  }
+
+  // Create and track a new pending request
   const url = `${NWS_API}/points/${lat},${lon}`;
-  const data = await nwsFetch(url);
+  const pending = (async () => {
+    const data = await nwsFetch(url);
 
-  const props = data?.properties || {};
-  const result = {
-    wfo: props.gridId || props.cwa,
-    gridX: props.gridX,
-    gridY: props.gridY,
-    forecastZone: props.forecastZone,
-    county: props.county,
-    fireWeatherZone: props.fireWeatherZone,
-    timeZone: props.timeZone,
-    radarStation: props.radarStation,
-    observationStations: props.observationStations,
-    forecast: props.forecast,
-    forecastHourly: props.forecastHourly,
-    forecastGridData: props.forecastGridData,
-  };
+    const props = data?.properties || {};
+    const result = {
+      wfo: props.gridId || props.cwa,
+      gridX: props.gridX,
+      gridY: props.gridY,
+      forecastZone: props.forecastZone,
+      county: props.county,
+      fireWeatherZone: props.fireWeatherZone,
+      timeZone: props.timeZone,
+      radarStation: props.radarStation,
+      observationStations: props.observationStations,
+      forecast: props.forecast,
+      forecastHourly: props.forecastHourly,
+      forecastGridData: props.forecastGridData,
+    };
 
-  DataCache.set(cacheKey, result, 'nwsPoint');
-  return result;
+    DataCache.set(cacheKey, result, 'nwsPoint');
+    return result;
+  })();
+
+  _nwsPendingRequests.set(cacheKey, pending);
+
+  try {
+    const result = await pending;
+    return result;
+  } finally {
+    // Clean up the pending entry after it resolves (whether success or failure)
+    _nwsPendingRequests.delete(cacheKey);
+  }
 }
 
 // Step 2: Fetch 12-hour forecast
@@ -10927,43 +11309,19 @@ async function run(isBackground = false) {
       }
     }
 
-    // Check NWS bounds and fetch NWS data where available — all in parallel
+    // Fetch NWS data for cities in the US — resolvePoint handles bounds check internally
     if (weatherData.length > 0) {
-      const boundsPromises = weatherData.map(async (city) => {
-        if (city.latitude != null && city.longitude != null &&
-            city.latitude >= 17 && city.latitude <= 71 &&
-            city.longitude >= -170 && city.longitude <= -65) {
-          try {
-            const inBounds = await isNwsBoundsAvailable(city.latitude, city.longitude);
-            return { city, nwsBounds: inBounds };
-          } catch (err) {
-            console.warn(`[NWS bounds] ${city.name} (${city.latitude},${city.longitude}): ${err.message}`);
-            return { city, nwsBounds: false };
-          }
-        }
-        return { city, nwsBounds: false };
-      });
-      
-      const boundsResults = await Promise.all(boundsPromises);
-      for (const { city, nwsBounds } of boundsResults) {
-        city.nwsBounds = nwsBounds;
-      }
-      
-      const nwsCities = weatherData.filter(c => c.nwsBounds);
+      const nwsResults = await Promise.allSettled(
+        weatherData.map(city => fetchForCity(city.latitude, city.longitude).catch(() => null))
+      );
 
-      if (nwsCities.length > 0) {
-        const nwsResults = await Promise.allSettled(
-          nwsCities.map(city => fetchForCity(city.latitude, city.longitude).catch(() => null))
-        );
-
-        for (let i = 0; i < nwsCities.length; i++) {
-          const city = nwsCities[i];
-          const result = nwsResults[i];
-          if (result.status === 'fulfilled' && result.value && result.value.current) {
-            const nwsAppData = nwsToAppData(city, result.value);
-            if (nwsAppData) {
-              city.nwsData = nwsAppData;
-            }
+      for (let i = 0; i < weatherData.length; i++) {
+        const city = weatherData[i];
+        const result = nwsResults[i];
+        if (result.status === 'fulfilled' && result.value && result.value.current) {
+          const nwsAppData = nwsToAppData(city, result.value);
+          if (nwsAppData) {
+            city.nwsData = nwsAppData;
           }
         }
       }
@@ -10982,8 +11340,10 @@ async function run(isBackground = false) {
       }
     }
 
-    // Start periodic background refresh of weather data
+    // Start periodic background refresh of weather data AND location
     startBackgroundRefresh();
+    startIpLocationRefresh();
+    startGeolocationRefresh();
   } finally {
     if (!isBackground) _runPending = false;
   }
@@ -11101,6 +11461,10 @@ function startRadarUpdates(lat, lon) {
   }
 
   // Radar refresh interval: 80% of the radar TTL, minimum 2 minutes
+  if (shortestTTL === Infinity) {
+    console.log('[Radar] No TTL data available, skipping background updates');
+    return;
+  }
   const interval = Math.max(2 * 60 * 1000, shortestTTL * BACKGROUND_REFRESH_FRACTION);
   _radarUpdateTimer = setInterval(() => refreshRadarBackground(lat, lon), interval);
 
@@ -11154,35 +11518,8 @@ function loadRadarOverlaySelect(lat, lon) {
     }
   });
 
-  // Also fetch and add discovered overlays from GetCapabilities
-  if (!_radarOptionsLoaded) {
-    window.fetchAvailableRadarLayers(lat, lon).then(layers => {
-      _radarOptionsLoaded = true;
-      const existingOpts = new Set();
-      sel.querySelectorAll('option').forEach(o => existingOpts.add(o.value));
-
-      for (const layer of layers) {
-        // Map WMS layer name to our key
-        let key = Object.keys(RADAR_LAYERS).find(k => RADAR_LAYERS[k].wmsLayer === layer.name);
-        if (!key && layer.name.startsWith('conus_')) {
-          // Generate a key for discovered layers
-          const shortName = layer.name.replace('conus_', '').replace('_qcd', '');
-          key = shortName;
-          RADAR_LAYERS[key] = { wmsLayer: layer.name, label: layer.label };
-        }
-
-        if (key && !existingOpts.has(key)) {
-          const opt = document.createElement('option');
-          opt.value = key;
-          opt.textContent = layer.label;
-          sel.appendChild(opt);
-        }
-      }
-
-      // Set the correct value after adding options
-      sel.value = _selectedRadarOverlay;
-    });
-  }
+  // Defer GetCapabilities until user interacts with combo box — no request on startup.
+  // Discovered layers are loaded later in applyRadarOverlaySelection when the user first opens the dropdown.
 
   sel.value = _selectedRadarOverlay;
 }
@@ -11209,6 +11546,10 @@ function applyRadarOverlaySelection(lat, lon) {
 
   // If switching FROM "None", start background updates and load image
   if (!isNowNone && wasNone) {
+    // Load discovered layers on first interaction with the combo box
+    if (!_radarOptionsLoaded && lat && lon) {
+      _loadDiscoveredRadarLayers(sel, lat, lon);
+    }
     loadRadarBackground(lat, lon);
     startRadarUpdates(lat, lon);
     return;
@@ -11216,6 +11557,37 @@ function applyRadarOverlaySelection(lat, lon) {
 
   // Same overlay type, just reload the image (don't restart timer)
   loadRadarBackground(lat, lon);
+}
+
+// Load discovered radar layers from GetCapabilities (deferred until user first interacts with combo box)
+async function _loadDiscoveredRadarLayers(sel, lat, lon) {
+  if (_radarOptionsLoaded) return;
+  try {
+    const layers = await window.fetchAvailableRadarLayers(lat, lon);
+    _radarOptionsLoaded = true;
+
+    // GetCapabilities is cached to localStorage with 50 min TTL — if it fails or times out,
+    // the predefined RADAR_LAYERS will still be used.
+    for (const layer of layers) {
+      // Map WMS layer name to our key
+      let key = Object.keys(RADAR_LAYERS).find(k => RADAR_LAYERS[k].wmsLayer === layer.name);
+      if (!key && layer.name.startsWith('conus_')) {
+        // Generate a key for discovered layers
+        const shortName = layer.name.replace('conus_', '').replace('_qcd', '');
+        key = shortName;
+        RADAR_LAYERS[key] = { wmsLayer: layer.name, label: layer.label };
+      }
+
+      if (key && !sel.querySelector(`option[value="${key}"]`)) {
+        const opt = document.createElement('option');
+        opt.value = key;
+        opt.textContent = layer.label;
+        sel.appendChild(opt);
+      }
+    }
+  } catch (e) {
+    console.warn('[Radar] Failed to load discovered layers:', e);
+  }
 }
 
 // ===== GAME TOGGLE =====
@@ -11514,6 +11886,31 @@ function onMarkerResize() {
     }
   }, 200);
 }
+
+// ===== NETWORK EVENT LISTENERS =====
+// Listen for network connectivity changes to restart location timers
+window.addEventListener('online', () => {
+  console.log('[Location] Network reconnected — restarting timers');
+  if (userLocation) {
+    startIpLocationRefresh();
+    startGeolocationRefresh();
+    // Also invalidate the cached IP so it gets validated fresh
+    DataCache.invalidate('ip_location');
+    DataCache.invalidate('ip_address');
+  }
+});
+
+window.addEventListener('offline', () => {
+  console.log('[Location] Network disconnected — stopping timers');
+  stopAllLocationRefresh();
+});
+
+// ===== PAGE UNLOAD HANDLER =====
+// Stop all background timers when the page unloads to prevent stale operations
+window.addEventListener('beforeunload', () => {
+  stopAllLocationRefresh();
+  stopBackgroundRefresh();
+});
 
 
 </script>
