@@ -5,14 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Half-Assed Solution: Donkey Runner</title>
 <style>
-/* ===== DONKEY RUNNER MINIGAME ===== */
-.donkey-panel {
+/* ===== ABOUT PANEL — VT100 TERMINAL STYLE ===== */
+
+.about-panel {
   position: fixed;
-  top: 80px;
+  top: 64px;
   left: 50%;
   transform: translateX(-50%);
-  width: 640px;
-  max-width: 95vw;
+  width: 780px;
+  max-width: 92vw;
   z-index: 200;
   background: rgba(255, 255, 255, 0.04);
   backdrop-filter: blur(20px) saturate(150%);
@@ -20,36 +21,48 @@
   border-radius: 16px;
   overflow: hidden;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 60px rgba(100, 200, 100, 0.05);
-  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease, top 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease, top 0.35s cubic-bezier(0.16, 1, 0.3, 1);
   transform-origin: top center;
-  will-change: transform, opacity;
 }
 
-.donkey-panel.donkey-visible {
-  top: 80px;
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.donkey-panel.donkey-hidden {
-  top: -200px;
+.about-panel.about-hidden {
+  top: -400px;
   opacity: 0;
   pointer-events: none;
 }
 
-/* Header - full width titlebar with scores */
-.donkey-panel-header {
+.about-panel.about-visible {
+  top: 64px;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Header - full width titlebar with close button */
+.about-panel-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0.5rem 0.8rem;
-  background: rgba(0, 0, 0, 0.35);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(20px) saturate(150%);
+  border-bottom: 1px solid rgba(51, 255, 51, 0.2);
   gap: 0.6rem;
 }
 
-/* Touch-friendly buttons */
-.donkey-panel-header button {
+/* Title (center) — matches donkey-title styling */
+.about-title {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: rgba(51, 255, 51, 0.6);
+  letter-spacing: 0.05em;
+  text-align: center;
+  white-space: nowrap;
+  flex: 1;
+  flex-shrink: 0;
+  text-shadow: 0 0 8px rgba(51, 255, 51, 0.2);
+}
+
+.about-close-btn {
   background: rgba(255, 255, 255, 0.1);
   border: 2px solid rgba(255, 255, 255, 0.2);
   color: rgba(255, 255, 255, 0.85);
@@ -65,88 +78,30 @@
   flex-shrink: 0;
 }
 
-.donkey-panel-header button:hover {
+.about-close-btn:hover {
   background: rgba(255, 255, 255, 0.2);
   color: #fff;
   border-color: rgba(255, 255, 255, 0.35);
 }
 
-.donkey-panel-header button:active {
+.about-close-btn:active {
   background: rgba(255, 255, 255, 0.3);
 }
 
-.donkey-close-btn {
-  font-size: 1.1rem;
-  font-weight: 700;
-}
-
-.donkey-close-btn:hover {
+.about-close-btn:hover {
   background: rgba(239, 68, 68, 0.25);
   border-color: rgba(239, 68, 68, 0.5);
   color: #ef4444;
 }
 
-/* Score section (left side) */
-.donkey-header-score {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  flex: 1;
-  min-width: 0;
-}
-
-/* Score display - 7-segment look */
-.donkey-score {
-  font-size: 1.8rem;
-  font-weight: 900;
-  color: #ffffff;
-  letter-spacing: 0.08em;
-  line-height: 1.1;
-  text-shadow:
-    0 0 8px rgba(255, 255, 255, 0.3),
-    0 2px 4px rgba(0, 0, 0, 0.5);
-  font-family: 'Courier New', 'Lucida Console', monospace;
-}
-
-/* Title (center) */
-.donkey-title {
-  font-size: 0.7rem;
-  font-weight: 700;
-  color: rgba(255, 255, 255, 0.6);
-  letter-spacing: 0.05em;
-  text-align: center;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-/* High score section (right side) */
-.donkey-header-highscore {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  flex: 1;
-  min-width: 0;
-}
-
-/* High score display */
-.donkey-highscore {
-  font-size: 1.2rem;
-  font-weight: 700;
-  color: rgba(255, 255, 255, 0.6);
-  letter-spacing: 0.08em;
-  line-height: 1.1;
-  font-family: 'Courier New', 'Lucida Console', monospace;
-  text-shadow: 0 0 6px rgba(255, 255, 255, 0.1);
-}
-
-/* Body */
-.donkey-panel-body {
+/* Body — matches donkey-runner transparency */
+.about-panel-body {
   padding: 0.3rem 0.8rem 0.8rem;
   position: relative;
 }
 
-/* Scanline overlay — same style as about panel */
-.donkey-panel-body::before {
+/* Scanline overlay (body level, like donkey) */
+.about-panel-body::before {
   content: '';
   position: absolute;
   inset: 0;
@@ -161,718 +116,288 @@
   z-index: 1;
 }
 
-/* Sound toggle button - muted state (inherits header button base styles) */
-.donkey-sound-btn.muted {
-  color: rgba(255, 255, 255, 0.35);
-  opacity: 0.65;
-}
-
-/* Play area — canvas + overlays, positioned relative */
-.donkey-play-area {
+/* Inner panel — darker, more opaque container behind VT100 content (no rounded corners, matching donkey play area) */
+.about-inner-panel {
   position: relative;
-  width: 100%;
-  height: 180px;
-  overflow: hidden;
+  max-height: calc(100vh - 200px);
+  overflow-y: auto;
+  background: rgba(0, 20, 0, 0.65);
+  border: none;
+  border-radius: 0;
+  padding: 1.2rem 1.4rem;
+  z-index: 2;
 }
 
-/* Canvas inside play area */
-#donkey-canvas {
-  width: 100%;
-  height: 100%;
-  display: block;
-  cursor: pointer;
+/* Content area — the VT100 terminal panel */
+.about-panel-content {
+  position: relative;
+  color: #33ff33;
+  font-family: 'Courier New', 'Lucida Console', 'Consolas', monospace;
+  font-size: 0.85rem;
+  line-height: 1.65;
+  padding: 1.2rem 1.4rem;
+  text-shadow: 0 0 8px rgba(51, 255, 51, 0.35), 0 0 2px rgba(51, 255, 51, 0.2);
 }
 
-#donkey-canvas:hover {
-  box-shadow:
-    0 0 15px rgba(100, 200, 100, 0.15),
-    inset 0 0 15px rgba(100, 200, 100, 0.03);
-  border-color: rgba(100, 200, 100, 0.25);
-}
-
-/* Start screen overlay (canvas area only, centered) */
-.donkey-startscreen {
+/* Scanline overlay */
+.about-inner-panel::before {
+  content: '';
   position: absolute;
   inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  background: rgba(10, 14, 24, 0.88);
-  z-index: 5;
-  padding: 1.2rem;
-  text-align: center;
-  transition: opacity 0.25s ease, transform 0.25s ease;
-}
-
-.donkey-startscreen.hidden {
-  opacity: 0;
   pointer-events: none;
-  transform: scale(1.05);
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0px,
+    transparent 2px,
+    rgba(0, 0, 0, 0.15) 2px,
+    rgba(0, 0, 0, 0.15) 4px
+  );
+  z-index: 1;
 }
 
-.ds-subtitle {
-  font-size: 0.65rem;
-  color: rgba(255, 255, 255, 0.3);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  margin-bottom: 0.6rem;
+/* Inner glow border */
+.about-inner-panel::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 60px rgba(51, 255, 51, 0.04), inset 0 0 120px rgba(51, 255, 51, 0.02);
+  z-index: 1;
 }
 
-.ds-objective {
-  font-size: 0.65rem;
-  color: rgba(255, 255, 255, 0.25);
-  line-height: 1.6;
-  margin: 0 auto 1rem;
-  text-align: center;
+/* Scrollbar */
+.about-inner-panel::-webkit-scrollbar {
+  width: 10px;
 }
 
-.ds-highscore {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.3rem;
-  margin-bottom: 1rem;
-  padding: 0.4rem 0.8rem;
-  background: rgba(255, 255, 255, 0.04);
-  border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+.about-inner-panel::-webkit-scrollbar-track {
+  background: rgba(0, 30, 0, 0.5);
+  border-left: 1px solid rgba(51, 255, 51, 0.15);
 }
 
-.ds-highscore-label {
-  font-size: 0.6rem;
-  font-weight: 700;
-  color: rgba(255, 255, 255, 0.3);
-  letter-spacing: 0.1em;
+.about-inner-panel::-webkit-scrollbar-thumb {
+  background: rgba(51, 255, 51, 0.3);
+  border-radius: 5px;
+  border: 1px solid rgba(51, 255, 51, 0.15);
 }
 
-.ds-highscore-val {
-  font-size: 0.9rem;
+.about-inner-panel::-webkit-scrollbar-thumb:hover {
+  background: rgba(51, 255, 51, 0.5);
+}
+
+/* Headings */
+.about-inner-panel h1 {
+  color: #33ff33;
+  font-size: 1.6rem;
   font-weight: 900;
-  color: rgba(255, 255, 255, 0.6);
-  letter-spacing: 0.08em;
-  font-family: 'Courier New', 'Lucida Console', monospace;
-  text-shadow: 0 0 6px rgba(255, 255, 255, 0.1);
+  letter-spacing: 0.06em;
+  margin: 0 0 0.8rem 0;
+  text-shadow: 0 0 12px rgba(51, 255, 51, 0.6), 0 0 24px rgba(51, 255, 51, 0.3);
+  border-bottom: 1px solid rgba(51, 255, 51, 0.25);
+  padding-bottom: 0.4rem;
 }
 
-.ds-controls {
-  margin-bottom: 0.7rem;
+.about-inner-panel h2 {
+  color: #33ff33;
+  font-size: 1.25rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  margin: 1.4rem 0 0.6rem 0;
+  text-shadow: 0 0 10px rgba(51, 255, 51, 0.5), 0 0 20px rgba(51, 255, 51, 0.25);
 }
 
-.ds-ctrl-row {
-  font-size: 0.7rem;
-  color: rgba(255, 255, 255, 0.4);
-  margin-bottom: 0.25rem;
-  letter-spacing: 0.03em;
+.about-inner-panel h3 {
+  color: #44ff44;
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin: 1rem 0 0.5rem 0;
+  text-shadow: 0 0 8px rgba(51, 255, 51, 0.4);
 }
 
-.ds-ctrl-row kbd {
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+.about-inner-panel h4,
+.about-inner-panel h5,
+.about-inner-panel h6 {
+  color: #55ff55;
+  font-size: 0.95rem;
+  font-weight: 700;
+  margin: 0.8rem 0 0.4rem 0;
+  text-shadow: 0 0 6px rgba(51, 255, 51, 0.3);
+}
+
+/* Paragraphs */
+.about-inner-panel p {
+  margin: 0 0 0.7rem 0;
+  color: #33ff33;
+  text-shadow: 0 0 6px rgba(51, 255, 51, 0.25);
+}
+
+/* Links */
+.about-inner-panel a {
+  color: #66ff66;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-shadow: 0 0 8px rgba(51, 255, 51, 0.4);
+}
+
+.about-inner-panel a:hover {
+  color: #99ff99;
+  text-shadow: 0 0 12px rgba(51, 255, 51, 0.6);
+}
+
+/* Emphasis / italic */
+.about-inner-panel em,
+.about-inner-panel i {
+  color: #88ff88;
+  font-style: italic;
+}
+
+/* Bold */
+.about-inner-panel strong,
+.about-inner-panel b {
+  color: #66ff66;
+  text-shadow: 0 0 8px rgba(51, 255, 51, 0.4);
+}
+
+/* Unordered lists */
+.about-inner-panel ul {
+  margin: 0.4rem 0 0.8rem 0;
+  padding-left: 1.4rem;
+}
+
+.about-inner-panel li {
+  margin-bottom: 0.35rem;
+  color: #33ff33;
+  text-shadow: 0 0 6px rgba(51, 255, 51, 0.2);
+}
+
+.about-inner-panel li::marker {
+  color: #44ff44;
+}
+
+/* Ordered lists */
+.about-inner-panel ol {
+  margin: 0.4rem 0 0.8rem 0;
+  padding-left: 1.6rem;
+}
+
+.about-inner-panel ol li {
+  margin-bottom: 0.35rem;
+  color: #33ff33;
+}
+
+/* Code */
+.about-inner-panel code {
+  background: rgba(0, 40, 0, 0.6);
+  border: 1px solid rgba(51, 255, 51, 0.2);
+  color: #66ff66;
+  padding: 0.1rem 0.35rem;
   border-radius: 3px;
-  padding: 1px 5px;
   font-family: 'Courier New', monospace;
-  font-size: 0.65rem;
-  color: rgba(255, 255, 255, 0.55);
+  font-size: 0.82rem;
+  text-shadow: 0 0 6px rgba(51, 255, 51, 0.4);
 }
 
-.ds-prompt {
-  font-size: 0.7rem;
-  color: rgba(255, 255, 255, 0.35);
-  animation: startPromptBlink 1.8s ease-in-out infinite;
-  letter-spacing: 0.04em;
-}
-
-@keyframes startPromptBlink {
-  0%, 100% { opacity: 0.3; }
-  50% { opacity: 0.7; }
-}
-
-/* Game over overlay (canvas area only) */
-.donkey-gameover {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  background: rgba(5, 8, 16, 0.85);
-  backdrop-filter: blur(3px);
-  z-index: 10;
-  transition: opacity 0.2s ease;
-}
-
-.donkey-gameover.hidden {
-  opacity: 0;
-  pointer-events: none;
-}
-
-/* GAME OVER title — the hero of the panel, big and dramatic */
-.donkey-gameover-text {
-  font-size: 2.8rem;
-  font-weight: 900;
-  letter-spacing: 0.22em;
-  color: #e05555;
-  margin-bottom: 0.3rem;
-  font-family: 'Courier New', monospace;
-  text-shadow: 0 0 20px rgba(224, 85, 85, 0.6), 0 0 40px rgba(224, 85, 85, 0.3), 0 0 60px rgba(224, 85, 85, 0.15);
-  animation: gameoverShake 0.6s cubic-bezier(0.36, 0.07, 0.19, 0.97) both, gameoverPulse 2.5s ease-in-out 0.6s infinite;
-}
-
-@keyframes gameoverShake {
-  0% { transform: scale(2) translateY(-20px); opacity: 0; }
-  20% { transform: scale(1.4) translateY(5px); opacity: 0.8; }
-  40% { transform: scale(1.1) translateY(-3px); opacity: 1; }
-  60% { transform: scale(1.02) translateY(1px); }
-  80% { transform: scale(0.99) translateY(-1px); }
-  100% { transform: scale(1) translateY(0); }
-}
-
-@keyframes gameoverPulse {
-  0%, 100% { text-shadow: 0 0 20px rgba(224, 85, 85, 0.6), 0 0 40px rgba(224, 85, 85, 0.3), 0 0 60px rgba(224, 85, 85, 0.15); }
-  50% { text-shadow: 0 0 30px rgba(224, 85, 85, 0.8), 0 0 50px rgba(224, 85, 85, 0.4), 0 0 80px rgba(224, 85, 85, 0.2); }
-}
-
-/* Score — prominent but not overpowering the GAME OVER text */
-.donkey-gameover-score {
-  font-size: 1.2rem;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  color: rgba(255, 255, 255, 0.6);
-  margin-bottom: 0.6rem;
-  font-family: 'Courier New', 'Lucida Console', monospace;
-  text-shadow: 0 0 10px rgba(255, 255, 255, 0.2);
-}
-
-/* New high score badge — clean, compact */
-.donkey-gameover-new {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  margin-bottom: 0.5rem;
-  padding: 0.15rem 0.5rem;
-  background: linear-gradient(135deg, rgba(74, 222, 128, 0.15), rgba(74, 222, 128, 0.08));
-  border: 1px solid rgba(74, 222, 128, 0.3);
-  border-radius: 20px;
-  font-size: 0.6rem;
-  font-weight: 800;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
-  color: #4ade80;
-  animation: newBadgePulse 1.5s ease-in-out 0.6s infinite;
-}
-
-.donkey-gameover-new.hidden {
-  display: none;
-}
-
-.donkey-gameover-new-label {
-  letter-spacing: 0.12em;
-}
-
-.donkey-gameover-new-score {
-  font-size: 0.75rem;
-  font-weight: 900;
-  letter-spacing: 0.08em;
-  color: #4ade80;
-  font-family: 'Courier New', monospace;
-  text-shadow: 0 0 8px rgba(74, 222, 128, 0.4);
-}
-
-@keyframes newBadgePulse {
-  0%, 100% { box-shadow: 0 0 8px rgba(74, 222, 128, 0.1); }
-  50% { box-shadow: 0 0 16px rgba(74, 222, 128, 0.25); }
-}
-
-/* Corner stat blocks — compact, no overlap with center heroes */
-.donkey-gameover-stats-top-left,
-.donkey-gameover-stats-top-right,
-.donkey-gameover-stats-bottom-left,
-.donkey-gameover-stats-bottom-right {
-  position: absolute;
-  display: flex;
-  flex-direction: column;
-  gap: 0.12rem;
-  padding: 0.25rem 0.4rem;
-  background: rgba(255, 255, 255, 0.02);
+/* Code blocks */
+.about-inner-panel pre {
+  background: rgba(0, 25, 0, 0.7);
+  border: 1px solid rgba(51, 255, 51, 0.2);
   border-radius: 4px;
+  padding: 0.8rem 1rem;
+  margin: 0.6rem 0 1rem 0;
+  overflow-x: auto;
+  text-shadow: 0 0 6px rgba(51, 255, 51, 0.3);
 }
 
-.donkey-gameover-stats-top-left {
-  left: 8px;
-  top: 8px;
+.about-inner-panel pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 0.8rem;
+  line-height: 1.55;
+  color: #44ff44;
 }
 
-.donkey-gameover-stats-top-right {
-  right: 8px;
-  top: 8px;
+/* Tables */
+.about-inner-panel table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.8rem 0 1rem 0;
+  border: 1px solid rgba(51, 255, 51, 0.2);
 }
 
-.donkey-gameover-stats-bottom-left {
-  left: 8px;
-  bottom: 8px;
-}
-
-.donkey-gameover-stats-bottom-right {
-  right: 8px;
-  bottom: 8px;
-}
-
-/* Corner stat row */
-.donkey-gameover-stat-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 0.4rem;
-  line-height: 1.1;
-}
-
-/* Corner stat label — right-aligned for left blocks, left-aligned for right blocks */
-.donkey-gameover-stat-label {
-  font-size: 0.35rem;
+.about-inner-panel th {
+  background: rgba(51, 255, 51, 0.1);
+  color: #66ff66;
   font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.3);
-  flex-shrink: 0;
-  text-align: right;
-}
-
-.donkey-gameover-stats-top-right .donkey-gameover-stat-label,
-.donkey-gameover-stats-bottom-right .donkey-gameover-stat-label {
+  padding: 0.5rem 0.7rem;
   text-align: left;
+  border: 1px solid rgba(51, 255, 51, 0.2);
+  text-shadow: 0 0 6px rgba(51, 255, 51, 0.4);
 }
 
-.donkey-gameover-stat-value {
-  font-size: 0.55rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  color: rgba(255, 255, 255, 0.65);
-  font-family: 'Courier New', 'Lucida Console', monospace;
-  text-shadow: 0 0 6px rgba(255, 255, 255, 0.1);
-  flex-shrink: 0;
+.about-inner-panel td {
+  padding: 0.4rem 0.7rem;
+  border: 1px solid rgba(51, 255, 51, 0.15);
+  color: #33ff33;
+  text-shadow: 0 0 6px rgba(51, 255, 51, 0.2);
 }
 
-/* Restart text — the other hero, big and inviting */
-.donkey-restart-text {
-  font-size: 0.8rem;
-  color: rgba(255, 255, 255, 0.4);
-  animation: restartBlink 2s ease-in-out infinite;
-  letter-spacing: 0.08em;
-  margin-top: 0.5rem;
+.about-inner-panel tr:nth-child(even) {
+  background: rgba(51, 255, 51, 0.03);
 }
 
-@keyframes restartBlink {
-  0%, 100% { opacity: 0.3; transform: translateY(0); }
-  50% { opacity: 0.6; transform: translateY(-2px); }
+/* Horizontal rule */
+.about-inner-panel hr {
+  border: none;
+  border-top: 1px solid rgba(51, 255, 51, 0.2);
+  margin: 1rem 0;
 }
 
-/* Score milestone flash */
-@keyframes milestoneFlash {
-  0% { color: rgba(255, 255, 255, 0.9); }
-  30% { color: #4ade80; text-shadow: 0 0 12px rgba(74, 222, 128, 0.5); transform: scale(1.1); }
-  100% { color: rgba(255, 255, 255, 0.9); transform: scale(1); }
+/* Blockquote */
+.about-inner-panel blockquote {
+  margin: 0.6rem 0 1rem 1rem;
+  padding-left: 0.8rem;
+  border-left: 3px solid rgba(51, 255, 51, 0.3);
+  color: #44ff44;
 }
 
-.donkey-score.milestone-flash {
-  animation: milestoneFlash 0.3s ease-out;
+/* Line separator (---) */
+.about-inner-panel .line-sep {
+  border: none;
+  border-top: 1px dashed rgba(51, 255, 51, 0.3);
+  margin: 1rem 0;
 }
 
-/* Dumb Luck flash text overlay */
-.donkey-dumb-luck {
-  position: absolute;
-  top: 35%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  font-size: 1.2rem;
-  font-weight: 900;
-  font-family: 'Courier New', monospace;
-  letter-spacing: 0.2em;
-  color: #FFD700;
-  text-shadow: 0 0 15px rgba(255, 215, 0, 0.8), 0 0 30px rgba(255, 215, 0, 0.5), 0 0 45px rgba(255, 215, 0, 0.3);
-  z-index: 8;
-  pointer-events: none;
-  opacity: 0;
-  transition: none;
+/* Flicker animation for the panel */
+@keyframes aboutFlicker {
+  0%, 97%, 100% { opacity: 1; }
+  98% { opacity: 0.85; }
+  99% { opacity: 0.95; }
 }
 
-.donkey-dumb-luck.flash {
-  animation: dumbLuckFlash 0.8s ease-out forwards;
+.about-inner-panel {
+  animation: aboutFlicker 4s ease-in-out infinite;
 }
 
-@keyframes dumbLuckFlash {
-  0% { opacity: 1; transform: translate(-50%, -50%) scale(0.5); }
-  15% { opacity: 1; transform: translate(-50%, -50%) scale(1.4); }
-  30% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-  60% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-  100% { opacity: 0; transform: translate(-50%, -70%) scale(0.8); }
-}
-
-/* Near-miss flash text overlay */
-.donkey-near-miss {
-  position: absolute;
-  top: 40%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  font-size: 1rem;
-  font-weight: 900;
-  font-family: 'Courier New', monospace;
-  letter-spacing: 0.15em;
-  color: #4ade80;
-  text-shadow: 0 0 12px rgba(74, 222, 128, 0.6), 0 0 24px rgba(74, 222, 128, 0.3);
-  z-index: 8;
-  pointer-events: none;
-  opacity: 0;
-  transition: none;
-}
-
-.donkey-near-miss.flash {
-  animation: nearMissFlash 0.5s ease-out forwards;
-}
-
-@keyframes nearMissFlash {
-  0% { opacity: 1; transform: translate(-50%, -50%) scale(1.3); }
-  100% { opacity: 0; transform: translate(-50%, -70%) scale(0.8); }
-}
-
-/* Bonus text (e.g., +50 NEAR MISS) */
-.donkey-bonus-text {
-  position: absolute;
-  top: 50%;
-  left: 55%;
-  transform: translate(-50%, -50%);
-  font-size: 0.6rem;
-  font-weight: 700;
-  font-family: 'Courier New', monospace;
-  letter-spacing: 0.1em;
-  color: #f59e0b;
-  text-shadow: 0 0 8px rgba(245, 158, 11, 0.4);
-  z-index: 8;
-  pointer-events: none;
-  opacity: 0;
-}
-
-.donkey-bonus-text.flash {
-  animation: bonusFlash 0.7s ease-out forwards;
-}
-
-@keyframes bonusFlash {
-  0% { opacity: 1; transform: translate(-50%, -50%) translateY(0); }
-  100% { opacity: 0; transform: translate(-50%, -50%) translateY(-25px); }
-}
-
-/* Property damage bonus text animation — positioned at obstacle, green, prominent */
-.property-damage-bonus {
-  position: absolute;
-  font-size: 0.9rem;
-  font-weight: 900;
-  font-family: 'Courier New', monospace;
-  letter-spacing: 0.1em;
-  color: #4ade80;
-  text-shadow: 0 0 8px rgba(74, 222, 128, 0.8), 0 0 16px rgba(74, 222, 128, 0.4), 0 0 24px rgba(74, 222, 128, 0.2);
-  z-index: 9;
-  pointer-events: none;
-  opacity: 0;
-  transform: translate(-50%, -50%) scale(0.5);
-}
-
-.property-damage-bonus.active {
-  animation: propertyDamageBonusAnim 1.2s ease-out forwards;
-}
-
-@keyframes propertyDamageBonusAnim {
-  0% {
-    opacity: 1;
-    transform: translate(-50%, -50%) scale(0.5);
+/* Responsive */
+@media (max-width: 600px) {
+  .about-panel {
+    width: 96vw;
+    left: 2%;
+    transform: none;
   }
-  15% {
-    opacity: 1;
-    transform: translate(-50%, -50%) scale(1.4);
+
+  .about-inner-panel {
+    padding: 1rem;
   }
-  35% {
-    opacity: 1;
-    transform: translate(-50%, -50%) scale(1.1);
+
+  .about-inner-panel h1 {
+    font-size: 1.3rem;
   }
-  100% {
-    opacity: 0;
-    transform: translate(-50%, -50%) translateY(-40px) scale(0.6);
+
+  .about-inner-panel h2 {
+    font-size: 1.1rem;
   }
-}
-
-/* Speed lines overlay */
-.donkey-speed-lines {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 3;
-  opacity: 0;
-  transition: opacity 0.5s ease;
-}
-
-.donkey-speed-lines.visible {
-  opacity: 1;
-}
-
-/* ===== OBSTACLE COUNT TABLE ===== */
-.donkey-gameover-obstacle-table {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 4px;
-  padding: 0.3rem 0.5rem;
-  margin-bottom: 0.4rem;
-  width: 100%;
-}
-
-.obstacle-count-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.15rem;
-  padding: 0.2rem 0.35rem;
-  background: rgba(255, 255, 255, 0.04);
-  border-radius: 4px;
-  min-width: 40px;
-  transition: background 0.2s ease;
-}
-
-/* Obstacle icon styling */
-.obstacle-count-icon {
-  width: 28px;
-  height: 28px;
-  flex-shrink: 0;
-}
-
-.obstacle-count-icon svg {
-  width: 100%;
-  height: 100%;
-}
-
-.obstacle-count-item.obstacle-kill-highlight {
-  background: rgba(224, 85, 85, 0.25);
-  border: 1px solid rgba(224, 85, 85, 0.4);
-}
-
-.obstacle-count-label {
-  font-size: 0.3rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.35);
-  margin-bottom: 0.1rem;
-}
-
-.obstacle-count-item.obstacle-kill-highlight .obstacle-count-label {
-  color: rgba(224, 85, 85, 0.7);
-}
-
-.obstacle-count-value {
-  font-size: 0.55rem;
-  font-weight: 900;
-  letter-spacing: 0.06em;
-  color: rgba(255, 255, 255, 0.7);
-  font-family: 'Courier New', 'Lucida Console', monospace;
-  text-shadow: 0 0 6px rgba(255, 255, 255, 0.1);
-}
-
-.obstacle-count-item.obstacle-kill-highlight .obstacle-count-value {
-  color: #e05555;
-  text-shadow: 0 0 8px rgba(224, 85, 85, 0.4);
-}
-
-/* ===== SNARKY MESSAGE OVERLAY ===== */
-.donkey-snarky-message {
-  position: absolute;
-  top: 10px;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: 0.8rem;
-  font-weight: 800;
-  font-family: 'Courier New', 'Lucida Console', monospace;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  pointer-events: none;
-  opacity: 0;
-  transition: none;
-  z-index: 7;
-  text-shadow: 0 0 8px rgba(0, 0, 0, 0.5), 0 0 16px rgba(0, 0, 0, 0.3);
-  text-align: center;
-  white-space: nowrap;
-  max-width: 90%;
-}
-
-.donkey-snarky-message.active {
-  animation: snarkyMessageFlash 2s ease-out forwards;
-}
-
-@keyframes snarkyMessageFlash {
-  0% {
-    opacity: 1;
-    transform: translateX(-50%) scale(0.7);
-  }
-  15% {
-    opacity: 1;
-    transform: translateX(-50%) scale(1.15);
-  }
-  30% {
-    opacity: 1;
-    transform: translateX(-50%) scale(1);
-  }
-  70% {
-    opacity: 1;
-    transform: translateX(-50%) scale(1);
-  }
-  100% {
-    opacity: 0;
-    transform: translateX(-50%) scale(0.85);
-  }
-}
-
-/* Color variants for snarky messages */
-.donkey-snarky-message.snarky-green {
-  color: #4ade80;
-  text-shadow: 0 0 12px rgba(74, 222, 128, 0.6), 0 0 24px rgba(74, 222, 128, 0.3);
-}
-
-.donkey-snarky-message.snarky-red {
-  color: #e05555;
-  text-shadow: 0 0 12px rgba(224, 85, 85, 0.6), 0 0 24px rgba(224, 85, 85, 0.3);
-}
-
-.donkey-snarky-message.snarky-yellow {
-  color: #f59e0b;
-  text-shadow: 0 0 12px rgba(245, 158, 11, 0.6), 0 0 24px rgba(245, 158, 11, 0.3);
-}
-
-.donkey-snarky-message.snarky-blue {
-  color: #60a5fa;
-  text-shadow: 0 0 12px rgba(96, 165, 250, 0.6), 0 0 24px rgba(96, 165, 250, 0.3);
-}
-
-.donkey-snarky-message.snarky-orange {
-  color: #fb923c;
-  text-shadow: 0 0 12px rgba(251, 146, 60, 0.6), 0 0 24px rgba(251, 146, 60, 0.3);
-}
-
-.donkey-snarky-message.snarky-gold {
-  color: #FFD700;
-  text-shadow: 0 0 12px rgba(255, 215, 0, 0.6), 0 0 24px rgba(255, 215, 0, 0.3);
-}
-
-/* ===== LUCK METER ===== */
-.donkey-luck-meter {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 6px;
-  background: rgba(255, 255, 255, 0.06);
-  border-radius: 3px 3px 0 0;
-  overflow: hidden;
-  z-index: 4;
-}
-
-.donkey-luck-fill {
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 25%; /* starts at 25% (matching luckMeterValue of 25) */
-  transition: width 2s ease-in-out, background 0.3s ease, box-shadow 0.3s ease;
-  border-radius: 3px 0 0 0;
-}
-
-/* Faster transition for reductions — added via "reducing" class */
-.donkey-luck-fill.reducing {
-  transition: width 0.3s ease-out, background 0.3s ease, box-shadow 0.3s ease;
-}
-
-/* Color gradient based on luck value (0-100 scale) */
-.donkey-luck-fill.luck-danger {
-  /* 0-25: Red — danger zone */
-  background: linear-gradient(90deg, #ef4444, #dc2626);
-  box-shadow: 0 0 8px rgba(239, 68, 68, 0.4), inset 0 0 4px rgba(255, 100, 100, 0.2);
-}
-
-.donkey-luck-fill.luck-low {
-  /* 25-35: Orange — building up */
-  background: linear-gradient(90deg, #f97316, #ea580c);
-  box-shadow: 0 0 8px rgba(249, 115, 22, 0.4), inset 0 0 4px rgba(255, 180, 100, 0.2);
-}
-
-.donkey-luck-fill.luck-mid {
-  /* 35-50: Yellow — moderate */
-  background: linear-gradient(90deg, #eab308, #ca8a04);
-  box-shadow: 0 0 8px rgba(234, 179, 8, 0.4), inset 0 0 4px rgba(255, 230, 100, 0.2);
-}
-
-.donkey-luck-fill.luck-high {
-  /* 50-65: Yellow-green — good */
-  background: linear-gradient(90deg, #84cc16, #65a30d);
-  box-shadow: 0 0 8px rgba(132, 204, 22, 0.4), inset 0 0 4px rgba(200, 255, 100, 0.2);
-}
-
-.donkey-luck-fill.luck-excellent {
-  /* 65-75: Green — excellent */
-  background: linear-gradient(90deg, #22c55e, #16a34a);
-  box-shadow: 0 0 8px rgba(34, 197, 94, 0.4), inset 0 0 4px rgba(150, 255, 150, 0.2);
-}
-
-.donkey-luck-fill.luck-cap {
-  /* 75+ cap: Bright green with glow */
-  background: linear-gradient(90deg, #4ade80, #22c55e);
-  box-shadow: 0 0 12px rgba(74, 222, 128, 0.6), inset 0 0 4px rgba(200, 255, 200, 0.3);
-}
-
-/* Shake animation for double-jump fail */
-@keyframes luckMeterShake {
-  0% { transform: translateX(0); }
-  10% { transform: translateX(-4px); }
-  20% { transform: translateX(4px); }
-  30% { transform: translateX(-3px); }
-  40% { transform: translateX(3px); }
-  50% { transform: translateX(-2px); }
-  60% { transform: translateX(2px); }
-  70% { transform: translateX(-1px); }
-  80% { transform: translateX(1px); }
-  90% { transform: translateX(-1px); }
-  100% { transform: translateX(0); }
-}
-
-.donkey-luck-fill.shake {
-  animation: luckMeterShake 0.3s ease-in-out;
-}
-
-/* Cap indicator — subtle glow at full cap */
-@keyframes capPulse {
-  0%, 100% { box-shadow: 0 0 12px rgba(74, 222, 128, 0.6), inset 0 0 4px rgba(200, 255, 200, 0.3); }
-  50% { box-shadow: 0 0 20px rgba(74, 222, 128, 0.8), inset 0 0 6px rgba(200, 255, 200, 0.4); }
-}
-
-.donkey-luck-fill.luck-cap {
-  animation: capPulse 2s ease-in-out infinite;
-}
-
-/* Near-miss flash — brief green pulse on instant +25% */
-@keyframes nearMissFlashPulse {
-  0% { box-shadow: 0 0 12px rgba(74, 222, 128, 0.6), inset 0 0 4px rgba(200, 255, 200, 0.3); }
-  50% { box-shadow: 0 0 24px rgba(74, 222, 128, 1), inset 0 0 8px rgba(200, 255, 200, 0.6); }
-  100% { box-shadow: 0 0 12px rgba(74, 222, 128, 0.6), inset 0 0 4px rgba(200, 255, 200, 0.3); }
-}
-
-.donkey-luck-fill.nearmiss-flash {
-  animation: nearMissFlashPulse 0.6s ease-out;
-}
-
-/* Double-jump fail — brief red flash during shake */
-@keyframes doubleJumpFailFlash {
-  0% { background: linear-gradient(90deg, #ef4444, #dc2626); box-shadow: 0 0 12px rgba(239, 68, 68, 0.6), inset 0 0 6px rgba(255, 100, 100, 0.3); }
-  50% { background: linear-gradient(90deg, #ef4444, #dc2626); box-shadow: 0 0 20px rgba(239, 68, 68, 0.8), inset 0 0 10px rgba(255, 100, 100, 0.4); }
-  100% { background: linear-gradient(90deg, #ef4444, #dc2626); box-shadow: 0 0 8px rgba(239, 68, 68, 0.4), inset 0 0 4px rgba(255, 100, 100, 0.2); }
-}
-
-.donkey-luck-fill.doublejump-fail {
-  animation: doubleJumpFailFlash 0.3s ease-out;
 }
 
 </style>
@@ -893,6 +418,115 @@
     top: auto !important;
     opacity: 1 !important;
     pointer-events: auto !important;
+  }
+
+  /* Donkey info buttons - positioned below the game */
+  .donkey-info-buttons {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 12px;
+    z-index: 150;
+  }
+
+  .donkey-info-btn {
+    background: rgba(0, 20, 0, 0.7);
+    border: 1px solid rgba(51, 255, 51, 0.3);
+    color: #33ff33;
+    padding: 8px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    letter-spacing: 0.05em;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+  }
+
+  .donkey-info-btn:hover {
+    background: rgba(51, 255, 51, 0.15);
+    border-color: rgba(51, 255, 51, 0.5);
+    color: #66ff66;
+  }
+
+  /* Donkey info panel - reuse about-panel styling */
+  .donkey-info-panel {
+    position: fixed;
+    top: 64px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 780px;
+    max-width: 92vw;
+    z-index: 200;
+    background: rgba(255, 255, 255, 0.04);
+    backdrop-filter: blur(20px) saturate(150%);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 60px rgba(100, 200, 100, 0.05);
+    transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease, top 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    transform-origin: top center;
+  }
+
+  .donkey-info-panel.donkey-info-hidden {
+    top: -400px;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .donkey-info-panel.donkey-info-visible {
+    top: 64px;
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  /* Close button inside info panels */
+  .donkey-info-close-btn {
+    background: rgba(255, 255, 255, 0.1);
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    color: rgba(255, 255, 255, 0.85);
+    min-width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+    flex-shrink: 0;
+  }
+
+  .donkey-info-close-btn:hover {
+    background: rgba(239, 68, 68, 0.25);
+    border-color: rgba(239, 68, 68, 0.5);
+    color: #ef4444;
+  }
+
+  /* Panel title (center) */
+  .donkey-info-title {
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: rgba(51, 255, 51, 0.6);
+    letter-spacing: 0.05em;
+    text-align: center;
+    white-space: nowrap;
+    flex: 1;
+    flex-shrink: 0;
+    text-shadow: 0 0 8px rgba(51, 255, 51, 0.2);
+  }
+
+  /* Responsive */
+  @media (max-width: 600px) {
+    .donkey-info-panel {
+      width: 96vw;
+      left: 2%;
+      transform: none;
+    }
+
+    .donkey-info-inner-panel {
+      padding: 1rem;
+    }
   }
 </style>
 </head>
@@ -3922,6 +3556,636 @@ document.addEventListener('DOMContentLoaded', () => {
       panel.classList.add('donkey-visible');
     }
   });
+
+  // Donkey info panel toggle handlers
+  function showDonkeyInfo(id) {
+    // Hide any other open panel first
+    document.querySelectorAll('.donkey-info-panel').forEach(p => {
+      p.classList.remove('donkey-info-visible');
+      p.classList.add('donkey-info-hidden');
+    });
+    // Show the requested panel
+    var panel = document.getElementById(id);
+    if (panel) {
+      panel.classList.remove('donkey-info-hidden');
+      panel.classList.add('donkey-info-visible');
+    }
+  }
+
+  function hideDonkeyInfo(id) {
+    var panel = document.getElementById(id);
+    if (panel) {
+      panel.classList.remove('donkey-info-visible');
+      panel.classList.add('donkey-info-hidden');
+    }
+  }
 </script>
+
+<!-- Donkey README Panel -->
+<div id="donkey-readme-panel" class="donkey-info-panel donkey-info-hidden">
+  <div class="about-panel-header">
+    <span class="donkey-info-title">Donkey README</span>
+    <button class="donkey-info-close-btn" onclick="hideDonkeyInfo('donkey-readme-panel')" title="Close">✕</button>
+  </div>
+  <div class="about-panel-body">
+    <div class="about-inner-panel" id="donkey-readme-content">
+      <!-- START DONKEY-README.md -->
+<h1>Half-Assed Solution: Donkey Runner</h1>
+<p>A Chrome-dinosaur-style endless runner minigame featuring a donkey dodging obstacles on a procedurally generated landscape.</p>
+<h2>Overview</h2>
+<p>Survive as long as you can — your score ticks up the longer you live. Obstacles get progressively harder as speed increases, and special mechanics add depth beyond simple jumping.</p>
+<h2>Controls</h2>
+<table>
+  <tr> <th>Action</th> <th>Input</th></tr>
+  <tr> <td>Start / Jump</td> <td><code>Space</code>, <code>↑</code> (Arrow Up), or tap/click on canvas</td></tr>
+  <tr> <td>Double Jump</td> <td>Press jump again while mid-air</td></tr>
+</table>
+<p><strong>Note:</strong> You can only double-jump if you have enough luck (see Luck Meter below). Holding the key will not trigger rapid-fire jumps.</p>
+<h2>Objective</h2>
+<p>Dodge obstacles and survive as long as possible. Score is based on distance traveled, displayed in a 7-segment digital format. Beat your high score!</p>
+<h2>Quick Rules</h2>
+<ul>
+  <li><strong>Jump over</strong> ground obstacles (cacti, rocks, cars)</li>
+  <li><strong>Dodge</strong> air-based obstacles (jets, falling rocks, drones) — jump under or over them</li>
+  <li><strong>Watch for warnings</strong> — falling rocks display a <code>!</code> warning before they hit the ground and become rolling boulders</li>
+  <li><strong>Score higher</strong> by narrowly avoiding obstacles for near-miss bonuses (+50 points)</li>
+  <li><strong>Use your luck wisely</strong> — donkey has a 25% luck meter that can save you from fatal collisions but costs score</li>
+</ul>
+<h2>Obstacle Types (Always Present)</h2>
+<table>
+  <tr> <th>Obstacle</th> <th>Description</th> <th>Danger Level</th></tr>
+  <tr> <td>Cactus-small</td> <td>Narrow, ~35-48px tall</td> <td>Low</td></tr>
+  <tr> <td>Cactus-large</td> <td>Wider with side arms, ~43-51px tall</td> <td>Medium</td></tr>
+  <tr> <td>Rock</td> <td>Small ground obstacle (~20-28px tall)</td> <td>Medium</td></tr>
+  <tr> <td>Car</td> <td>Large wide obstacle (36x18px)</td> <td>High</td></tr>
+</table>
+<h2>Obstacle Types (Appear at Higher Speeds)</h2>
+<table>
+  <tr> <th>Obstacle</th> <th>Unlocks At</th> <th>Description</th> <th>Danger Level</th></tr>
+  <tr> <td>Jet</td> <td>Speed &gt; 7</td> <td>Flying obstacle — jump under or over</td> <td>High</td></tr>
+  <tr> <td>Falling Rock / Rolling Boulder</td> <td>Speed &gt; 6</td> <td>Warning → falls → becomes rolling boulder on ground</td> <td>High</td></tr>
+  <tr> <td>Drone</td> <td>Speed &gt; 8</td> <td>Hovering drone moving in a wave pattern</td> <td>High</td></tr>
+</table>
+<h2>Post-Game Stats</h2>
+<p>When your donkey dies, you'll see:</p>
+<ul>
+  <li><strong>Score breakdown</strong> by obstacle type (the killer obstacle is highlighted in red)</li>
+  <li><strong>Near Misses</strong> — how many close calls you scored</li>
+  <li><strong>Property Damage</strong> — obstacles destroyed while stumbling</li>
+  <li><strong>Dumb Luck</strong> — times luck saved you from death</li>
+  <li><strong>Distance</strong> traveled and <strong>Max speed</strong> reached</li>
+  <li><strong>Run time</strong>, <strong>Air time</strong>, and <strong>Air percentage</strong></li>
+  <li><strong>Jump stats</strong> — total jumps, double jumps, and ignored jumps</li>
+</ul>
+<h2>Tips</h2>
+<ol>
+  <li><strong>Watch the speed increase</strong> — obstacles change weight at different speeds, with rocks becoming more common as speed rises</li>
+  <li><strong>Near misses are worth +50 points</strong> — they also give you a +25% luck boost, so lean into close calls</li>
+  <li><strong>Double jump costs luck</strong> — if your meter is too low (below 5%), the game will reject your double-jump attempt</li>
+  <li><strong>Dumb Luck can save you</strong> but halves your score — only works when NOT record-breaking</li>
+  <li><strong>You stumble every 30-60 seconds</strong> — use it! Knock obstacles aside for +100 points each</li>
+  <li><strong>During record-breaking runs</strong>, passive luck recharge stops and dumb luck is disabled — go all-in on skill</li>
+</ol>
+<!-- END DONKEY-README.md -->
+    </div>
+  </div>
+</div>
+
+<!-- Donkey Gameplay Panel -->
+<div id="donkey-gameplay-panel" class="donkey-info-panel donkey-info-hidden">
+  <div class="about-panel-header">
+    <span class="donkey-info-title">Gameplay</span>
+    <button class="donkey-info-close-btn" onclick="hideDonkeyInfo('donkey-gameplay-panel')" title="Close">✕</button>
+  </div>
+  <div class="about-panel-body">
+    <div class="about-inner-panel" id="donkey-gameplay-content">
+      <!-- START DONKEY-GAMEPLAY.md -->
+<h1>Half-Assed Solution: Donkey Runner — Detailed Gameplay Mechanics</h1>
+<h2>Table of Contents</h2>
+<ol>
+  <li><a href="#core-game-loop">Core Game Loop</a></li>
+  <li><a href="#movement--physics">Movement &amp; Physics</a></li>
+  <li><a href="#obstacle-system">Obstacle System</a></li>
+  <li><a href="#special-mechanics">Special Mechanics</a></li>
+  <li><a href="#luck-meter">Luck Meter</a></li>
+  <li><a href="#score-system">Score System</a></li>
+  <li><a href="#environmental-effects">Environmental Effects</a></li>
+  <li><a href="#audio-system">Audio System</a></li>
+  <li><a href="#post-game-statistics">Post-Game Statistics</a></li>
+  <li><a href="#game-balance--difficulty-scaling">Game Balance &amp; Difficulty Scaling</a></li>
+</ol>
+<hr class="line-sep">
+<h2>Core Game Loop</h2>
+<p>The game operates on a single <code>loop()</code> function driven by <code>requestAnimationFrame</code>. Each frame:</p>
+<ol>
+  <li><strong>Time delta calculation</strong> — the elapsed time since the previous frame is computed as milliseconds, then normalized to seconds for consistent physics</li>
+  <li><strong>Update</strong> — all game state (position, obstacles, particles, luck meter) is updated based on deltaTime</li>
+  <li><strong>Draw</strong> — the canvas is cleared and everything is rendered</li>
+</ol>
+<p>The loop runs at approximately 60fps. All physics values are multiplied by <code>(deltaTime * 60)</code> to maintain consistent behavior regardless of frame rate.</p>
+<hr class="line-sep">
+<h2>Movement &amp; Physics</h2>
+<h3>Gravity</h3>
+<ul>
+  <li>Constant gravity: <strong>0.6 per frame</strong> (scaled by deltaTime)</li>
+  <li>Donkey falls at an accelerating rate — velocity increases each frame while airborne</li>
+</ul>
+<h3>Jump Force</h3>
+<ul>
+  <li><strong>First jump:</strong> -10 (upward, from ground only)</li>
+  <li><strong>Double jump:</strong> -8 (reduced force, mid-air only)</li>
+  <li>Jump force is applied instantly — no ramp-up animation</li>
+</ul>
+<h3>Ceiling Clamp</h3>
+<ul>
+  <li>Donkey cannot rise above Y = 5px from the top of the canvas</li>
+  <li>Hitting the ceiling triggers:</li>
+  <li>Velocity reset to +3 (forced downward bounce)</li>
+  <li>A short stumble (0.8 seconds)</li>
+  <li>Ceiling impact particles and sound</li>
+  <li>Snarky message: "CEILING! Your donkey hit the ceiling"</li>
+</ul>
+<h3>Ground Detection</h3>
+<ul>
+  <li>Ground Y position is calculated as <code>canvas height - 20px</code></li>
+  <li>Donkey is considered grounded when <code>donkey.y &gt;= GROUND_Y - donkey.height</code></li>
+  <li>Landing triggers dust particles and a sound effect</li>
+</ul>
+<h3>Speed</h3>
+<ul>
+  <li>Starts at <strong>5</strong> (INITIAL_SPEED)</li>
+  <li>Increases by <strong>0.001 per frame</strong> (approximately 60 per second of gameplay)</li>
+  <li>Maximum speed: <strong>12</strong> (MAX_SPEED)</li>
+  <li>Speed affects:</li>
+  <li>Obstacle approach rate</li>
+  <li>Obstacle spawn frequency</li>
+  <li>Air obstacle fall speeds</li>
+  <li>Rolling boulder speed (80% of game speed)</li>
+  <li>Visual speed lines appearance (above speed 7)</li>
+</ul>
+<h3>Jump Cooldown</h3>
+<ul>
+  <li>50ms cooldown between jump inputs to prevent held-key rapid-fire</li>
+  <li>If a double-jump is attempted while the cooldown is active, it's rejected as an "ignored jump"</li>
+</ul>
+<hr class="line-sep">
+<h2>Obstacle System</h2>
+<h3>Ground Obstacles</h3>
+<h4>Cactus-small</h4>
+<ul>
+  <li>Width: 12px</li>
+  <li>Height: 35–48px (randomly generated)</li>
+  <li>Weight at base speed: 35% of spawns</li>
+  <li>Weight at high speed (&gt;7): 25%</li>
+  <li>Weight at very high speed (&gt;9): 20%</li>
+</ul>
+<h4>Cactus-large</h4>
+<ul>
+  <li>Width: 18px</li>
+  <li>Height: 43–51px (randomly generated)</li>
+  <li>Has side arms with spines for visual flair</li>
+  <li>Weight at base speed: 25% of spawns</li>
+  <li>Weight at high speed (&gt;7): 15%</li>
+  <li>Weight at very high speed (&gt;9): 10%</li>
+</ul>
+<h4>Rock</h4>
+<ul>
+  <li>Width: 16–24px (randomly generated)</li>
+  <li>Height: 12–18px (randomly generated)</li>
+  <li>Small and low — harder to jump over at high speeds</li>
+  <li>Weight at base speed: 25% of spawns</li>
+  <li>Weight at high speed (&gt;7): 45% (becomes the dominant obstacle)</li>
+  <li>Weight at very high speed (&gt;9): 40%</li>
+</ul>
+<h4>Car</h4>
+<ul>
+  <li>Width: 36px</li>
+  <li>Height: 18px</li>
+  <li>Large wide obstacle — must jump over it entirely</li>
+  <li>Only appears at very high speeds (&gt;9)</li>
+  <li>Weight at very high speed (&gt;9): 30% of spawns</li>
+</ul>
+<h3>Air-Based Obstacles</h3>
+<h4>Jet</h4>
+<ul>
+  <li>Unlocks at: Speed &gt; 7</li>
+  <li>Width: 35px</li>
+  <li>Height: 20px</li>
+  <li>Flies at a randomized mid-air height (35–55px above ground)</li>
+  <li>Requires the player to time a jump to go under it OR jump over it</li>
+  <li><strong>Always fatal</strong> — even during a stumble</li>
+</ul>
+<h4>Falling Rock → Rolling Boulder</h4>
+<ul>
+  <li>Unlocks at: Speed &gt; 6</li>
+  <li>Width: 14–22px (randomly generated)</li>
+  <li>Height: 10–15px (randomly generated)</li>
+  <li><strong>Two-phase sequence:</strong></li>
+</ul>
+<ol>
+  <li><strong>Falling phase</strong> — appears with an orange warning glow and <code>!</code> symbol, falls from above the screen at a speed proportional to game speed</li>
+  <li><strong>Rolling phase</strong> — upon hitting the ground, transitions into a rolling boulder that travels along the ground</li>
+</ol>
+<ul>
+  <li>Rotating visual animation with cracks</li>
+  <li>Dust trail particles as it rolls</li>
+  <li>Spawns at the exact position where the falling rock landed</li>
+  <li>Both phases are fatal if hit</li>
+</ul>
+<h4>Drone</h4>
+<ul>
+  <li>Unlocks at: Speed &gt; 8</li>
+  <li>Width: 18px</li>
+  <li>Height: 12px</li>
+  <li>Moves in a sinusoidal wave pattern (amplitude ~30px, period ~2 seconds)</li>
+  <li>Has spinning propeller arms and a pulsing red light</li>
+  <li><strong>Always fatal</strong> — even during a stumble</li>
+</ul>
+<h3>Spawn System</h3>
+<h4>Interval Calculation</h4>
+<p>The base spawn interval is calculated dynamically based on speed:</p>
+<pre><code>baseInterval = 20 + 45 * pow((12 - speed) / 7, 2)
+</code></pre>
+<p>At speed 5: ~65 frames between spawns (about 1 second at 60fps)</p>
+<p>At speed 9: ~30 frames between spawns (about 0.5 seconds at 60fps)</p>
+<p>At speed 12: ~20 frames between spawns (about 0.33 seconds at 60fps)</p>
+<h4>Random Variance</h4>
+<p>A ±25% random variance is added to the interval, making obstacle spacing feel more natural and less predictable.</p>
+<h4>Weight-Based Type Selection</h4>
+<p>Obstacle types are selected using weighted random selection. The weights shift dramatically based on speed:</p>
+<table>
+  <tr> <th>Speed Range</th> <th>Cactus-small</th> <th>Cactus-large</th> <th>Rock</th> <th>Car</th> <th>Jet</th> <th>Falling Rock</th> <th>Drone</th></tr>
+  <tr> <td>Base (5)</td> <td>35%</td> <td>25%</td> <td>25%</td> <td>—</td> <td>—</td> <td>10%</td> <td>—</td></tr>
+  <tr> <td>High (&gt;7)</td> <td>25%</td> <td>15%</td> <td>45%</td> <td>—</td> <td>15%</td> <td>10%</td> <td>—</td></tr>
+  <tr> <td>Very High (&gt;9)</td> <td>20%</td> <td>10%</td> <td>40%</td> <td>30%</td> <td>15%</td> <td>8%</td> <td>8%</td></tr>
+</table>
+<hr class="line-sep">
+<h2>Special Mechanics</h2>
+<h3>Near-Miss System</h3>
+<p><strong>Trigger conditions:</strong></p>
+<ul>
+  <li>Horizontal: Donkey's right edge has just passed the obstacle's right edge (within 6px)</li>
+  <li>Vertical: Donkey's bottom is just above the obstacle's top (within 8px)</li>
+  <li>Obstacle must be at least 30px tall to qualify (prevents false positives from small cacti/rocks)</li>
+</ul>
+<p><strong>Rewards:</strong></p>
+<ul>
+  <li>+50 bonus points</li>
+  <li>Instant +25% luck meter boost</li>
+  <li>Green "NEAR MISS!" text flash overlay</li>
+  <li>Bonus "+50" text animation at the point of near-miss</li>
+</ul>
+<p><strong>Cooldown:</strong></p>
+<ul>
+  <li>600ms cooldown prevents rapid-fire near-miss detection on the same obstacle</li>
+</ul>
+<h3>Dumb Luck System</h3>
+<p><strong>Trigger conditions:</strong></p>
+<ul>
+  <li>Donkey is about to die from a collision</li>
+  <li><strong>Not</strong> currently in a record-breaking run (score ≤ high score)</li>
+  <li>Random roll succeeds: <code>Math.random() &lt; (luckMeterValue / 100)</code></li>
+</ul>
+<p><strong>Effects:</strong></p>
+<ul>
+  <li>Obstacle is knocked away with golden sparkle particles</li>
+  <li>Score penalty: <strong>-50% of current score</strong> (half your progress is lost!)</li>
+  <li>Luck meter resets to 0%</li>
+  <li>Donkey stumbles briefly (0.5 seconds)</li>
+  <li>"DUMB LUCK!" text flash with golden sparkle overlay</li>
+</ul>
+<p><strong>Sound:</strong> A comedic "bonk + golden ding" — low thud followed by a bright ascending chime and sparkle noise burst</p>
+<h3>Double Jump System</h3>
+<p><strong>Trigger conditions:</strong></p>
+<ul>
+  <li>Donkey is airborne (not grounded)</li>
+  <li>Donkey has not yet used both jumps (currentJumpCount &lt; 2)</li>
+  <li>Donkey is not stumbling</li>
+  <li>Jump cooldown has expired (&gt;50ms since last jump input)</li>
+  <li>Luck meter has at least 5% remaining</li>
+</ul>
+<p><strong>Effects:</strong></p>
+<ul>
+  <li>Reduced upward force (-8 vs. -10 for first jump)</li>
+  <li>Costs <strong>5% of luck meter</strong> (clamped to floor)</li>
+  <li>Particles shoot backward and downward from the donkey's rear (the "fart" particles)</li>
+  <li>"Fart power engaged!" snarky message</li>
+</ul>
+<p><strong>Rejection:</strong></p>
+<ul>
+  <li>If luck is below 5%, the double jump is rejected with:</li>
+  <li>"Out of luck! Not enough beans!" message</li>
+  <li>Luck meter shake animation</li>
+  <li>Descending buzzer sound effect</li>
+  <li>No score penalty, no particles</li>
+</ul>
+<h3>Stumble System</h3>
+<p><strong>Trigger conditions:</strong></p>
+<ul>
+  <li>Every 30–60 seconds of gameplay (converted to frames: 1800–3600 frames at 60fps)</li>
+  <li>Randomly scheduled with a grace period (5–8 seconds after game start before first stumble)</li>
+</ul>
+<p><strong>Visual effects:</strong></p>
+<ul>
+  <li>Donkey wobbles with a sinusoidal rotation (±0.25 radians)</li>
+  <li>X-shaped eyes appear above the donkey's head</li>
+  <li>Legs flail randomly during the stumble</li>
+</ul>
+<p><strong>Duration:</strong> 2 seconds of stumbling</p>
+<p><strong>During stumble — obstacle interactions:</strong></p>
+<ul>
+  <li><strong>Ground obstacles</strong> (cactus-small, cactus-large, rock, car): Knocked aside for +100 points each, with obstacle-type-specific particle explosions</li>
+  <li><strong>Air-based obstacles</strong> (jet, falling-rock, drone): Always fatal — cannot knock these away</li>
+  <li>Rolling boulder: Cannot knock this away (treated as falling-rock type)</li>
+</ul>
+<h3>Backflip</h3>
+<p><strong>Trigger conditions:</strong></p>
+<ul>
+  <li>8% chance on the first jump from ground only</li>
+</ul>
+<p><strong>Effects:</strong></p>
+<ul>
+  <li>Donkey performs a full 360° backflip animation during the jump</li>
+  <li>Purely cosmetic — no gameplay benefit</li>
+  <li>Snarky message: "Backflip! Because regular jumping wasn't enough"</li>
+</ul>
+<h3>Ceiling Impact</h3>
+<p><strong>Trigger conditions:</strong></p>
+<ul>
+  <li>Donkey's upward movement would take it above Y = 5px from the top of the canvas</li>
+</ul>
+<p><strong>Effects:</strong></p>
+<ul>
+  <li>Velocity reset to +3 (forced downward)</li>
+  <li>Short stumble (0.8 seconds)</li>
+  <li>Ceiling impact particles (gray, from the ceiling point)</li>
+  <li>Metallic clang sound effect</li>
+  <li>Snarky message: "CEILING! Your donkey hit the ceiling"</li>
+</ul>
+<h3>Record-Breaking State</h3>
+<p><strong>Trigger conditions:</strong></p>
+<ul>
+  <li>Score exceeds the player's high score for the first time during a run</li>
+</ul>
+<p><strong>Effects:</strong></p>
+<ul>
+  <li>Passive luck meter recharge <strong>stops completely</strong> — no more free luck</li>
+  <li>Dumb Luck survival chance is <strong>disabled</strong> — no more cheap saves</li>
+  <li>Luck meter shakes visually</li>
+  <li>Golden snarky message: "UNCHARTED TERRITORY! The donkey is fearless now"</li>
+  <li>When the player eventually dies and this becomes the new high score, the state resets for the next run</li>
+</ul>
+<hr class="line-sep">
+<h2>Luck Meter</h2>
+<h3>Overview</h3>
+<p>A horizontal green/orange/yellow/red meter at the bottom of the play area showing the donkey's current luck level (0–100 scale).</p>
+<h3>Starting State</h3>
+<ul>
+  <li>Starts at <strong>25%</strong> of cap (orange color, labeled "luck-low")</li>
+  <li>Actively recharging from the moment the game starts</li>
+</ul>
+<h3>Color Gradient (based on value)</h3>
+<table>
+  <tr> <th>Value Range</th> <th>Color Name</th> <th>Visual</th> <th>Description</th></tr>
+  <tr> <td>0–24%</td> <td>luck-danger</td> <td>Red gradient</td> <td>Danger zone — almost no luck</td></tr>
+  <tr> <td>25–34%</td> <td>luck-low</td> <td>Orange gradient</td> <td>Building up</td></tr>
+  <tr> <td>35–49%</td> <td>luck-mid</td> <td>Yellow gradient</td> <td>Moderate luck</td></tr>
+  <tr> <td>50–64%</td> <td>luck-high</td> <td>Yellow-green gradient</td> <td>Good luck</td></tr>
+  <tr> <td>65–74%</td> <td>luck-excellent</td> <td>Green gradient</td> <td>Excellent luck</td></tr>
+  <tr> <td>75%+</td> <td>luck-cap</td> <td>Bright green with glow</td> <td>Full cap — maximum luck</td></tr>
+</table>
+<h3>Recharge Rate (per second)</h3>
+<p>The recharge rate <strong>decreases over time</strong> since the last luck change:</p>
+<table>
+  <tr> <th>Time Since Last Change</th> <th>Recharge Rate</th></tr>
+  <tr> <td>0–5 seconds</td> <td>3.0%/sec</td></tr>
+  <tr> <td>5–10 seconds</td> <td>2.0%/sec (linear interpolation)</td></tr>
+  <tr> <td>10–20 seconds</td> <td>1.0%/sec (linear interpolation)</td></tr>
+  <tr> <td>20–30 seconds</td> <td>0.5%/sec (linear interpolation)</td></tr>
+  <tr> <td>30+ seconds</td> <td>0.5%/sec (steady state)</td></tr>
+</table>
+<p><strong>Sub-integer accumulator:</strong> The system tracks fractional recharge amounts internally to avoid losing small increments when the value is below 1% of a full percentage point.</p>
+<h3>Instant Boosts</h3>
+<ul>
+  <li><strong>Near miss:</strong> +25% (clamped to cap at 100%)</li>
+  <li><strong>Double jump attempt:</strong> -5% (clamped to floor at 0%)</li>
+  <li><strong>Dumb Luck trigger:</strong> Resets to 0%</li>
+</ul>
+<h3>Visual Feedback</h3>
+<ul>
+  <li><strong>Width animation</strong> — smoothly transitions the fill width based on current value</li>
+  <li><strong>Near-miss flash</strong> — brief green pulse on instant +25% boost</li>
+  <li><strong>Double-jump fail shake</strong> — rapid shake animation with red flash when luck is too low for a double jump</li>
+  <li><strong>Cap glow</strong> — pulsing glow effect when at 75%+ (full cap)</li>
+  <li><strong>Reduced transition</strong> — faster transition (0.3s vs 2s) when the value is decreasing</li>
+</ul>
+<h3>Record-Breaking Impact</h3>
+<p>When in record-breaking state, the recharge timer stops and passive recharge halts entirely. The meter will remain static until the run ends or luck is spent.</p>
+<hr class="line-sep">
+<h2>Score System</h2>
+<h3>Primary Scoring</h3>
+<ul>
+  <li>Score = <code>floor(distance * 100) - dumbLuckPenalty</code></li>
+  <li>Distance increases by <code>speed <em> 0.01 </em> deltaTime * 60</code> per frame</li>
+  <li><strong>Airborne penalty:</strong> While airborne, the score rate drops to <strong>10%</strong> of normal (airborneMultiplier = 0.1)</li>
+  <li><strong>Dumb Luck penalty:</strong> Each dumb luck survival subtracts 50% of the current score from the total</li>
+</ul>
+<h3>Score Milestones</h3>
+<ul>
+  <li>Triggered every <strong>1,000 points</strong></li>
+  <li>Visual flash: score turns green and scales up briefly (300ms animation)</li>
+  <li>Snarky message: "MILESTONE! You survived a while!" or "Another thousand points! The donkey is proud"</li>
+</ul>
+<h3>Near-Miss Bonus</h3>
+<ul>
+  <li><strong>+50 points</strong> per near miss</li>
+  <li>Score breakdown tracked separately (<code>nearMissScore</code>)</li>
+</ul>
+<h3>Property Damage Bonus</h3>
+<ul>
+  <li><strong>+100 points</strong> per obstacle knocked aside during stumble</li>
+  <li>Floating "+100" text animation at the knock position</li>
+  <li>Tracked in <code>propertyDamageCount</code></li>
+</ul>
+<h3>High Score</h3>
+<ul>
+  <li>Saved to localStorage as <code>"hasW_donkeyHighScore"</code></li>
+  <li>Displayed on start screen and game over screen</li>
+  <li>When beaten: golden "NEW HIGH SCORE!" badge appears on the game over screen</li>
+  <li>Record-breaking state triggers when score first exceeds high score</li>
+</ul>
+<hr class="line-sep">
+<h2>Environmental Effects</h2>
+<h3>Day/Night Cycle</h3>
+<ul>
+  <li><strong>60-second full cycle</strong> (0 = midnight, 0.5 = day, back to 0)</li>
+</ul>
+<table>
+  <tr> <th>Phase</th> <th>Time Range</th> <th>Effect</th></tr>
+  <tr> <td>Night → Dusk</td> <td>0–25%</td> <td>Background transitions from dark to lighter; stars fade out</td></tr>
+  <tr> <td>Dusk → Day</td> <td>25–50%</td> <td>Background lightens further; clouds become more visible</td></tr>
+  <tr> <td>Day → Dusk</td> <td>50–75%</td> <td>Background darkens again; stars begin to appear</td></tr>
+  <tr> <td>Dusk → Night</td> <td>75–100%</td> <td>Stars fully visible, clouds fade back out</td></tr>
+</table>
+<h3>Star System</h3>
+<ul>
+  <li><strong>25 twinkling stars</strong> randomly distributed across the top of the canvas</li>
+  <li>Each star has:</li>
+  <li>Random position (x, y)</li>
+  <li>Random size (0.5–2px)</li>
+  <li>Random twinkle phase</li>
+  <li>Alpha varies based on day/night phase (0 = invisible during day, 1 = full at night)</li>
+</ul>
+<h3>Cloud System</h3>
+<ul>
+  <li><strong>4 clouds</strong> with random positions, widths (35–75px), and speeds (0.2–0.8)</li>
+  <li>Move slower at higher game speeds (relative to the ground)</li>
+  <li>Visible only during daytime phases (alpha based on star alpha)</li>
+</ul>
+<h3>Speed Lines</h3>
+<ul>
+  <li><strong>6 horizontal lines</strong> that appear when speed exceeds 7</li>
+  <li>Lines scroll leftward from their current position</li>
+  <li>Length increases with speed (base 30px + (speed - 7) * 10px)</li>
+  <li>Opacity varies by line (0.05–0.13)</li>
+</ul>
+<hr class="line-sep">
+<h2>Audio System</h2>
+<h3>Architecture</h3>
+<ul>
+  <li>Procedural sound effects using the Web Audio API</li>
+  <li>No external audio files — all sounds are synthesized in real-time</li>
+  <li>Toggle button in the header (🔇/🔊) — preference saved to localStorage</li>
+</ul>
+<h3>Sound Effects</h3>
+<table>
+  <tr> <th>Type</th> <th>Description</th> <th>Sound Design</th></tr>
+  <tr> <td><code>jump</code></td> <td>First jump from ground</td> <td>Rising sine wave (400→600Hz, 100ms)</td></tr>
+  <tr> <td><code>fart</code></td> <td>Double jump mid-air</td> <td>Multi-layered fart sound: constriction noise, wet squelch, sub-bass rumble, gurgling bubbles, and air hiss (450ms total)</td></tr>
+  <tr> <td><code>knock</code></td> <td>Obstacle destroyed during stumble</td> <td>Square wave descending (200→80Hz, 150ms)</td></tr>
+  <tr> <td><code>gameover</code></td> <td>Death</td> <td>Sawtooth wave descending (400→80Hz, 600ms)</td></tr>
+  <tr> <td><code>milestone</code></td> <td>Score milestone reached</td> <td>Three-tone ascending chord (523→659→784Hz, 300ms)</td></tr>
+  <tr> <td><code>nearmiss</code></td> <td>Near miss scored</td> <td>Triangle wave sweeping (800→1200→600Hz, 200ms)</td></tr>
+  <tr> <td><code>land</code></td> <td>Donkey lands on ground</td> <td>Sine wave descending (150→50Hz, 100ms)</td></tr>
+  <tr> <td><code>ceiling</code></td> <td>Donkey hits ceiling</td> <td>Square wave metallic clang (800→200Hz, 200ms)</td></tr>
+  <tr> <td><code>fail</code></td> <td>Double jump rejected (not enough luck)</td> <td>Descending sawtooth buzzer (600→150Hz, 350ms)</td></tr>
+  <tr> <td><code>dumbluck</code></td> <td>Dumb Luck saves from death</td> <td>Comedic bonk + golden ding: triangle thud (150→60Hz), sine chime (600→1400Hz), sparkle noise burst</td></tr>
+</table>
+<h3>Input Handling</h3>
+<ul>
+  <li>Keyboard: Space or Arrow Up keys</li>
+  <li>Browser auto-repeat is ignored — user must release the key to jump again</li>
+  <li>Mouse/Touch: Click or tap on the canvas</li>
+  <li>First click/tap initializes the audio context (required by browsers)</li>
+  <li>Sound toggle button in header</li>
+</ul>
+<hr class="line-sep">
+<h2>Post-Game Statistics</h2>
+<h3>Game Over Screen Layout</h3>
+<pre><code>┌─────────────────────────────────────────┐
+│           [OBSTACLE COUNT TABLE]         │  ← Top center: icons + counts
+│    NEAR MISSES   DISTANCE               │  ← Top-left / Top-right blocks
+│ PROPERTY DAMAGE  MAX SPEED              │  ← (4 items each)
+│  DUMB LUCK                                │
+│                                           │
+│              GAME OVER                    │  ← Center: big red text
+│          [NEW HIGH SCORE BADGE]           │
+│         ── Score breakdown ──             │
+│                                           │
+│    RUN TIME      TOTAL JUMPS            │  ← Bottom-left / Bottom-right blocks
+│ AIR TIME        DOUBLE JUMPS              │  ← (3 items each)
+│ AIR %           IGNORED JUMPS            │
+└─────────────────────────────────────────┘
+</code></pre>
+<h3>Corner Blocks</h3>
+<p><strong>Top-Left (Score-based):</strong></p>
+<table>
+  <tr> <th>Stat</th> <th>Description</th></tr>
+  <tr> <td>Near Misses</td> <td>Count of near-miss bonuses scored</td></tr>
+  <tr> <td>Property Damage</td> <td>Obstacles destroyed while stumbling</td></tr>
+  <tr> <td>Dumb Luck</td> <td>Times luck saved from death</td></tr>
+</table>
+<p><strong>Top-Right (Performance):</strong></p>
+<table>
+  <tr> <th>Stat</th> <th>Description</th></tr>
+  <tr> <td>Distance</td> <td>Total distance traveled (formatted as X.Xkm)</td></tr>
+  <tr> <td>Max Speed</td> <td>Highest speed reached (formatted as X.X)</td></tr>
+</table>
+<p><strong>Bottom-Left (Time-based):</strong></p>
+<table>
+  <tr> <th>Stat</th> <th>Description</th></tr>
+  <tr> <td>Run Time</td> <td>Total play time (formatted as Xm Ys or Ys)</td></tr>
+  <tr> <td>Air Time</td> <td>Total time airborne (formatted as Xm Ys or Ys)</td></tr>
+  <tr> <td>Air %</td> <td>Percentage of run time spent airborne</td></tr>
+</table>
+<p><strong>Bottom-Right (Jump-based):</strong></p>
+<table>
+  <tr> <th>Stat</th> <th>Description</th></tr>
+  <tr> <td>Total Jumps</td> <td>Total jump inputs received</td></tr>
+  <tr> <td>Double Jumps</td> <td>Successful double jumps executed</td></tr>
+  <tr> <td>Ignored Jumps</td> <td>Jump inputs that were rejected (cooldown active, no luck, etc.)</td></tr>
+</table>
+<h3>Obstacle Count Table</h3>
+<ul>
+  <li>Displays <strong>all obstacle types</strong> as small icon + label + count rows</li>
+  <li>Icons are inline SVGs matching the in-game visuals</li>
+  <li>The <strong>killer obstacle</strong> (the one that caused the game over) is highlighted with a red background and text color</li>
+  <li>Icon labels: Cactus, L.Cactus, Rock, Car, Jet, F.Rock, Drone</li>
+</ul>
+<hr class="line-sep">
+<h2>Game Balance &amp; Difficulty Scaling</h2>
+<h3>Speed Tiers</h3>
+<h4>Tier 1 — Relaxed (Speed 5–6)</h4>
+<ul>
+  <li>Obstacles: Cacti-small, cacti-large, rocks</li>
+  <li>Spacing: ~65–50 frames (~1.1–0.8 seconds)</li>
+  <li>No air obstacles</li>
+  <li>Player has time to react and build up luck meter</li>
+</ul>
+<h4>Tier 2 — Intense (Speed 7–8)</h4>
+<ul>
+  <li>Obstacles: Cacti-small, cacti-large, rocks (dominant), car, jet, falling rock</li>
+  <li>Spacing: ~40–30 frames (~0.67–0.5 seconds)</li>
+  <li>Air obstacles appear — must learn vertical positioning</li>
+  <li>Luck meter recharge drops to 1%/sec after initial burst</li>
+</ul>
+<h4>Tier 3 — Brutal (Speed 9–12)</h4>
+<ul>
+  <li>Obstacles: Cacti-small, cacti-large, rocks, car (dominant), jet, falling rock, drone</li>
+  <li>Spacing: ~30–20 frames (~0.5–0.33 seconds)</li>
+  <li>Car appears frequently alongside rocks</li>
+  <li>Drone introduces wave-pattern evasion</li>
+  <li>Luck meter recharge drops to 0.5%/sec steady state</li>
+  <li>Speed lines visible above speed 7</li>
+</ul>
+<h3>Obstacle Weight Shifts by Speed</h3>
+<table>
+  <tr> <th>Speed</th> <th>Cactus-small</th> <th>Cactus-large</th> <th>Rock</th> <th>Car</th> <th>Jet</th> <th>F.Rock</th> <th>Drone</th></tr>
+  <tr> <td>5</td> <td>35%</td> <td>25%</td> <td>25%</td> <td>—</td> <td>—</td> <td>10%</td> <td>—</td></tr>
+  <tr> <td>7</td> <td>25%</td> <td>15%</td> <td>45%</td> <td>—</td> <td>15%</td> <td>10%</td> <td>—</td></tr>
+  <tr> <td>9</td> <td>20%</td> <td>10%</td> <td>40%</td> <td>30%</td> <td>15%</td> <td>8%</td> <td>8%</td></tr>
+</table>
+<h3>Key Balance Decisions</h3>
+<ol>
+  <li><strong>Airborne scoring penalty (10%)</strong> — encourages staying on the ground, making near-misses more valuable for scoring</li>
+  <li><strong>Double jump costs luck</strong> — prevents the game from being too easy; players must weigh risk vs reward</li>
+  <li><strong>Dumb Luck halves score</strong> — saves you but at a steep cost, discouraging reliance on it during competitive play</li>
+  <li><strong>Stumble as opportunity</strong> — transforms a moment of vulnerability into scoring potential (+100 per obstacle)</li>
+  <li><strong>Record-breaking state removes passive luck</strong> — pure skill mode, making high-score runs genuinely challenging</li>
+  <li><strong>Near-miss cooldown (600ms)</strong> — prevents spamming near-misses on the same obstacle for free score</li>
+  <li><strong>Falling rock → rolling boulder sequence</strong> — provides visual warning before the danger arrives, giving the player a moment to react</li>
+  <li><strong>Air obstacles are always fatal</strong> — even during stumble, they cannot be knocked aside, ensuring the game doesn't become too easy at high speeds</li>
+</ol>
+<!-- END DONKEY-GAMEPLAY.md -->
+    </div>
+  </div>
+</div>
+
+<!-- Info buttons outside the game area -->
+<div class="donkey-info-buttons">
+  <button class="donkey-info-btn" onclick="showDonkeyInfo('donkey-readme-panel')">Donkey README</button>
+  <button class="donkey-info-btn" onclick="showDonkeyInfo('donkey-gameplay-panel')">Gameplay</button>
+</div>
+
 </body>
 </html>
