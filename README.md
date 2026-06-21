@@ -16,7 +16,6 @@ A completely self-contained single-file weather app that uses public sources, wi
 - localStorage-based caching with configurable TTLs per data type (15 min for weather/AQI, 24h for geocoding/IP, 10 min for nearby cities) and LRU eviction (default: 500 entries per type)
 - Nearby city discovery via Nominatim with bearing-based diversity selection (automatic display of up to 6 nearest cities, Open-Meteo feature_code categorization for state capitals, regional capitals, nearest cities)
 - °F/°C unit toggle with debouncing
-- Fullscreen toggle button (hidden by default, shown when supported)
 - Animated SVG weather icons (20+ weather types with glow, rotation, drift, shake, bob, and particle animations)
 - Canvas-based charts — merged chart (temperature area fill + precipitation bars + wind line), combined chart (humidity fill + wind line + precipitation bars) with live min/max/avg stats, and ghost NWS overlay charts
 - Automatic API retry with exponential backoff (3 retries, 1s/2s/4s) for network resilience
@@ -29,7 +28,7 @@ A completely self-contained single-file weather app that uses public sources, wi
 - **Local Sensor Bar** — Real-time local weather station data display (temperature, feels-like, dewpoint, wind speed/gust/direction, humidity, pressure, GPS coordinates, UV index, visibility, rainfall, solar radiation, soil moisture) with auto-refresh and TTL expiry
 - **Ghost Chart Overlay** — When NWS data is available, parallel NWS data shown as blue-tinted ghost elements: ghost temperature, ghost weather icon, ghost details grid values, ghost hourly forecast, and ghost merged chart canvas
 - **Cross-source Data Model** — Three states: `open-meteo` (OM-only), `nws` (NWS-only), `enhanced` (OM base + NWS supplemental). Field-level merging where missing OM fields are filled from NWS cache and vice versa
-- **Donkey Runner Minigame** — Chrome dinosaur-style endless runner with extensive features: animated donkey character, backflip on rare jumps, double-jump with fart sound effect, stumble mechanic (donkey trips for 2 seconds), property damage bonus (+100 points when knocking obstacles while stumbling), near-miss detection (+50 points), snarky message system (50+ messages across 20 event types), procedural sound effects (jump, double-jump/fart, game over, milestone, near-miss, land, ceiling), day/night cycle, air-based obstacles (jet, falling rock, drone), obstacle count tracking on game over screen with SVG icons, post-game stats breakdown (run time, air time, jump stats), corner stat blocks, fullscreen mode, sound toggle with localStorage persistence
+- **Donkey Runner Minigame** — Chrome dinosaur-style endless runner with extensive features: animated donkey character, backflip on rare jumps, double-jump with fart sound effect, stumble mechanic (donkey trips for 2 seconds), property damage bonus (+100 points when knocking obstacles while stumbling), near-miss detection (+50 points), snarky message system (50+ messages across 20 event types), procedural sound effects (jump, double-jump/fart, game over, milestone, near-miss, land, ceiling), day/night cycle, air-based obstacles (jet, falling rock, drone), obstacle count tracking on game over screen with SVG icons, post-game stats breakdown (run time, air time, jump stats), corner stat blocks, sound toggle with localStorage persistence
 - **About Panel** — Click the `?` button in the header to open a floating VT100-terminal-styled panel with green-on-black CRT styling, scanline effects, and flicker animation. The panel renders the full README.md content (headings, lists, tables, code blocks) parsed at build time by `build.js`, so it works perfectly from `file:///` with zero fetch/XHR/CORS. Styled to match the Donkey Runner game panel aesthetic with a close button.
 - Zero external dependencies — pure vanilla HTML/CSS/JS
 
@@ -313,7 +312,6 @@ A Chrome dinosaur-style endless runner triggered by network outage or the 🫏 b
 - **Obstacle count tracking** — Game over screen shows counts for each obstacle type with SVG icons
 - **Post-game stats breakdown** — Run time, air time, air percentage, total jumps, double jumps, ignored jumps, max speed, distance, near misses, property damage count
 - **Corner stat blocks** — Compact stat displays positioned at card corners during game over
-- **Fullscreen mode** — Toggle fullscreen view for immersive gameplay
 - **Sound toggle** — Enable/disable sound effects (persisted in localStorage)
 - **Speed lines** — Visual speed indicator at high speeds
 - **Particle effects** — Jump, landing, knock, ceiling impact, and double-jump particles
