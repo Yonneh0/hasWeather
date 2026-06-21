@@ -6075,17 +6075,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Donkey info panel toggle handlers
   function showDonkeyInfo(id) {
-    // Hide any other open panel first
+    var panel = document.getElementById(id);
+    if (!panel) return;
+
+    // If this panel is already visible, close it
+    if (panel.classList.contains('donkey-info-visible')) {
+      panel.classList.remove('donkey-info-visible');
+      panel.classList.add('donkey-info-hidden');
+      return;
+    }
+
+    // Hide any other open panel first, then show the requested one
     document.querySelectorAll('.donkey-info-panel').forEach(p => {
       p.classList.remove('donkey-info-visible');
       p.classList.add('donkey-info-hidden');
     });
-    // Show the requested panel
-    var panel = document.getElementById(id);
-    if (panel) {
-      panel.classList.remove('donkey-info-hidden');
-      panel.classList.add('donkey-info-visible');
-    }
+    panel.classList.remove('donkey-info-hidden');
+    panel.classList.add('donkey-info-visible');
   }
 
   function hideDonkeyInfo(id) {
