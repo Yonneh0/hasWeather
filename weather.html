@@ -2890,7 +2890,7 @@ body.donkey-fullscreen .donkey-panel.donkey-hidden {
     <div class="about-inner-panel" id="about-content">
       <!-- START README.md -->
 <h1>hasWeather (Under Development: Proceed with caution)</h1>
-<p>completely self-contained single file weather app, that uses public sources, with proper local caching, to provide reliable comprehensive weather information, with 0 ads. Brought to you by <code>Carls' Jr</code>.</p>
+<p>A completely self-contained single-file weather app that uses public sources, with proper local caching, to provide reliable comprehensive weather information — with zero ads. Brought to you by <code>Carls' Jr</code>.</p>
 <ul>
   <li>Here be dragons!</li>
   <li>This project is under development. It is not intended for public use, yet.</li>
@@ -2904,14 +2904,13 @@ body.donkey-fullscreen .donkey-panel.donkey-hidden {
   <li>Radar imagery from NOAA/NCEP GeoServer WMS — current MRMS base reflectivity image displayed as a page background with white-to-transparent processing</li>
   <li><strong>Radar Marker Toggle</strong> — Click the 👁 button (next to the radar overlay selector) to switch between city cards and small map markers overlaid on the radar image. City cards animate outward from their positions while markers fade in at their exact geographic locations. Markers are pixel-perfect, centered on the user's location, and positioned using percentage-based coordinates within a 512×512 container scaled to match the background image. City names and distances are always visible on markers; hover reveals additional info. Background weather updates continue uninterrupted in either view.</li>
   <li>localStorage-based caching with configurable TTLs per data type (15 min for weather/AQI, 24h for geocoding/IP, 10 min for nearby cities) and LRU eviction (default: 500 entries per type)</li>
-  <li>Nearby city discovery via Nominatim with bearing-based diversity selection and automatic display of up to 6 nearest cities</li>
+  <li>Nearby city discovery via Nominatim with bearing-based diversity selection (automatic display of up to 6 nearest cities, Open-Meteo feature_code categorization for state capitals, regional capitals, nearest cities)</li>
   <li>°F/°C unit toggle with debouncing</li>
   <li>Fullscreen toggle button (hidden by default, shown when supported)</li>
   <li>Animated SVG weather icons (20+ weather types with glow, rotation, drift, shake, bob, and particle animations)</li>
   <li>Canvas-based charts — merged chart (temperature area fill + precipitation bars + wind line), combined chart (humidity fill + wind line + precipitation bars) with live min/max/avg stats, and ghost NWS overlay charts</li>
   <li>Automatic API retry with exponential backoff (3 retries, 1s/2s/4s) for network resilience</li>
   <li>Automatic geolocation via browser Geolocation API, falling back to ipinfo.io IP-based lookup</li>
-  <li>Nearby city discovery via Nominatim with bearing-based diversity selection and Open-Meteo feature_code categorization (state capitals, regional capitals, nearest cities)</li>
   <li>Wind compass display with directional arrows</li>
   <li>Day/night aware UI theming (dynamic city backgrounds based on current weather code)</li>
   <li>Debug quick-select buttons for common test locations</li>
@@ -2953,40 +2952,57 @@ node build.js
 </code></pre>
 <p>Output: <code>weather.html</code> — the one true file.</p>
 <h2>Project Structure (hasWeather/)</h2>
-<h3>.git/ - 11 items - GIT Folder</h3>
-<h3>css/ - 7 items - Directory</h3>
-<h4>css/about.css - ~300 lines - Cascading Style Sheet (css) — About panel VT100 terminal styling (green text, scanlines, flicker animation, CRT effects)</h4>
-<h4>css/base.css - 29 lines - Cascading Style Sheet (css) — reset &amp; base styles (body, particle-canvas)</h4>
+<h4>css/about.css - 394 lines — Cascading Style Sheet (css)</h4>
+<ul>
+  <li>About panel VT100 terminal styling (see <strong>About Panel</strong> feature)</li>
+</ul>
+<h4>css/base.css - 28 lines - Cascading Style Sheet (css) — reset &amp; base styles (body, particle-canvas)</h4>
 <h4>css/card-components.css - 912 lines - Cascading Style Sheet (css) — card display components (city card, hourly forecast, canvas charts)</h4>
-<h4>css/donkey-runner.css - 777 lines - Cascading Style Sheet (css) — minigame panel styling &amp; animations</h4>
-<h4>css/interactive.css - 385 lines - Cascading Style Sheet (css) — interactive elements (SVG weather icons, network outage panel)</h4>
+<h4>css/donkey-runner.css - 793 lines — Cascading Style Sheet (css)</h4>
+<ul>
+  <li>Minigame panel styling &amp; animations (see <strong>Donkey Runner Minigame</strong> feature)</li>
+</ul>
+<h4>css/interactive.css - 384 lines - Cascading Style Sheet (css) — interactive elements (SVG weather icons, network outage panel)</h4>
 <h4>css/layout.css - 323 lines - Cascading Style Sheet (css) — core layout &amp; structural styles (header, city grid, modal, loading, text glow)</h4>
-<h4>css/main.css - 7 lines - Cascading Style Sheet (css) — entry point (imports all modular CSS)</h4>
-<h3>js/ - 14 items - Directory</h3>
-<h4>js/api-nws.js - 842 lines - JavaScript (js) — NWS API client</h4>
+<h4>css/main.css - 8 lines - Cascading Style Sheet (css) — entry point (imports all modular CSS)</h4>
+<h4>js/api-nws.js - 866 lines - JavaScript (js) — NWS API client</h4>
 <ul>
   <li>gridpoint data, observation stations, alerts, snowfall/ice accumulation parsing, sky cover, cross-source lookup with rate limiting and exponential backoff for 429 responses</li>
 </ul>
-<h4>js/api-openmeteo.js - 437 lines - JavaScript (js) — Open-Meteo weather/AQI API client</h4>
+<h4>js/api-openmeteo.js - 450 lines - JavaScript (js) — Open-Meteo weather/AQI API client</h4>
 <ul>
   <li>consolidated cache keys, per-city incremental fetch, request deduplication, and cross-source NWS fallback</li>
 </ul>
 <h4>js/api-openstreetmap.js - 184 lines - JavaScript (js) — Nominatim/OSM nearby city discovery with bearing-based diversity selection</h4>
-<h4>js/api-radar.js - 245 lines - JavaScript (js) — NOAA/NCEP GeoServer WMS radar API client</h4>
+<h4>js/api-radar.js - 238 lines - JavaScript (js) — NOAA/NCEP GeoServer WMS radar API client</h4>
 <ul>
   <li>multi-overlay fetch with per-layer localStorage caching, GetCapabilities layer discovery, white-to-transparent processing</li>
 </ul>
-<h4>js/cache.js - 285 lines - JavaScript (js) — DataCache (localStorage caching with configurable TTLs per type and LRU eviction, NWS toggle state persistence)</h4>
-<h4>js/charts.js - 495 lines - JavaScript (js) — canvas chart rendering (merged chart, combined chart, ghost NWS overlay charts, particles) with named constants and shared helpers</h4>
-<h4>js/constants.js - 68 lines - JavaScript (js) — shared constants (WMO codes &amp; gradients)</h4>
-<h4>js/donkey-runner.js - 2755 lines - JavaScript (js) — Donkey Runner minigame engine (canvas-based runner with extensive features)</h4>
-<h4>js/icons.js - 290 lines - JavaScript (js) — animated SVG weather icons</h4>
-<h4>js/local-sensor.js - 754 lines - JavaScript (js) — Local Sensor Bar for displaying local weather station data (15 sensor types, flexible unit parsing, auto-refresh with exponential backoff, TTL expiry, page visibility awareness, health checks)</h4>
-<h4>js/main.js - 589 lines - JavaScript (js) — entry point (state + DOM init + event bindings + game toggle + radar background + marker toggle + run orchestration)</h4>
+<h4>js/cache.js - 280 lines - JavaScript (js) — DataCache (localStorage caching with configurable TTLs per type and LRU eviction, NWS toggle state persistence)</h4>
+<h4>js/charts.js - 494 lines — JavaScript (js)</h4>
+<ul>
+  <li>Canvas chart rendering (merged chart, combined chart, ghost NWS overlay charts — see <strong>Ghost Chart Overlay</strong> feature)</li>
+</ul>
+<h4>js/constants.js - 78 lines - JavaScript (js) — shared constants (WMO codes &amp; gradients)</h4>
+<h4>js/donkey-runner.js - 2754 lines — JavaScript (js)</h4>
+<ul>
+  <li>Donkey Runner minigame engine (see <strong>Donkey Runner Minigame</strong> feature for details)</li>
+</ul>
+<h4>js/icons.js - 289 lines - JavaScript (js) — animated SVG weather icons</h4>
+<h4>js/local-sensor.js - 753 lines — JavaScript (js)</h4>
+<ul>
+  <li>Local Sensor Bar data display and configuration (see <strong>Local Sensor Bar</strong> feature)</li>
+</ul>
+<h4>js/main.js - 764 lines — JavaScript (js)</h4>
+<ul>
+  <li>Entry point (app initialization, radar marker toggle, game toggle — see <strong>Radar Marker Toggle</strong> and <strong>Donkey Runner Minigame</strong> features)</li>
+</ul>
 <h4>js/network-monitor.js - 332 lines - JavaScript (js) — network outage detection, animated error panel, auto-retry</h4>
-<h4>js/render.js - 555 lines - JavaScript (js) — DOM rendering (placeholder cards, incremental OM/NWS updates, full card render with ghost NWS overlay, chart coordination) using named constants</h4>
-<h4>js/utils.js - 258 lines - JavaScript (js) — utility functions (unit conversion, haversine, bearing, wind compass, AQI labeling, day/night check, IP-based location, NWS bounds check, background refresh, unit toggle)</h4>
-<h3>node_modules/ - 20 items</h3>
+<h4>js/render.js - 523 lines — JavaScript (js)</h4>
+<ul>
+  <li>DOM rendering (incremental OM/NWS updates, ghost NWS overlay — see <strong>Ghost Chart Overlay</strong> feature)</li>
+</ul>
+<h4>js/utils.js - 740 lines - JavaScript (js) — utility functions (unit conversion, haversine, bearing, wind compass, AQI labeling, day/night check, IP-based location, NWS bounds check, background refresh, unit toggle, location validation with TTL-based expiry)</h4>
 <h3>rag-docs/ - 7 items - Directory</h3>
 <h4>rag-docs/MET_Norway-api.md - 253 lines - Markdown Document (md) — documentation for the MET Norway API</h4>
 <h4>rag-docs/WeatherGov-Radar-API.md - 356 lines - Markdown Document (md) — documentation for the Weather.gov radar endpoints (WMS, metadata)</h4>
@@ -2995,23 +3011,23 @@ node build.js
 <h4>rag-docs/geocoding-api.md - 138 lines - Markdown Document (md) — documentation for the geocoding endpoint</h4>
 <h4>rag-docs/weather-forecast-api.md - 205 lines - Markdown Document (md) — documentation for the weather forecast endpoint</h4>
 <h4>rag-docs/weather.gov-api.md - 1201 lines - Markdown Document (md) — documentation for the NWS API endpoint</h4>
-<h3>.gitignore - 2 lines</h3>
-<h3>AGENTS.md - 2 lines — I wouldn't let your agent read this. Very bad advice.</h3>
-<h3>README.md - 281 lines — you are here</h3>
-<h3>build.js - ~410 lines — build script (inlines CSS/JS into weather.html, parses README.md via markdownToHtml() and injects rendered content into about panel markers, outputs weather.html/weather-full.html/weather-prod.html)</h3>
+<h3>.gitignore - 2 lines — ignored files (node_modules, .env, etc.)</h3>
+<h3>AGENTS.md - 1 line — I wouldn't let your agent read this. Very bad advice.</h3>
+<h3>README.md - 384 lines — you are here</h3>
+<h3>build.js - 414 lines — build script (inlines CSS/JS into weather.html, parses README.md via markdownToHtml() and injects rendered content into about panel markers, outputs weather.html/weather-full.html/weather-prod.html)</h3>
 <h3>favicon.ico - 130985 bytes - ICO Image (ico) — site favicon</h3>
-<h3>has.png - 61909 bytes - PNG Image (png) — Half-Assed Solutions Official Unoffocial Mascott</h3>
+<h3>has.png - 61909 bytes (~60.5 KB) — PNG Image (png) — Half-Assed Solutions Official Unoffocial Mascott</h3>
 <h3>hasWeather-low.png - 11568 bytes - PNG Image (png) — Favicon, minimized, in png flavor</h3>
 <h3>hasWeather.png - 52189 bytes - PNG Image (png) — Favicon, in png flavor</h3>
-<h3>index.html - 64 lines — development HTML template (linked CSS/JS)</h3>
-<h3>package-lock.json - 251 lines — build script stuff</h3>
-<h3>package.json - 15 lines — project metadata + build script</h3>
+<h3>index.html - 84 lines — development HTML template (linked CSS/JS)</h3>
+<h3>package-lock.json - 250 lines — build script stuff</h3>
+<h3>package.json - 14 lines — project metadata + build script</h3>
 <h3>project-tree.js - 211 lines — ... huh, I wonder what this was....</h3>
-<h3>weather-full.html - 10597 lines — (GENERATED) complete single-file build output with comments, including embedded favicon (318kb+)</h3>
-<h3>weather-local.js - 4 lines — local weather station data override file (see below)</h3>
+<h3>weather-full.html — (GENERATED) complete single-file build output with comments, including embedded favicon (~318kb+)</h3>
+<h3>weather-local.js - 3 lines — local weather station data override file (see below)</h3>
 <h3>weather-local.js.example - 107 lines — example configuration for local sensor data</h3>
-<h3>weather-prod.html - 1 lines — (GENERATED) minimized/optimized production-ready single-file build output, without embedded favicon (179kb+)</h3>
-<h3>weather.html - 10597 lines — (GENERATED) complete single-file build output with comments, without embedded favicon (303kb+)</h3>
+<h3>weather-prod.html — (GENERATED) minimized/optimized production-ready single-file build output, without embedded favicon (~179kb+)</h3>
+<h3>weather.html — (GENERATED) complete single-file build output with comments, without embedded favicon (~300kb+)</h3>
 <hr class="line-sep">
 <h2>Caching</h2>
 <p>All API responses are cached in <code>localStorage</code> with type-specific TTLs and LRU eviction:</p>
@@ -3391,6 +3407,7 @@ const DataCache = {
     geocode:    24 * 60 * 60 * 1000, // 24 hr
     nearby:     15 * 60 * 1000,   // 15 min (aligned with weather)
     ipLocation: 24 * 60 * 60 * 1000, // 24 hr
+    geolocation: 24 * 60 * 60 * 1000, // 24 hr
 
     // NWS general data
     nwsPoint:      15 * 60 * 1000,   // 15 min
@@ -3707,6 +3724,14 @@ async function getLocation() {
     return userLocation;
   }
 
+  // Check browser geolocation cache first
+  const cachedGeo = DataCache.get('geolocation', 'geolocation');
+  if (cachedGeo) {
+    console.log(`[Location] ✓ Using cached browser geolocation: (${cachedGeo.lat.toFixed(2)}, ${cachedGeo.lon.toFixed(2)})`);
+    return cachedGeo;
+  }
+
+  // Check IP-based location cache as fallback
   const cachedIP = DataCache.get('ip_location', 'ipLocation');
   if (cachedIP) {
     console.log(`[Location] ✓ Using cached IP location: (${cachedIP.lat.toFixed(2)}, ${cachedIP.lon.toFixed(2)})`);
@@ -3728,8 +3753,11 @@ async function getLocation() {
         navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: GEOLOCATION_TIMEOUT_MS });
       });
       const { latitude, longitude } = pos.coords;
+      const loc = { lat: latitude, lon: longitude };
       console.log(`[Location] ✓ Browser geolocation successful: (${latitude.toFixed(2)}, ${longitude.toFixed(2)})`);
-      return { lat: latitude, lon: longitude };
+      // Cache the browser geolocation result for future lookups
+      DataCache.set('geolocation', loc, 'geolocation');
+      return loc;
     } catch (geocErr) {
       console.warn('[Location] ✗ Browser geolocation failed:', geocErr.message);
 
@@ -3785,8 +3813,10 @@ async function checkGeolocationChange() {
       DataCache.invalidate(oldNearbyKey);
       userLocation = { lat: latitude, lon: longitude };
       // Invalidate weather cache keys for the new location too (they'll be fetched fresh)
-      const newWeatherKey = `hasw_cache_${weatherAqiCacheKey(latitude, longitude)}`;
+      const newWeatherKey = weatherAqiCacheKey(latitude, longitude);
       DataCache.invalidate(newWeatherKey);
+      // Also invalidate the cached geolocation since position has changed
+      DataCache.invalidate('geolocation');
       console.log('[Geolocation] ✓ Location updated — caches invalidated');
       return true;
     }
@@ -3813,6 +3843,54 @@ function getIpLocationElapsed() {
   } catch {
     return null;
   }
+}
+
+/**
+ * Calculate the elapsed time since the cached geolocation entry was created.
+ * Returns null if there's no valid cache entry.
+ */
+function getGeolocationElapsed() {
+  const raw = localStorage.getItem('hasw_cache_geolocation');
+  if (!raw) return null;
+  try {
+    const entry = JSON.parse(raw);
+    if (entry.type !== 'geolocation') return null;
+    return Date.now() - entry.timestamp;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Get the elapsed time since any location cache was created (IP or geolocation).
+ * Returns null if neither exists.
+ */
+function getLocationElapsed() {
+  const geoElapsed = getGeolocationElapsed();
+  if (geoElapsed != null && geoElapsed > 0) return geoElapsed;
+  return getIpLocationElapsed();
+}
+
+/**
+ * Get the TTL for any location cache type.
+ */
+function getLocationTTL() {
+  const raw = localStorage.getItem('hasw_cache_geolocation');
+  if (raw) {
+    try {
+      const entry = JSON.parse(raw);
+      if (entry.type === 'geolocation' && DataCache.TTL.geolocation) return DataCache.TTL.geolocation;
+    } catch {}
+  }
+  const ipRaw = localStorage.getItem('hasw_cache_ip_location');
+  if (ipRaw) {
+    try {
+      const entry = JSON.parse(ipRaw);
+      if (entry.type === 'ipLocation' && DataCache.TTL.ipLocation) return DataCache.TTL.ipLocation;
+    } catch {}
+  }
+  // Default to IP TTL as fallback
+  return DataCache.TTL.ipLocation || 24 * 60 * 60 * 1000;
 }
 
 /**
@@ -3875,7 +3953,7 @@ function startIpLocationRefresh() {
     console.log(`[Location] ✓ IP validation timer started — every ${Math.round(interval / 1000)}s (no cache TTL, using minimum)`);
   }
 
-  _ipLocationRefreshTimer = setInterval(async () => {
+  const tickIpValidation = async () => {
     const locationChanged = await validateIpLocation();
     if (locationChanged) {
       console.log('[Location] ⚠️ IP location validation failed — invalidating cache and forcing refresh');
@@ -3900,10 +3978,12 @@ function startIpLocationRefresh() {
       if (Math.abs(newInterval - interval) / interval > 0.25) {
         clearInterval(_ipLocationRefreshTimer);
         interval = newInterval;
-        _ipLocationRefreshTimer = setInterval(arguments.callee, interval);
+        _ipLocationRefreshTimer = setInterval(tickIpValidation, interval);
       }
     }
-  }, interval);
+  };
+
+  _ipLocationRefreshTimer = setInterval(tickIpValidation, interval);
 }
 
 /**
@@ -3931,14 +4011,14 @@ function startGeolocationRefresh() {
     return;
   }
 
-  const elapsed = getIpLocationElapsed();
+  const elapsed = getLocationElapsed();
   let interval;
+  const locTTL = getLocationTTL();
 
   if (elapsed != null && elapsed > 0) {
     // Start checking every 5 minutes from cache creation, decreasing frequency as
     // the cache ages — but never less than 15 minutes.
-    const ipLocationTTL = DataCache.TTL.ipLocation || 24 * 60 * 60 * 1000;
-    const timeSinceCache = elapsed / ipLocationTTL;
+    const timeSinceCache = elapsed / locTTL;
 
     if (timeSinceCache < 0.1) {
       // Less than 10% of TTL — check every 5 minutes
@@ -3963,7 +4043,7 @@ function startGeolocationRefresh() {
     console.log(`[Geolocation] ✓ Background refresh timer started — every ${Math.round(interval / 1000)}s (no cache TTL, using minimum)`);
   }
 
-  _geolocationRefreshTimer = setInterval(async () => {
+  const tickGeolocationChange = async () => {
     const positionChanged = await checkGeolocationChange();
     if (positionChanged) {
       console.log('[Geolocation] ⚠️ Position changed — invalidating location cache, forcing refresh');
@@ -3972,9 +4052,9 @@ function startGeolocationRefresh() {
       DataCache.invalidate('ip_address');
     }
     // Recalculate interval based on current elapsed time after each check
-    const newElapsed = getIpLocationElapsed();
+    const newElapsed = getLocationElapsed();
     if (newElapsed != null && newElapsed > 0) {
-      const newTTL = DataCache.TTL.ipLocation || 24 * 60 * 60 * 1000;
+      const newTTL = getLocationTTL();
       const newTimeSinceCache = newElapsed / newTTL;
 
       let newInterval;
@@ -3988,10 +4068,12 @@ function startGeolocationRefresh() {
       if (Math.abs(newInterval - interval) / interval > 0.25) {
         clearInterval(_geolocationRefreshTimer);
         interval = newInterval;
-        _geolocationRefreshTimer = setInterval(arguments.callee, interval);
+        _geolocationRefreshTimer = setInterval(tickGeolocationChange, interval);
       }
     }
-  }, interval);
+  };
+
+  _geolocationRefreshTimer = setInterval(tickGeolocationChange, interval);
 }
 
 /**
