@@ -159,43 +159,19 @@ async function run(isBackground = false) {
       }
     }
 
-    // Check NWS bounds and fetch NWS data where available — all in parallel
+    // Fetch NWS data for cities in the US — resolvePoint handles bounds check internally
     if (weatherData.length > 0) {
-      const boundsPromises = weatherData.map(async (city) => {
-        if (city.latitude != null && city.longitude != null &&
-            city.latitude >= 17 && city.latitude <= 71 &&
-            city.longitude >= -170 && city.longitude <= -65) {
-          try {
-            const inBounds = await isNwsBoundsAvailable(city.latitude, city.longitude);
-            return { city, nwsBounds: inBounds };
-          } catch (err) {
-            console.warn(`[NWS bounds] ${city.name} (${city.latitude},${city.longitude}): ${err.message}`);
-            return { city, nwsBounds: false };
-          }
-        }
-        return { city, nwsBounds: false };
-      });
-      
-      const boundsResults = await Promise.all(boundsPromises);
-      for (const { city, nwsBounds } of boundsResults) {
-        city.nwsBounds = nwsBounds;
-      }
-      
-      const nwsCities = weatherData.filter(c => c.nwsBounds);
+      const nwsResults = await Promise.allSettled(
+        weatherData.map(city => fetchForCity(city.latitude, city.longitude).catch(() => null))
+      );
 
-      if (nwsCities.length > 0) {
-        const nwsResults = await Promise.allSettled(
-          nwsCities.map(city => fetchForCity(city.latitude, city.longitude).catch(() => null))
-        );
-
-        for (let i = 0; i < nwsCities.length; i++) {
-          const city = nwsCities[i];
-          const result = nwsResults[i];
-          if (result.status === 'fulfilled' && result.value && result.value.current) {
-            const nwsAppData = nwsToAppData(city, result.value);
-            if (nwsAppData) {
-              city.nwsData = nwsAppData;
-            }
+      for (let i = 0; i < weatherData.length; i++) {
+        const city = weatherData[i];
+        const result = nwsResults[i];
+        if (result.status === 'fulfilled' && result.value && result.value.current) {
+          const nwsAppData = nwsToAppData(city, result.value);
+          if (nwsAppData) {
+            city.nwsData = nwsAppData;
           }
         }
       }
@@ -214,8 +190,10 @@ async function run(isBackground = false) {
       }
     }
 
-    // Start periodic background refresh of weather data
+    // Start periodic background refresh of weather data AND location
     startBackgroundRefresh();
+    startIpLocationRefresh();
+    startGeolocationRefresh();
   } finally {
     if (!isBackground) _runPending = false;
   }
@@ -333,6 +311,10 @@ function startRadarUpdates(lat, lon) {
   }
 
   // Radar refresh interval: 80% of the radar TTL, minimum 2 minutes
+  if (shortestTTL === Infinity) {
+    console.log('[Radar] No TTL data available, skipping background updates');
+    return;
+  }
   const interval = Math.max(2 * 60 * 1000, shortestTTL * BACKGROUND_REFRESH_FRACTION);
   _radarUpdateTimer = setInterval(() => refreshRadarBackground(lat, lon), interval);
 
@@ -386,35 +368,8 @@ function loadRadarOverlaySelect(lat, lon) {
     }
   });
 
-  // Also fetch and add discovered overlays from GetCapabilities
-  if (!_radarOptionsLoaded) {
-    window.fetchAvailableRadarLayers(lat, lon).then(layers => {
-      _radarOptionsLoaded = true;
-      const existingOpts = new Set();
-      sel.querySelectorAll('option').forEach(o => existingOpts.add(o.value));
-
-      for (const layer of layers) {
-        // Map WMS layer name to our key
-        let key = Object.keys(RADAR_LAYERS).find(k => RADAR_LAYERS[k].wmsLayer === layer.name);
-        if (!key && layer.name.startsWith('conus_')) {
-          // Generate a key for discovered layers
-          const shortName = layer.name.replace('conus_', '').replace('_qcd', '');
-          key = shortName;
-          RADAR_LAYERS[key] = { wmsLayer: layer.name, label: layer.label };
-        }
-
-        if (key && !existingOpts.has(key)) {
-          const opt = document.createElement('option');
-          opt.value = key;
-          opt.textContent = layer.label;
-          sel.appendChild(opt);
-        }
-      }
-
-      // Set the correct value after adding options
-      sel.value = _selectedRadarOverlay;
-    });
-  }
+  // Defer GetCapabilities until user interacts with combo box — no request on startup.
+  // Discovered layers are loaded later in applyRadarOverlaySelection when the user first opens the dropdown.
 
   sel.value = _selectedRadarOverlay;
 }
@@ -441,6 +396,10 @@ function applyRadarOverlaySelection(lat, lon) {
 
   // If switching FROM "None", start background updates and load image
   if (!isNowNone && wasNone) {
+    // Load discovered layers on first interaction with the combo box
+    if (!_radarOptionsLoaded && lat && lon) {
+      _loadDiscoveredRadarLayers(sel, lat, lon);
+    }
     loadRadarBackground(lat, lon);
     startRadarUpdates(lat, lon);
     return;
@@ -448,6 +407,37 @@ function applyRadarOverlaySelection(lat, lon) {
 
   // Same overlay type, just reload the image (don't restart timer)
   loadRadarBackground(lat, lon);
+}
+
+// Load discovered radar layers from GetCapabilities (deferred until user first interacts with combo box)
+async function _loadDiscoveredRadarLayers(sel, lat, lon) {
+  if (_radarOptionsLoaded) return;
+  try {
+    const layers = await window.fetchAvailableRadarLayers(lat, lon);
+    _radarOptionsLoaded = true;
+
+    // GetCapabilities is cached to localStorage with 50 min TTL — if it fails or times out,
+    // the predefined RADAR_LAYERS will still be used.
+    for (const layer of layers) {
+      // Map WMS layer name to our key
+      let key = Object.keys(RADAR_LAYERS).find(k => RADAR_LAYERS[k].wmsLayer === layer.name);
+      if (!key && layer.name.startsWith('conus_')) {
+        // Generate a key for discovered layers
+        const shortName = layer.name.replace('conus_', '').replace('_qcd', '');
+        key = shortName;
+        RADAR_LAYERS[key] = { wmsLayer: layer.name, label: layer.label };
+      }
+
+      if (key && !sel.querySelector(`option[value="${key}"]`)) {
+        const opt = document.createElement('option');
+        opt.value = key;
+        opt.textContent = layer.label;
+        sel.appendChild(opt);
+      }
+    }
+  } catch (e) {
+    console.warn('[Radar] Failed to load discovered layers:', e);
+  }
 }
 
 // ===== GAME TOGGLE =====
@@ -746,4 +736,29 @@ function onMarkerResize() {
     }
   }, 200);
 }
+
+// ===== NETWORK EVENT LISTENERS =====
+// Listen for network connectivity changes to restart location timers
+window.addEventListener('online', () => {
+  console.log('[Location] Network reconnected — restarting timers');
+  if (userLocation) {
+    startIpLocationRefresh();
+    startGeolocationRefresh();
+    // Also invalidate the cached IP so it gets validated fresh
+    DataCache.invalidate('ip_location');
+    DataCache.invalidate('ip_address');
+  }
+});
+
+window.addEventListener('offline', () => {
+  console.log('[Location] Network disconnected — stopping timers');
+  stopAllLocationRefresh();
+});
+
+// ===== PAGE UNLOAD HANDLER =====
+// Stop all background timers when the page unloads to prevent stale operations
+window.addEventListener('beforeunload', () => {
+  stopAllLocationRefresh();
+  stopBackgroundRefresh();
+});
 

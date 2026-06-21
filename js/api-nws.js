@@ -3,6 +3,10 @@
 
 const NWS_USER_AGENT = 'hasWeather/1.0 (https://github.com/Yonneh0/hasWeather)';
 
+// ===== Pending Request Tracker =====
+// Prevents duplicate /points/ requests when multiple parallel calls hit the same cache key simultaneously.
+const _nwsPendingRequests = new Map();
+
 // ===== NWS Fetch Configuration =====
 const NWS_FETCH_TIMEOUT_MS = 10000;
 const NWS_RATE_LIMIT_RETRIES = 3;
@@ -169,30 +173,52 @@ async function nwsFetch(url, maxRetries = 3) {
 // Step 1: Resolve a lat/lon to a WFO grid
 async function resolvePoint(lat, lon) {
   const cacheKey = nwsPointCacheKey(lat, lon);
+  
+  // Check cache first — if it exists, return immediately
   const cached = DataCache.get(cacheKey, 'nwsPoint');
   if (cached) return cached;
 
+  // Check for a pending request with the same cache key — if one exists, wait for it
+  const existingPending = _nwsPendingRequests.get(cacheKey);
+  if (existingPending) {
+    // Pending request will populate the cache when it resolves
+    return existingPending;
+  }
+
+  // Create and track a new pending request
   const url = `${NWS_API}/points/${lat},${lon}`;
-  const data = await nwsFetch(url);
+  const pending = (async () => {
+    const data = await nwsFetch(url);
 
-  const props = data?.properties || {};
-  const result = {
-    wfo: props.gridId || props.cwa,
-    gridX: props.gridX,
-    gridY: props.gridY,
-    forecastZone: props.forecastZone,
-    county: props.county,
-    fireWeatherZone: props.fireWeatherZone,
-    timeZone: props.timeZone,
-    radarStation: props.radarStation,
-    observationStations: props.observationStations,
-    forecast: props.forecast,
-    forecastHourly: props.forecastHourly,
-    forecastGridData: props.forecastGridData,
-  };
+    const props = data?.properties || {};
+    const result = {
+      wfo: props.gridId || props.cwa,
+      gridX: props.gridX,
+      gridY: props.gridY,
+      forecastZone: props.forecastZone,
+      county: props.county,
+      fireWeatherZone: props.fireWeatherZone,
+      timeZone: props.timeZone,
+      radarStation: props.radarStation,
+      observationStations: props.observationStations,
+      forecast: props.forecast,
+      forecastHourly: props.forecastHourly,
+      forecastGridData: props.forecastGridData,
+    };
 
-  DataCache.set(cacheKey, result, 'nwsPoint');
-  return result;
+    DataCache.set(cacheKey, result, 'nwsPoint');
+    return result;
+  })();
+
+  _nwsPendingRequests.set(cacheKey, pending);
+
+  try {
+    const result = await pending;
+    return result;
+  } finally {
+    // Clean up the pending entry after it resolves (whether success or failure)
+    _nwsPendingRequests.delete(cacheKey);
+  }
 }
 
 // Step 2: Fetch 12-hour forecast

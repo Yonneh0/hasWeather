@@ -1,5 +1,5 @@
 # hasWeather (Under Development: Proceed with caution)
-completely self-contained single file weather app, that uses public sources, with proper local caching, to provide reliable comprehensive weather information, with 0 ads. Brought to you by `Carls' Jr`.
+A completely self-contained single-file weather app that uses public sources, with proper local caching, to provide reliable comprehensive weather information — with zero ads. Brought to you by `Carls' Jr`.
 
 - Here be dragons!
 - This project is under development. It is not intended for public use, yet.
@@ -13,14 +13,13 @@ completely self-contained single file weather app, that uses public sources, wit
 - Radar imagery from NOAA/NCEP GeoServer WMS — current MRMS base reflectivity image displayed as a page background with white-to-transparent processing
 - **Radar Marker Toggle** — Click the 👁 button (next to the radar overlay selector) to switch between city cards and small map markers overlaid on the radar image. City cards animate outward from their positions while markers fade in at their exact geographic locations. Markers are pixel-perfect, centered on the user's location, and positioned using percentage-based coordinates within a 512×512 container scaled to match the background image. City names and distances are always visible on markers; hover reveals additional info. Background weather updates continue uninterrupted in either view.
 - localStorage-based caching with configurable TTLs per data type (15 min for weather/AQI, 24h for geocoding/IP, 10 min for nearby cities) and LRU eviction (default: 500 entries per type)
-- Nearby city discovery via Nominatim with bearing-based diversity selection and automatic display of up to 6 nearest cities
+- Nearby city discovery via Nominatim with bearing-based diversity selection (automatic display of up to 6 nearest cities, Open-Meteo feature_code categorization for state capitals, regional capitals, nearest cities)
 - °F/°C unit toggle with debouncing
 - Fullscreen toggle button (hidden by default, shown when supported)
 - Animated SVG weather icons (20+ weather types with glow, rotation, drift, shake, bob, and particle animations)
 - Canvas-based charts — merged chart (temperature area fill + precipitation bars + wind line), combined chart (humidity fill + wind line + precipitation bars) with live min/max/avg stats, and ghost NWS overlay charts
 - Automatic API retry with exponential backoff (3 retries, 1s/2s/4s) for network resilience
 - Automatic geolocation via browser Geolocation API, falling back to ipinfo.io IP-based lookup
-- Nearby city discovery via Nominatim with bearing-based diversity selection and Open-Meteo feature_code categorization (state capitals, regional capitals, nearest cities)
 - Wind compass display with directional arrows
 - Day/night aware UI theming (dynamic city backgrounds based on current weather code)
 - Debug quick-select buttons for common test locations
@@ -75,58 +74,57 @@ Output: `weather.html` — the one true file.
 
 ## Project Structure (hasWeather/)
 
-### .git/ - 11 items - GIT Folder
+#### css/about.css - 394 lines — Cascading Style Sheet (css)
+- About panel VT100 terminal styling (see **About Panel** feature)
 
-### css/ - 7 items - Directory
-
-#### css/about.css - ~300 lines - Cascading Style Sheet (css) — About panel VT100 terminal styling (green text, scanlines, flicker animation, CRT effects)
-
-#### css/base.css - 29 lines - Cascading Style Sheet (css) — reset & base styles (body, particle-canvas)
+#### css/base.css - 28 lines - Cascading Style Sheet (css) — reset & base styles (body, particle-canvas)
 
 #### css/card-components.css - 912 lines - Cascading Style Sheet (css) — card display components (city card, hourly forecast, canvas charts)
 
-#### css/donkey-runner.css - 777 lines - Cascading Style Sheet (css) — minigame panel styling & animations
+#### css/donkey-runner.css - 793 lines — Cascading Style Sheet (css)
+- Minigame panel styling & animations (see **Donkey Runner Minigame** feature)
 
-#### css/interactive.css - 385 lines - Cascading Style Sheet (css) — interactive elements (SVG weather icons, network outage panel)
+#### css/interactive.css - 384 lines - Cascading Style Sheet (css) — interactive elements (SVG weather icons, network outage panel)
 
 #### css/layout.css - 323 lines - Cascading Style Sheet (css) — core layout & structural styles (header, city grid, modal, loading, text glow)
 
-#### css/main.css - 7 lines - Cascading Style Sheet (css) — entry point (imports all modular CSS)
+#### css/main.css - 8 lines - Cascading Style Sheet (css) — entry point (imports all modular CSS)
 
-### js/ - 14 items - Directory
-
-#### js/api-nws.js - 842 lines - JavaScript (js) — NWS API client
+#### js/api-nws.js - 866 lines - JavaScript (js) — NWS API client
 - gridpoint data, observation stations, alerts, snowfall/ice accumulation parsing, sky cover, cross-source lookup with rate limiting and exponential backoff for 429 responses
 
-#### js/api-openmeteo.js - 437 lines - JavaScript (js) — Open-Meteo weather/AQI API client
+#### js/api-openmeteo.js - 450 lines - JavaScript (js) — Open-Meteo weather/AQI API client
 - consolidated cache keys, per-city incremental fetch, request deduplication, and cross-source NWS fallback
 
 #### js/api-openstreetmap.js - 184 lines - JavaScript (js) — Nominatim/OSM nearby city discovery with bearing-based diversity selection
 
-#### js/api-radar.js - 245 lines - JavaScript (js) — NOAA/NCEP GeoServer WMS radar API client
+#### js/api-radar.js - 238 lines - JavaScript (js) — NOAA/NCEP GeoServer WMS radar API client
 - multi-overlay fetch with per-layer localStorage caching, GetCapabilities layer discovery, white-to-transparent processing
 
-#### js/cache.js - 285 lines - JavaScript (js) — DataCache (localStorage caching with configurable TTLs per type and LRU eviction, NWS toggle state persistence)
+#### js/cache.js - 280 lines - JavaScript (js) — DataCache (localStorage caching with configurable TTLs per type and LRU eviction, NWS toggle state persistence)
 
-#### js/charts.js - 495 lines - JavaScript (js) — canvas chart rendering (merged chart, combined chart, ghost NWS overlay charts, particles) with named constants and shared helpers
+#### js/charts.js - 494 lines — JavaScript (js)
+- Canvas chart rendering (merged chart, combined chart, ghost NWS overlay charts — see **Ghost Chart Overlay** feature)
 
-#### js/constants.js - 68 lines - JavaScript (js) — shared constants (WMO codes & gradients)
+#### js/constants.js - 78 lines - JavaScript (js) — shared constants (WMO codes & gradients)
 
-#### js/donkey-runner.js - 2755 lines - JavaScript (js) — Donkey Runner minigame engine (canvas-based runner with extensive features)
+#### js/donkey-runner.js - 2754 lines — JavaScript (js)
+- Donkey Runner minigame engine (see **Donkey Runner Minigame** feature for details)
 
-#### js/icons.js - 290 lines - JavaScript (js) — animated SVG weather icons
+#### js/icons.js - 289 lines - JavaScript (js) — animated SVG weather icons
 
-#### js/local-sensor.js - 754 lines - JavaScript (js) — Local Sensor Bar for displaying local weather station data (15 sensor types, flexible unit parsing, auto-refresh with exponential backoff, TTL expiry, page visibility awareness, health checks)
+#### js/local-sensor.js - 753 lines — JavaScript (js)
+- Local Sensor Bar data display and configuration (see **Local Sensor Bar** feature)
 
-#### js/main.js - 589 lines - JavaScript (js) — entry point (state + DOM init + event bindings + game toggle + radar background + marker toggle + run orchestration)
+#### js/main.js - 764 lines — JavaScript (js)
+- Entry point (app initialization, radar marker toggle, game toggle — see **Radar Marker Toggle** and **Donkey Runner Minigame** features)
 
 #### js/network-monitor.js - 332 lines - JavaScript (js) — network outage detection, animated error panel, auto-retry
 
-#### js/render.js - 555 lines - JavaScript (js) — DOM rendering (placeholder cards, incremental OM/NWS updates, full card render with ghost NWS overlay, chart coordination) using named constants
+#### js/render.js - 523 lines — JavaScript (js)
+- DOM rendering (incremental OM/NWS updates, ghost NWS overlay — see **Ghost Chart Overlay** feature)
 
-#### js/utils.js - 258 lines - JavaScript (js) — utility functions (unit conversion, haversine, bearing, wind compass, AQI labeling, day/night check, IP-based location, NWS bounds check, background refresh, unit toggle)
-
-### node_modules/ - 20 items
+#### js/utils.js - 740 lines - JavaScript (js) — utility functions (unit conversion, haversine, bearing, wind compass, AQI labeling, day/night check, IP-based location, NWS bounds check, background refresh, unit toggle, location validation with TTL-based expiry)
 
 ### rag-docs/ - 7 items - Directory
 
@@ -144,39 +142,38 @@ Output: `weather.html` — the one true file.
 
 #### rag-docs/weather.gov-api.md - 1201 lines - Markdown Document (md) — documentation for the NWS API endpoint
 
-### .gitignore - 2 lines
+### .gitignore - 2 lines — ignored files (node_modules, .env, etc.)
+### AGENTS.md - 1 line — I wouldn't let your agent read this. Very bad advice.
 
-### AGENTS.md - 2 lines — I wouldn't let your agent read this. Very bad advice.
+### README.md - 384 lines — you are here
 
-### README.md - 281 lines — you are here
-
-### build.js - ~410 lines — build script (inlines CSS/JS into weather.html, parses README.md via markdownToHtml() and injects rendered content into about panel markers, outputs weather.html/weather-full.html/weather-prod.html)
+### build.js - 414 lines — build script (inlines CSS/JS into weather.html, parses README.md via markdownToHtml() and injects rendered content into about panel markers, outputs weather.html/weather-full.html/weather-prod.html)
 
 ### favicon.ico - 130985 bytes - ICO Image (ico) — site favicon
 
-### has.png - 61909 bytes - PNG Image (png) — Half-Assed Solutions Official Unoffocial Mascott
+### has.png - 61909 bytes (~60.5 KB) — PNG Image (png) — Half-Assed Solutions Official Unoffocial Mascott
 
 ### hasWeather-low.png - 11568 bytes - PNG Image (png) — Favicon, minimized, in png flavor
 
 ### hasWeather.png - 52189 bytes - PNG Image (png) — Favicon, in png flavor
 
-### index.html - 64 lines — development HTML template (linked CSS/JS)
+### index.html - 84 lines — development HTML template (linked CSS/JS)
 
-### package-lock.json - 251 lines — build script stuff
+### package-lock.json - 250 lines — build script stuff
 
-### package.json - 15 lines — project metadata + build script
+### package.json - 14 lines — project metadata + build script
 
 ### project-tree.js - 211 lines — ... huh, I wonder what this was....
 
-### weather-full.html - 10597 lines — (GENERATED) complete single-file build output with comments, including embedded favicon (318kb+)
+### weather-full.html — (GENERATED) complete single-file build output with comments, including embedded favicon (~318kb+)
 
-### weather-local.js - 4 lines — local weather station data override file (see below)
+### weather-local.js - 3 lines — local weather station data override file (see below)
 
 ### weather-local.js.example - 107 lines — example configuration for local sensor data
 
-### weather-prod.html - 1 lines — (GENERATED) minimized/optimized production-ready single-file build output, without embedded favicon (179kb+)
+### weather-prod.html — (GENERATED) minimized/optimized production-ready single-file build output, without embedded favicon (~179kb+)
 
-### weather.html - 10597 lines — (GENERATED) complete single-file build output with comments, without embedded favicon (303kb+)
+### weather.html — (GENERATED) complete single-file build output with comments, without embedded favicon (~300kb+)
 
 
 ---

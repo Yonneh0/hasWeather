@@ -10,6 +10,11 @@ const MAX_CITIES = 6;
 const MIN_CITY_DISTANCE_MI = 8;
 const HOURLY_FORECAST_SLOTS = 24;
 const CHART_DRAW_DELAY_MS = 400;
+
+// ===== Location Refresh Constants =====
+const IP_LOCATION_REFRESH_MS = 30 * 60 * 1000; // 30 min — check if user's IP changed
+const GEOLOCATION_BACKGROUND_REFRESH_MS = 5 * 60 * 1000; // 5 min — periodically refresh browser location
+const COORD_CHANGE_THRESHOLD_MI = 0.5; // minimum distance change to trigger update (half mile)
 const CHART_RESIZE_DEBOUNCE_MS = 250;
 const TOGGLE_DEBOUNCE_MS = 300;
 const RENDER_ALL_CHART_DELAY_MS = 400;
