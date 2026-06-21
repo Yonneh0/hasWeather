@@ -1148,7 +1148,9 @@ const DONKEY_RUNNER = {
     this.donkey.wasGrounded = this.donkey.grounded;
 
     this.obstacleTimer += deltaTime * 60;
-    const targetInterval = 35 + Math.round(45 * Math.pow((12 - this.speed) / 7, 2));
+    const baseInterval = 25 + Math.round(45 * Math.pow((12 - this.speed) / 7, 2));
+    // Add ±25% random variance to obstacle spacing for more natural feel
+    const targetInterval = baseInterval * (0.75 + Math.random() * 0.5);
     if (this.obstacleTimer >= targetInterval) {
       this.spawnObstacle();
       this.obstacleTimer = 0;
