@@ -1,11 +1,16 @@
 #!/usr/bin/env node
 
 /**
- * build.js - Compiles src/index.html into a single self-contained weather.html
+ * build.js - Compiles HTML templates into self-contained build/ outputs
  *
- * Reads index.html, inlines all referenced CSS and JS files (resolving @import),
- * and writes weather.html. Then generates weather-full.html (with favicon) and
- * weather-prod.html (minified, no favicon).
+ * For weather.html: reads index.html, inlines CSS/JS (resolving @import),
+ * injects README.md content, then writes weather.html, weather-full.html (with favicon),
+ * and weather-prod.html (minified).
+ *
+ * For donkey.html: reads donkey.html, inlines CSS/JS, then writes
+ * donkey-full.html (inlined) and donkey-prod.html (minified).
+ *
+ * All outputs go to ./build/ directory.
  */
 
 const fs = require('fs');
@@ -13,19 +18,108 @@ const path = require('path');
 const { minify } = require('html-minifier-terser');
 const { execSync } = require('child_process');
 
+// --- Configuration ---
+const ROOT = __dirname;
+const BUILD_DIR = path.join(ROOT, 'build');
+const FAVICON_PATH = path.join(ROOT, 'hasWeather-low.png');
+
+// Weather HTML inputs/outputs
+const WEATHER_INPUT_HTML = path.join(ROOT, 'index.html');
+const WEATHER_OUTPUT_HTML = path.join(BUILD_DIR, 'weather.html');
+const WEATHER_OUTPUT_FULL_HTML = path.join(BUILD_DIR, 'weather-full.html');
+const WEATHER_OUTPUT_PROD_HTML = path.join(BUILD_DIR, 'weather-prod.html');
+
+// Donkey HTML inputs/outputs
+const DONKEY_INPUT_HTML = path.join(ROOT, 'donkey.html');
+const DONKEY_OUTPUT_FULL_HTML = path.join(BUILD_DIR, 'donkey-full.html');
+const DONKEY_OUTPUT_PROD_HTML = path.join(BUILD_DIR, 'donkey-prod.html');
+
+// --- Helper: Format file stats ---
+function formatFileSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+function formatDate(date) {
+  const d = date.toISOString().replace('T', ' ').substring(0, 19);
+  return d;
+}
+
+function logFileEntry(label, filePath) {
+  if (!fs.existsSync(filePath)) return;
+  const stats = fs.statSync(filePath);
+  const size = stats.size;
+  const modDate = formatDate(stats.mtime);
+  const relPath = path.relative(ROOT, filePath);
+  const suffix = label.endsWith(':') ? '' : ':';
+  const paddedPath = relPath.padEnd(32);
+  const paddedSize = formatFileSize(size).padEnd(10);
+  console.log(`  ${label}${suffix} ${paddedPath} ${paddedSize} ${modDate}`);
+}
+
+// --- CSS @import resolver ---
+function readCSSWithImports(cssPath) {
+  const css = fs.readFileSync(cssPath, 'utf8');
+  const cssDir = path.dirname(cssPath);
+
+  return css.replace(/@import\s+['"]([^'"]+)['"];?\s*/gi, (_match, href) => {
+    const resolvedPath = path.resolve(cssDir, href);
+    if (!fs.existsSync(resolvedPath)) {
+      return _match;
+    }
+    return readCSSWithImports(resolvedPath);
+  });
+}
+
+// --- CSS file collector for logging ---
+function collectCSSFiles(cssPath, cssSet) {
+  const css = fs.readFileSync(cssPath, 'utf8');
+  const cssDir = path.dirname(cssPath);
+
+  let match;
+  const regex = /@import\s+['"]([^'"]+)['"];?\s*/gi;
+  while ((match = regex.exec(css)) !== null) {
+    const href = match[1];
+    const resolvedPath = path.resolve(cssDir, href);
+    if (fs.existsSync(resolvedPath) && !cssSet.has(resolvedPath)) {
+      cssSet.add(resolvedPath);
+      collectCSSFiles(resolvedPath, cssSet);
+    }
+  }
+}
+
+// --- Collect referenced files from HTML ---
+function collectCssLinks(html) {
+  const links = [];
+  let match;
+  const regex = /<link\s+rel="stylesheet"\s+href="([^"]+)"\s*\/?>/gi;
+  while ((match = regex.exec(html)) !== null) {
+    links.push(match[1]);
+  }
+  return links;
+}
+
+function collectJsLinks(html) {
+  const files = [];
+  let match;
+  const regex = /<script\s+src="([^"]+)"><\/script>/gi;
+  while ((match = regex.exec(html)) !== null) {
+    files.push(match[1]);
+  }
+  return files;
+}
+
 // --- Simple Markdown → HTML parser (no external deps) ---
-  function markdownToHtml(md) {
-    // Normalize Windows CRLF to LF so regexes work correctly
-    md = md.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-    const lines = md.split('\n');
+function markdownToHtml(md) {
+  md = md.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const lines = md.split('\n');
   let html = '';
-  let inList = null;       // 'ul' or 'ol'
+  let inList = null;
   let inPre = false;
-  let preContent = '';
+  let codeBuf = '';
   let inTable = false;
   let tableRows = [];
-  let codeInline = false;
-  let codeBuf = '';
 
   function flushList() {
     if (inList) { html += `</${inList}>\n`; inList = null; }
@@ -52,19 +146,13 @@ const { execSync } = require('child_process');
   }
 
   function inlineParse(s) {
-    // Bold + italic
     s = s.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
-    // Bold
     s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
     s = s.replace(/__(.+?)__/g, '<strong>$1</strong>');
-    // Italic
     s = s.replace(/\*(.+?)\*/g, '<em>$1</em>');
     s = s.replace(/_(.+?)_/g, '<em>$1</em>');
-    // Inline code
     s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
-    // Links
     s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
-    // Restore # heading markers that were escaped by escapeHtml
     s = s.replace(/&#35;/g, '#');
     return s;
   }
@@ -72,7 +160,6 @@ const { execSync } = require('child_process');
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    // Code blocks (``` ... ```)
     if (line.trim().startsWith('```')) {
       if (inPre) {
         html += `<pre><code>${escapeHtml(codeBuf)}</code></pre>\n`;
@@ -90,7 +177,6 @@ const { execSync } = require('child_process');
       continue;
     }
 
-    // Horizontal rule (---, ***, ___)
     if (/^\s*([-*_]\s*){3,}$/.test(line)) {
       flushList();
       flushTable();
@@ -98,12 +184,11 @@ const { execSync } = require('child_process');
       continue;
     }
 
-    // Table rows
     if (line.includes('|') && /^\|/.test(line.trim())) {
       flushList();
       const cells = line.split('|').filter((_, ci, arr) => ci > 0 && ci < arr.length - 1).map(c => inlineParse(escapeHtml(c.trim())));
       const isSep = /^\|[\s\-:|]+\|$/.test(line.trim());
-      if (isSep) continue; // skip separator line
+      if (isSep) continue;
       if (!inTable) { inTable = true; tableRows = []; }
       tableRows.push(cells);
       continue;
@@ -111,7 +196,6 @@ const { execSync } = require('child_process');
       flushTable();
     }
 
-    // Headings
     const headingMatch = line.match(/^(#{1,6})\s+(.+)$/);
     if (headingMatch) {
       flushList();
@@ -120,32 +204,27 @@ const { execSync } = require('child_process');
       continue;
     }
 
-    // Unordered list item
     if (/^\s*[-*+]\s/.test(line)) {
       if (inList !== 'ul') { flushList(); inList = 'ul'; html += '<ul>\n'; }
       html += `  <li>${inlineParse(escapeHtml(line.replace(/^\s*[-*+]\s+/, '')))}</li>\n`;
       continue;
     }
 
-    // Ordered list item
     if (/^\s*\d+\.\s/.test(line)) {
       if (inList !== 'ol') { flushList(); inList = 'ol'; html += '<ol>\n'; }
       html += `  <li>${inlineParse(escapeHtml(line.replace(/^\s*\d+\.\s+/, '')))}</li>\n`;
       continue;
     }
 
-    // Blank line
     if (line.trim() === '') {
       flushList();
       continue;
     }
 
-    // Paragraph
     flushList();
     html += `<p>${inlineParse(escapeHtml(line))}</p>\n`;
   }
 
-  // Flush remaining
   if (inPre) { html += `<pre><code>${escapeHtml(codeBuf)}</code></pre>\n`; }
   flushList();
   flushTable();
@@ -154,7 +233,7 @@ const { execSync } = require('child_process');
 }
 
 // --- Inject README.md into about panel stub content ---
-function injectAboutContent(html, callNum) {
+function injectAboutContent(html) {
   const readmePath = path.join(ROOT, 'README.md');
   if (!fs.existsSync(readmePath)) {
     console.log('[build] README.md not found, skipping about panel injection');
@@ -164,139 +243,89 @@ function injectAboutContent(html, callNum) {
   const md = fs.readFileSync(readmePath, 'utf8');
   const rendered = markdownToHtml(md);
 
-  // Replace everything between <!-- START README.md --> and <!-- END README.md --> markers.
   const re = /<!--\s*START README\.md\s*-->([\s\S]*?)<!--\s*END README\.md\s*-->/;
   const newContent = `<!-- START README.md -->\n${rendered}<!-- END README.md -->`;
 
-  const beforeMatch = re.test(html);
   html = html.replace(re, newContent);
-  console.log(`[build] injectAboutContent call #${callNum}: marker found=${beforeMatch}, rendered md length=${rendered.length}`);
+  console.log('[build] Injected README.md into about panel');
+  return html;
+}
+
+// --- Inject donkey markdown files into their respective stub content ---
+function injectDonkeyContent(html) {
+  let changed = false;
+
+  // Inject donkey-readme.md
+  const donkeyReadmePath = path.join(ROOT, 'donkey-readme.md');
+  if (fs.existsSync(donkeyReadmePath)) {
+    const md = fs.readFileSync(donkeyReadmePath, 'utf8');
+    const rendered = markdownToHtml(md);
+    const re = /<!--\s*START DONKEY-README\.md\s*-->([\s\S]*?)<!--\s*END DONKEY-README\.md\s*-->/;
+    const newContent = `<!-- START DONKEY-README.md -->\n${rendered}<!-- END DONKEY-README.md -->`;
+    html = html.replace(re, newContent);
+    console.log('[build] Injected donkey-readme.md into panel');
+    changed = true;
+  } else {
+    console.log('[build] donkey-readme.md not found, skipping injection');
+  }
+
+  // Inject donkey-gameplay.md
+  const donkeyGameplayPath = path.join(ROOT, 'donkey-gameplay.md');
+  if (fs.existsSync(donkeyGameplayPath)) {
+    const md = fs.readFileSync(donkeyGameplayPath, 'utf8');
+    const rendered = markdownToHtml(md);
+    const re = /<!--\s*START DONKEY-GAMEPLAY\.md\s*-->([\s\S]*?)<!--\s*END DONKEY-GAMEPLAY\.md\s*-->/;
+    const newContent = `<!-- START DONKEY-GAMEPLAY.md -->\n${rendered}<!-- END DONKEY-GAMEPLAY.md -->`;
+    html = html.replace(re, newContent);
+    console.log('[build] Injected donkey-gameplay.md into panel');
+    changed = true;
+  } else {
+    console.log('[build] donkey-gameplay.md not found, skipping injection');
+  }
 
   return html;
 }
 
-// --- Configuration ---
-const ROOT = __dirname;
-const INPUT_HTML = path.join(ROOT, 'index.html');
-const OUTPUT_HTML = path.join(ROOT, 'weather.html');
-const OUTPUT_FULL_HTML = path.join(ROOT, 'weather-full.html');
-const OUTPUT_PROD_HTML = path.join(ROOT, 'weather-prod.html');
-const FAVICON_PATH = path.join(ROOT, 'hasWeather-low.png');
-
-// --- Helper: Format file stats ---
-function formatFileSize(bytes) {
-  if (bytes < 1024) return bytes + ' B';
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
-}
-
-function formatDate(date) {
-  const d = date.toISOString().replace('T', ' ').substring(0, 19);
-  return d;
-}
-
-function logFileEntry(label, filePath) {
-  const stats = fs.statSync(filePath);
-  const size = stats.size;
-  const modDate = formatDate(stats.mtime);
-  const relPath = path.relative(ROOT, filePath);
-  // label should end with ':' (e.g. "Input:", "CSS:", "JS:", "Output:")
-  const suffix = label.endsWith(':') ? '' : ':';
-  // Pad filename and size for alignment: sizes max ~7 chars (e.g. "43.2 KB"), dates fixed 19 chars
-  const paddedPath = relPath.padEnd(32);
-  const paddedSize = formatFileSize(size).padEnd(10);
-  console.log(`  ${label}${suffix} ${paddedPath} ${paddedSize} ${modDate}`);
-}
-
-// --- CSS @import resolver ---
-// Recursively reads a CSS file and resolves all @import statements,
-// replacing them with the referenced file's content.
-function readCSSWithImports(cssPath) {
-  const css = fs.readFileSync(cssPath, 'utf8');
-  const cssDir = path.dirname(cssPath);
-
-  return css.replace(/@import\s+['"]([^'"]+)['"];?\s*/gi, (_match, href) => {
-    const resolvedPath = path.resolve(cssDir, href);
-    // If the file doesn't exist locally, leave the @import as-is (external URL)
-    if (!fs.existsSync(resolvedPath)) {
-      return _match;
-    }
-    return readCSSWithImports(resolvedPath);
-  });
-}
-
-// --- Main build function ---
-async function main() {
-  console.log('Half-Assed Solution: build weather');
-  console.log('');
-
-  // --- Step 1: Read the HTML template ---
+// --- Reusable HTML compilation function ---
+// Compiles an HTML file by inlining all CSS and JS references.
+function compileHtmlFile(inputPath) {
   let html;
   try {
-    html = fs.readFileSync(INPUT_HTML, 'utf8');
+    html = fs.readFileSync(inputPath, 'utf8');
   } catch (err) {
-    console.error(`Error: Cannot read ${INPUT_HTML}`);
+    console.error(`Error: Cannot read ${inputPath}`);
     console.error(err.message);
     process.exit(1);
   }
-  logFileEntry('Input:', INPUT_HTML);
 
-  // --- Step 2: Resolve all CSS files (with @import recursion) ---
-  function collectCSSFiles(cssPath) {
-    const css = fs.readFileSync(cssPath, 'utf8');
-    const cssDir = path.dirname(cssPath);
+  // Collect CSS files for logging
+  const cssLinks = collectCssLinks(html);
+  const jsLinks = collectJsLinks(html);
 
-    let match;
-    const regex = /@import\s+['"]([^'"]+)['"];?\s*/gi;
-    while ((match = regex.exec(css)) !== null) {
-      const href = match[1];
-      const resolvedPath = path.resolve(cssDir, href);
-      if (fs.existsSync(resolvedPath)) {
-        cssSet.add(resolvedPath);
-        collectCSSFiles(resolvedPath);
-      }
+  if (cssLinks.length > 0) {
+    console.log('');
+    console.log('CSS files:');
+    const cssSet = new Set();
+    for (const href of cssLinks) {
+      const cssPath = path.join(ROOT, href);
+      cssSet.add(cssPath);
+      collectCSSFiles(cssPath, cssSet);
+    }
+    for (const cssPath of [...cssSet].sort()) {
+      logFileEntry('CSS:', cssPath);
     }
   }
 
-  // Scan index.html for CSS <link> tags
-  const cssLinks = [];
-  let cssMatch;
-  const cssRegex = /<link\s+rel="stylesheet"\s+href="([^"]+)"\s*\/?>/gi;
-  while ((cssMatch = cssRegex.exec(html)) !== null) {
-    cssLinks.push(cssMatch[1]);
+  if (jsLinks.length > 0) {
+    console.log('');
+    console.log('JS files:');
+    for (const jsHref of jsLinks) {
+      const jsPath = path.join(ROOT, jsHref);
+      logFileEntry('JS:', jsPath);
+    }
   }
 
-  // Collect all CSS files recursively
-  const cssSet = new Set();
-  for (const href of cssLinks) {
-    const cssPath = path.join(ROOT, href);
-    cssSet.add(cssPath);
-    collectCSSFiles(cssPath);
-  }
-
-  // De-duplicate and log CSS files
-  console.log('');
-  console.log('CSS files:');
-  for (const cssPath of [...cssSet].sort()) {
-    logFileEntry('CSS:', cssPath);
-  }
-
-  // --- Step 3: Collect JS files ---
-  const jsFiles = [];
-  let jsMatch;
-  const jsRegex = /<script\s+src="([^"]+)"><\/script>/gi;
-  while ((jsMatch = jsRegex.exec(html)) !== null) {
-    jsFiles.push(jsMatch[1]);
-  }
-
-  console.log('');
-  console.log('JS files:');
-  for (const jsHref of jsFiles) {
-    const jsPath = path.join(ROOT, jsHref);
-    logFileEntry('JS:', jsPath);
-  }
-
-  // --- Step 4: Inline all CSS ---
+  // Inline CSS
   html = html.replace(
     /<link\s+rel="stylesheet"\s+href="([^"]+)"\s*\/?>/gi,
     (_match, href) => {
@@ -312,7 +341,7 @@ async function main() {
     }
   );
 
-  // --- Step 5: Inline all JS ---
+  // Inline JS
   html = html.replace(
     /<script\s+src="([^"]+)"><\/script>/gi,
     (_match, src) => {
@@ -328,27 +357,46 @@ async function main() {
     }
   );
 
-  // --- Step 6: Inject README.md into about panel, then write output ---
-  html = injectAboutContent(html, 1);
+  return html;
+}
 
+// --- Write file and log it ---
+function writeOutput(label, outputPath, content) {
   try {
-    fs.writeFileSync(OUTPUT_HTML, html, 'utf8');
+    fs.writeFileSync(outputPath, content, 'utf8');
+    logFileEntry(label + ':', outputPath);
   } catch (err) {
-    console.error(`Error: Cannot write ${OUTPUT_HTML}`);
+    console.error(`Error: Cannot write ${outputPath}`);
     console.error(err.message);
     process.exit(1);
   }
-  logFileEntry('Output:', OUTPUT_HTML);
+}
 
-  // --- Step 7: Generate weather-full.html (with embedded favicon) ---
-  let fullHtml = injectAboutContent(html, 2);
+// --- Main build function ---
+async function main() {
+  // Create build directory if needed
+  if (!fs.existsSync(BUILD_DIR)) {
+    fs.mkdirSync(BUILD_DIR, { recursive: true });
+  }
 
-  // Read favicon as base64
+  console.log('Half-Assed Solution: build weather');
+  console.log('');
+
+  // ============================================
+  // Weather builds (from index.html)
+  // ============================================
+  let html = compileHtmlFile(WEATHER_INPUT_HTML);
+  logFileEntry('Input:', WEATHER_INPUT_HTML);
+
+  // --- weather.html (inlined, README injected) ---
+  html = injectAboutContent(html);
+  writeOutput('Output', WEATHER_OUTPUT_HTML, html);
+
+  // --- weather-full.html (inlined + README + embedded favicon) ---
+  let fullHtml = injectAboutContent(html);
   if (fs.existsSync(FAVICON_PATH)) {
     const faviconData = fs.readFileSync(FAVICON_PATH);
     const faviconBase64 = faviconData.toString('base64');
-
-    // Replace the favicon link tag with an inline data URI
     fullHtml = fullHtml.replace(
       /<link[^>]*>/gi,
       (match) => {
@@ -360,19 +408,11 @@ async function main() {
       }
     );
   }
-
-  try {
-    fs.writeFileSync(OUTPUT_FULL_HTML, fullHtml, 'utf8');
-  } catch (err) {
-    console.error(`Error: Cannot write ${OUTPUT_FULL_HTML}`);
-    console.error(err.message);
-    process.exit(1);
-  }
-  logFileEntry('Full:', OUTPUT_FULL_HTML);
+  writeOutput('Full', WEATHER_OUTPUT_FULL_HTML, fullHtml);
   console.log('');
 
-  // --- Step 8: Generate weather-prod.html (minified, no favicon) ---
-  const prodHtml = await minify(injectAboutContent(html, 3), {
+  // --- weather-prod.html (inlined + README + minified) ---
+  const prodHtml = await minify(injectAboutContent(html), {
     collapseWhitespace: true,
     removeComments: true,
     removeRedundantAttributes: true,
@@ -382,23 +422,60 @@ async function main() {
     collapseBooleanAttributes: false,
     sortAttributes: false,
   });
-
-  try {
-    fs.writeFileSync(OUTPUT_PROD_HTML, prodHtml, 'utf8');
-  } catch (err) {
-    console.error(`Error: Cannot write ${OUTPUT_PROD_HTML}`);
-    console.error(err.message);
-    process.exit(1);
-  }
-  logFileEntry('Prod:', OUTPUT_PROD_HTML);
+  writeOutput('Prod', WEATHER_OUTPUT_PROD_HTML, prodHtml);
   console.log('');
 
-  // --- Step 9: Commit the 3 files to git ---
+  // ============================================
+  // Donkey builds (from donkey.html)
+  // ============================================
+  console.log('Half-Assed Solution: build donkey');
+  console.log('');
+
+  let donkeyHtml = compileHtmlFile(DONKEY_INPUT_HTML);
+  logFileEntry('Input:', DONKEY_INPUT_HTML);
+
+  // --- donkey-full.html (inlined + README injected, no minification) ---
+  donkeyHtml = injectDonkeyContent(donkeyHtml);
+  writeOutput('Full', DONKEY_OUTPUT_FULL_HTML, donkeyHtml);
+  console.log('');
+
+  // --- donkey-prod.html (inlined + README injected + minified) ---
+  const donkeyProdHtml = await minify(injectDonkeyContent(donkeyHtml), {
+    collapseWhitespace: true,
+    removeComments: true,
+    removeRedundantAttributes: true,
+    minifyCSS: true,
+    minifyJS: true,
+    removeEmptyAttributes: true,
+    collapseBooleanAttributes: false,
+    sortAttributes: false,
+  });
+  writeOutput('Prod', DONKEY_OUTPUT_PROD_HTML, donkeyProdHtml);
+  console.log('');
+
+  // ============================================
+  // Commit all build output to git
+  // ============================================
   console.log('Committing build output...');
   try {
-    execSync('git add weather.html weather-full.html weather-prod.html', { stdio: 'inherit' });
+    execSync(`git add "${BUILD_DIR}"`, { stdio: 'inherit' });
+
+    const sizes = [];
+    const files = [
+      ['weather.html', WEATHER_OUTPUT_HTML],
+      ['weather-full.html', WEATHER_OUTPUT_FULL_HTML],
+      ['weather-prod.html', WEATHER_OUTPUT_PROD_HTML],
+      ['donkey-full.html', DONKEY_OUTPUT_FULL_HTML],
+      ['donkey-prod.html', DONKEY_OUTPUT_PROD_HTML],
+    ];
+    for (const [name, filePath] of files) {
+      if (fs.existsSync(filePath)) {
+        sizes.push(`${name} [${formatFileSize(fs.statSync(filePath).size)}]`);
+      }
+    }
+
     execSync(
-      `git commit -m "Build: weather.html [${formatFileSize(fs.statSync(OUTPUT_HTML).size)}], weather-full.html [${formatFileSize(fs.statSync(OUTPUT_FULL_HTML).size)}], weather-prod.html [${formatFileSize(fs.statSync(OUTPUT_PROD_HTML).size)}]"`,
+      `git commit -m "Build: ${sizes.join(', ')}"`,
       { stdio: 'inherit' }
     );
     console.log('');

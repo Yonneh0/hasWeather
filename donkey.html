@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Half-Assed Solution: Donkey Runner</title>
-<link rel="stylesheet" href="css/donkey-runner.css">
+<link rel="stylesheet" href="css/main.css">
 <style>
   /* Standalone page setup */
   html, body {
@@ -23,6 +23,115 @@
     opacity: 1 !important;
     pointer-events: auto !important;
   }
+
+  /* Donkey info buttons - positioned below the game */
+  .donkey-info-buttons {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 12px;
+    z-index: 300;
+  }
+
+  .donkey-info-btn {
+    background: rgba(0, 20, 0, 0.7);
+    border: 1px solid rgba(51, 255, 51, 0.3);
+    color: #33ff33;
+    padding: 8px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    letter-spacing: 0.05em;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+  }
+
+  .donkey-info-btn:hover {
+    background: rgba(51, 255, 51, 0.15);
+    border-color: rgba(51, 255, 51, 0.5);
+    color: #66ff66;
+  }
+
+  /* Donkey info panel - reuse about-panel styling */
+  .donkey-info-panel {
+    position: fixed;
+    top: 64px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 780px;
+    max-width: 92vw;
+    z-index: 300;
+    background: rgba(255, 255, 255, 0.04);
+    backdrop-filter: blur(20px) saturate(150%);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 60px rgba(100, 200, 100, 0.05);
+    transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease, top 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    transform-origin: top center;
+  }
+
+  .donkey-info-panel.donkey-info-hidden {
+    top: -400px;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .donkey-info-panel.donkey-info-visible {
+    top: 64px;
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  /* Close button inside info panels */
+  .donkey-info-close-btn {
+    background: rgba(255, 255, 255, 0.1);
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    color: rgba(255, 255, 255, 0.85);
+    min-width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+    flex-shrink: 0;
+  }
+
+  .donkey-info-close-btn:hover {
+    background: rgba(239, 68, 68, 0.25);
+    border-color: rgba(239, 68, 68, 0.5);
+    color: #ef4444;
+  }
+
+  /* Panel title (center) */
+  .donkey-info-title {
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: rgba(51, 255, 51, 0.6);
+    letter-spacing: 0.05em;
+    text-align: center;
+    white-space: nowrap;
+    flex: 1;
+    flex-shrink: 0;
+    text-shadow: 0 0 8px rgba(51, 255, 51, 0.2);
+  }
+
+  /* Responsive */
+  @media (max-width: 600px) {
+    .donkey-info-panel {
+      width: 96vw;
+      left: 2%;
+      transform: none;
+    }
+
+    .donkey-info-inner-panel {
+      padding: 1rem;
+    }
+  }
 </style>
 </head>
 <body>
@@ -36,6 +145,78 @@
       panel.classList.add('donkey-visible');
     }
   });
+
+  // Donkey info panel toggle handlers
+  function showDonkeyInfo(id) {
+    var panel = document.getElementById(id);
+    if (!panel) return;
+
+    // If this panel is already visible, close it
+    if (panel.classList.contains('donkey-info-visible')) {
+      panel.classList.remove('donkey-info-visible');
+      panel.classList.add('donkey-info-hidden');
+      return;
+    }
+
+    // Hide any other open panel first, then show the requested one
+    document.querySelectorAll('.donkey-info-panel').forEach(p => {
+      p.classList.remove('donkey-info-visible');
+      p.classList.add('donkey-info-hidden');
+    });
+    panel.classList.remove('donkey-info-hidden');
+    panel.classList.add('donkey-info-visible');
+  }
+
+  function hideDonkeyInfo(id) {
+    var panel = document.getElementById(id);
+    if (panel) {
+      panel.classList.remove('donkey-info-visible');
+      panel.classList.add('donkey-info-hidden');
+    }
+  }
 </script>
+
+<!-- Donkey README Panel -->
+<div id="donkey-readme-panel" class="donkey-info-panel donkey-info-hidden">
+  <div class="about-panel-header">
+    <span class="donkey-info-title">Donkey README</span>
+    <button class="donkey-info-close-btn" onclick="hideDonkeyInfo('donkey-readme-panel')" title="Close">✕</button>
+  </div>
+  <div class="about-panel-body">
+    <div class="about-inner-panel" id="donkey-readme-content">
+      <!-- START DONKEY-README.md -->
+      <h1>Half-Assed Solution: Donkey Runner</h1>
+      <p>A Chrome-dinosaur-style endless runner minigame featuring a donkey dodging obstacles on a procedurally generated landscape.</p>
+      <br>
+      <h2>[ <a href="donkey-readme.md">View donkey-readme.md</a> ]</h2>
+      <!-- END DONKEY-README.md -->
+    </div>
+  </div>
+</div>
+
+<!-- Donkey Gameplay Panel -->
+<div id="donkey-gameplay-panel" class="donkey-info-panel donkey-info-hidden">
+  <div class="about-panel-header">
+    <span class="donkey-info-title">Gameplay</span>
+    <button class="donkey-info-close-btn" onclick="hideDonkeyInfo('donkey-gameplay-panel')" title="Close">✕</button>
+  </div>
+  <div class="about-panel-body">
+    <div class="about-inner-panel" id="donkey-gameplay-content">
+      <!-- START DONKEY-GAMEPLAY.md -->
+      <h1>Gameplay Mechanics</h1>
+      <p>Detailed gameplay mechanics and rules for the donkey runner.</p>
+      <br>
+      <h2>[ <a href="donkey-gameplay.md">View donkey-gameplay.md</a> ]</h2>
+      <!-- END DONKEY-GAMEPLAY.md -->
+    </div>
+  </div>
+</div>
+
+<!-- Info buttons outside the game area -->
+<div class="donkey-info-buttons">
+  <button class="donkey-info-btn" onclick="showDonkeyInfo('donkey-readme-panel')">Donkey README</button>
+  <button class="donkey-info-btn" onclick="showDonkeyInfo('donkey-gameplay-panel')">Gameplay</button>
+</div>
+
 </body>
 </html>
