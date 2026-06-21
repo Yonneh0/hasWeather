@@ -4,6 +4,7 @@ A completely self-contained single-file weather app that uses public sources, wi
 - Here be dragons!
 - This project is under development. It is not intended for public use, yet.
 - Please wash your hands before returning to work.
+- This product is not yet fit for human consumption. It has errors-a-many, and is a **wrok in porgress**. Feel free to pick it apart, and see what makes it tick, tho! <3
 
 ## Features
 
