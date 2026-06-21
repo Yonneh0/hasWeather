@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Half-Assed Solution: Donkey Runner</title>
+<link rel="stylesheet" href="css/donkey-runner.css">
+<style>
+  /* Standalone page setup */
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: #1a1a2e;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Override the hidden state - always show the game panel */
+  .donkey-panel.donkey-hidden {
+    top: auto !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+  }
+</style>
+</head>
+<body>
+<script src="js/donkey-runner.js"></script>
+<script>
+  // Remove donkey-hidden class after init so the JS doesn't think the panel is hidden
+  document.addEventListener('DOMContentLoaded', function() {
+    var panel = document.querySelector('.donkey-panel');
+    if (panel) {
+      panel.classList.remove('donkey-hidden');
+      panel.classList.add('donkey-visible');
+    }
+  });
+</script>
+</body>
+</html>

@@ -64,6 +64,15 @@ const DONKEY_RUNNER = {
   fallingRockY: 0,
   fallingRockFallSpeed: 3,
   fallingRockActive: false,
+
+  // Rolling boulder (leaves behind when falling rock hits the ground)
+  rollingBoulderX: 0,
+  rollingBoulderY: 0,
+  rollingBoulderSpeed: 5,
+  rollingBoulderActive: false,
+  rollingBoulderWidth: 28,
+  rollingBoulderHeight: 20,
+  rollingBoulderRotation: 0,
   jetY: 0,
   jetActive: false,
   droneX: 0,
@@ -114,6 +123,14 @@ const DONKEY_RUNNER = {
   // Dumb luck tracking
   dumbLuckCount: 0,
   dumbLuckPenalty: 0,
+
+  // Luck meter state (0-100 scale)
+  luckMeterValue: 25,    // starts at 25% of cap
+  luckTimerStart: null,  // when recharge started (null = not actively recharging)
+  luckRechargeAccum: 0,  // accumulator for sub-integer recharge (float to avoid losing fractional parts)
+
+  // Record-breaking state — disables passive luck recharge and dumb luck when score exceeds high score
+  recordBreaking: false,
 
   // Jump tracking
   totalJumps: 0,
@@ -177,10 +194,13 @@ const DONKEY_RUNNER = {
     jet: ["A jet! Your donkey is not a bird", "Military aviation is not your ally today"],
     "falling-rock": ["Falling rock! Look both ways before running", "Gravity: 1, Donkey: 0"],
     drone: ["Drone incoming! Your donkey is not a spaceship", "Surveillance state meets incompetence"],
+    "rolling-boulder": ["A rolling boulder! You should have seen the falling rock coming", "Gravity does what it wants", "The rock falls — the rock rolls"],
     milestone: ["MILESTONE! You survived a while!", "Another thousand points! The donkey is proud"],
     "ignored-jump": ["Jump ignored! Your donkey said no", "Not every jump is welcome here"],
     restart: ["Round two! Why do you keep doing this?", "Again? Really?"],
-    "dumb-luck": ["DUMB LUCK! You survived, but at what cost?", "Pure luck saved your hide!", "Score halved! But you're alive!", "Fortune favors the clumsy!", "The donkey got lucky — barely!"]
+    "dumb-luck": ["DUMB LUCK! You survived, but at what cost?", "Pure luck saved your hide!", "Score halved! But you're alive!", "Fortune favors the clumsy!", "The donkey got lucky — barely!"],
+    "double-jump-fail": ["Out of luck! Not enough beans!", "No chance, no fly!", "Zero luck — sorry, pal!", "Nope! Luck's empty, try jumping again"],
+    "record-break": ["UNCHARTED TERRITORY! The donkey is fearless now", "Breaking records? Good luck with that luckless run!", "No more luck for you — ride the raw skill, donkey!"]
   },
   messageIndex: {},  // tracks which message was last shown per event type
   messageCooldown: 0,  // cooldown timer
@@ -226,6 +246,7 @@ const DONKEY_RUNNER = {
       <div class="donkey-panel-body">
           <div class="donkey-play-area">
           <canvas id="donkey-canvas" width="600" height="180"></canvas>
+          <div class="donkey-luck-meter" id="donkey-luck-meter"><div class="donkey-luck-fill" id="donkey-luck-fill"></div></div>
           <div class="donkey-speed-lines" id="donkey-speed-lines"></div>
           <div class="donkey-near-miss" id="donkey-near-miss">NEAR MISS!</div>
           <div class="donkey-dumb-luck" id="donkey-dumb-luck">DUMB LUCK!</div>
@@ -342,6 +363,14 @@ const DONKEY_RUNNER = {
     this.speedLinesEl = document.getElementById('donkey-speed-lines');
     this.soundBtnEl = document.getElementById('donkey-sound-btn');
     this.snarkyMessageEl = document.getElementById('donkey-snarky-message');
+
+    // Luck meter DOM element
+    this.luckFillEl = document.getElementById('donkey-luck-fill');
+
+    // Initialize luck meter display
+    if (this.luckFillEl) {
+      this.updateLuckMeterDisplay();
+    }
 
     // High score on start screen
     const dsHighScoreVal = document.getElementById('ds-highscore-val');
@@ -726,6 +755,17 @@ const DONKEY_RUNNER = {
           oscillator.stop(now + 0.2);
           break;
 
+        case 'fail':
+          // Descending buzzer — "you can't do that" sound
+          oscillator.type = 'sawtooth';
+          oscillator.frequency.setValueAtTime(600, now);
+          oscillator.frequency.exponentialRampToValueAtTime(150, now + 0.3);
+          gainNode.gain.setValueAtTime(0.12, now);
+          gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
+          oscillator.start(now);
+          oscillator.stop(now + 0.35);
+          break;
+
         case 'dumbluck':
           // Comedic "bonk + golden ding" — lucky save sound
           // Bonk: low thud
@@ -814,10 +854,21 @@ const DONKEY_RUNNER = {
     } else if (!this.donkey.grounded && !this.donkey.stumbling && this.donkey.currentJumpCount < this.MAX_JUMPS && !this.gameOverActive) {
       // Only allow double jump if cooldown has expired (prevents held-key rapid-fire)
       if (this.jumpCooldownTimer <= 0) {
+        // Check if enough luck for a double-jump (need at least 5%)
+        if (this.luckMeterValue < 5) {
+          // Not enough luck — fail the jump
+          this.ignoredJumps++;
+          this.playSound('fail');
+          this.shakeLuckMeter();
+          this.showSnarkyMessage('double-jump-fail');
+          return;
+        }
         // Change to fart sound for double-jump
         this.playSound('fart');
         this.totalJumps++;
         this.doubleJumps++;
+        // Reduce luck by 5% for the double jump (clamped to floor)
+        this.subtractLuck(5);
         this.donkey.vy = this.DOUBLE_JUMP_FORCE;
         this.donkey.currentJumpCount++;
         // Spawn double-jump particles
@@ -902,8 +953,9 @@ const DONKEY_RUNNER = {
     this.obstacles = [];
     this.obstacleTimer = 0;
     this.groundX = 0;
-    // Reset air-based obstacles
+    // Reset air-based obstacles and rolling boulder
     this.fallingRockActive = false;
+    this.rollingBoulderActive = false;
     this.jetActive = false;
     this.droneActive = false;
     this.particles = [];
@@ -933,6 +985,16 @@ const DONKEY_RUNNER = {
     // Reset dumb luck tracking
     this.dumbLuckCount = 0;
     this.dumbLuckPenalty = 0;
+
+    // Reset luck meter to starting value (25)
+    this.luckMeterValue = 25;
+    this.luckTimerStart = performance.now();
+    // Update DOM to reflect reset state
+    if (this.luckFillEl) {
+      this.luckFillEl.style.width = '25%';
+      this.luckFillEl.className = 'donkey-luck-fill';
+      this.luckFillEl.classList.add('luck-low');
+    }
 
     // Regenerate clouds for fresh start
     this.generateClouds();
@@ -1005,6 +1067,25 @@ const DONKEY_RUNNER = {
       this.messageCooldown -= deltaTime;
     }
 
+    // Recharge luck meter if active and game is running AND not record-breaking
+    if (this.luckTimerStart && this.gameRunning && !this.recordBreaking && this.luckMeterValue < 100) {
+      const elapsed = (performance.now() - this.luckTimerStart) / 1000;
+      const rate = this.getRechargeRate(elapsed);
+      // Accumulate sub-integer recharge amounts each frame
+      this.luckRechargeAccum += rate * deltaTime;
+      // Update the meter when we've accumulated enough for a full percentage point
+      while (this.luckRechargeAccum >= 1) {
+        this.luckMeterValue = Math.min(100, this.luckMeterValue + 1);
+        this.luckRechargeAccum -= 1;
+        this.updateLuckMeterDisplay();
+        if (this.luckMeterValue >= 99.9) {
+          // At cap, stop tracking timer
+          this.luckTimerStart = null;
+          break;
+        }
+      }
+    }
+
     // Accumulate run time (total play time)
     this.runTime += deltaTime;
 
@@ -1024,6 +1105,14 @@ const DONKEY_RUNNER = {
     const airborneMultiplier = this.donkey.grounded ? 1.0 : 0.1;
     this.distance += this.speed * 0.01 * deltaTime * 60 * airborneMultiplier;
     this.score = Math.floor(this.distance * 100) - this.dumbLuckPenalty;
+
+    // Check if player just broke their own record — triggers "uncharted territory" state
+    if (this.score > this.highScore && !this.recordBreaking) {
+      this.recordBreaking = true;
+      this.resetLuckMeter(); // Reset to 0% — no more passive recharge
+      this.shakeLuckMeter(); // Visual feedback: shake the meter
+      this.showSnarkyMessage('record-break');
+    }
 
     // Score milestone flash check
     const currentMilestone = Math.floor(this.score / 1000) * 1000;
@@ -1148,7 +1237,7 @@ const DONKEY_RUNNER = {
     this.donkey.wasGrounded = this.donkey.grounded;
 
     this.obstacleTimer += deltaTime * 60;
-    const baseInterval = 25 + Math.round(45 * Math.pow((12 - this.speed) / 7, 2));
+    const baseInterval = 20 + Math.round(45 * Math.pow((12 - this.speed) / 7, 2));
     // Add ±25% random variance to obstacle spacing for more natural feel
     const targetInterval = baseInterval * (0.75 + Math.random() * 0.5);
     if (this.obstacleTimer >= targetInterval) {
@@ -1190,9 +1279,9 @@ const DONKEY_RUNNER = {
           // Knock aside: remove obstacle, spawn particles
           this.knockObstacle(obs, i);
           this.showSnarkyMessage('property-damage');
-        } else if (this.score <= this.highScore && Math.random() < 0.5) {
-          // Dumb Luck! 50% chance to survive by knocking obstacle away
-          // Only allow when score is at or below high score (prevents score inflation via luck)
+        } else if (!this.recordBreaking && Math.random() < this.luckMeterValue / 100) {
+          // Dumb Luck! Chance to survive by knocking obstacle away — based on luck meter value
+          // Only allow when NOT record-breaking (prevents score inflation during record runs)
           this.triggerDumbLuck(obs, i);
         } else {
           // Record the killer obstacle type for the table
@@ -1224,9 +1313,21 @@ const DONKEY_RUNNER = {
     if (this.fallingRockActive) {
       this.fallingRockY += this.fallingRockFallSpeed * deltaTime * 60;
       if (this.fallingRockY + this.fallingRockHeight >= this.GROUND_Y) {
+        // Falling rock hit the ground — spawn rolling boulder instead of just particles
         this.obstacleCounts['falling-rock']++;
         this.fallingRockActive = false;
+        // Create rolling boulder at the falling rock's landing position
+        this.rollingBoulderX = this.fallingRockX;
+        this.rollingBoulderY = this.GROUND_Y - this.fallingRockHeight;
+        this.rollingBoulderWidth = this.fallingRockWidth;
+        this.rollingBoulderHeight = this.fallingRockHeight;
+        this.rollingBoulderSpeed = this.speed * 0.8; // rolls at 80% of game speed
+        this.rollingBoulderActive = true;
+        this.rollingBoulderRotation = 0;
+        // Spawn landing particles (dust explosion)
         this.spawnFallingRockLandingParticles(this.fallingRockX + this.fallingRockWidth / 2, this.GROUND_Y);
+        // Show snarky message about the rolling boulder
+        this.showSnarkyMessage('rolling-boulder');
       } else {
         if (this.checkAirCollision('falling-rock')) {
           this.gameOverObstacleType = 'falling-rock';
@@ -1235,6 +1336,36 @@ const DONKEY_RUNNER = {
         }
         if (this.fallingRockY < -5) {
           this.showSnarkyMessage('falling-rock');
+        }
+      }
+    }
+
+    // Rolling boulder — rolls across the ground after falling rock hits
+    if (this.rollingBoulderActive) {
+      this.rollingBoulderX -= this.rollingBoulderSpeed * deltaTime * 60;
+      this.rollingBoulderRotation += deltaTime * 8; // spin rate for rolling animation
+
+      // Spawn dust trail while rolling
+      if (Math.random() < 0.3) {
+        this.particles.push({
+          x: this.rollingBoulderX + this.rollingBoulderWidth + Math.random() * 5,
+          y: this.GROUND_Y - Math.random() * 3,
+          vx: -0.5 - Math.random() * 1,
+          vy: -0.3 - Math.random() * 0.8,
+          size: 1 + Math.random() * 2,
+          color: '#6B6B6B',
+          life: 0.3 + Math.random() * 0.3,
+        });
+      }
+
+      if (this.rollingBoulderX + this.rollingBoulderWidth < 0) {
+        this.obstacleCounts['falling-rock']++;
+        this.rollingBoulderActive = false;
+      } else {
+        if (this.checkAirCollision('rolling-boulder')) {
+          this.gameOverObstacleType = 'falling-rock';
+          this.gameOver();
+          return;
         }
       }
     }
@@ -1281,6 +1412,109 @@ const DONKEY_RUNNER = {
 
   randomFrameRange(min, max) {
     return min + Math.random() * (max - min);
+  },
+
+  // ===== LUCK METER HELPERS =====
+
+  // Get the recharge rate per second based on elapsed time since last drop.
+  // Returns a percentage (0-1) — how many percentage points of luck to add per second.
+  getRechargeRate(elapsedSeconds) {
+    // (rate in % per second, so 1.0 = 1% per second)
+    const breakpoints = [
+      { time: 0,    rate: 0.3 },
+      { time: 5,    rate: 3.0 },
+      { time: 10,   rate: 2.0 },
+      { time: 20,   rate: 1.0 },
+      { time: 30,   rate: 0.5 },
+    ];
+
+    if (elapsedSeconds <= 0) return 0;
+    if (elapsedSeconds >= breakpoints[breakpoints.length - 1].time) return breakpoints[breakpoints.length - 1].rate;
+
+    // Find the segment this time falls into
+    for (let i = 0; i < breakpoints.length - 1; i++) {
+      const t0 = breakpoints[i];
+      const t1 = breakpoints[i + 1];
+      if (elapsedSeconds >= t0.time && elapsedSeconds <= t1.time) {
+        const t = (elapsedSeconds - t0.time) / (t1.time - t0.time);
+        return t0.rate + t * (t1.rate - t0.rate);
+      }
+    }
+
+    // Fallback (shouldn't reach here)
+    return breakpoints[breakpoints.length - 1].rate;
+  },
+
+  // Clamp luck value to valid range [0, 100]
+  clampLuck(value) {
+    return Math.max(0, Math.min(100, value));
+  },
+
+  // Add a percentage point of luck (clamped to cap)
+  addLuck(amount) {
+    this.luckMeterValue = this.clampLuck(this.luckMeterValue + amount);
+    this.luckTimerStart = performance.now();
+    this.luckRechargeAccum = 0; // reset accumulator on instant gain
+    this.updateLuckMeterDisplay();
+  },
+
+  // Subtract a percentage point of luck (clamped to floor)
+  subtractLuck(amount) {
+    // Apply fast reduction transition by adding "reducing" class
+    if (this.luckFillEl) {
+      this.luckFillEl.classList.add('reducing');
+      setTimeout(() => this.luckFillEl.classList.remove('reducing'), 300);
+    }
+    this.luckMeterValue = this.clampLuck(this.luckMeterValue - amount);
+    this.luckTimerStart = performance.now();
+    this.luckRechargeAccum = 0; // reset accumulator on instant loss
+    this.updateLuckMeterDisplay();
+  },
+
+  // Reset luck meter to 0% (dumb luck triggered)
+  resetLuckMeter() {
+    this.luckMeterValue = 0;
+    this.luckTimerStart = performance.now();
+    this.luckRechargeAccum = 0; // reset accumulator on reset
+    this.updateLuckMeterDisplay();
+  },
+
+  // Update the DOM element display based on current luck value
+  updateLuckMeterDisplay() {
+    if (!this.luckFillEl) return;
+
+    // Update width directly (value is already 0-100)
+    this.luckFillEl.style.width = `${this.luckMeterValue}%`;
+
+    // Remove all class states
+    this.luckFillEl.className = 'donkey-luck-fill';
+
+    // Add appropriate color class based on percentage
+    if (this.luckMeterValue >= 75) {
+      this.luckFillEl.classList.add('luck-cap');
+    } else if (this.luckMeterValue >= 65) {
+      this.luckFillEl.classList.add('luck-excellent');
+    } else if (this.luckMeterValue >= 50) {
+      this.luckFillEl.classList.add('luck-high');
+    } else if (this.luckMeterValue >= 35) {
+      this.luckFillEl.classList.add('luck-mid');
+    } else if (this.luckMeterValue >= 25) {
+      this.luckFillEl.classList.add('luck-low');
+    } else {
+      this.luckFillEl.classList.add('luck-danger');
+    }
+  },
+
+  // Shake the luck meter visual (double-jump fail effect)
+  shakeLuckMeter() {
+    if (!this.luckFillEl) return;
+    // Remove existing shake to re-trigger
+    this.luckFillEl.classList.remove('shake');
+    void this.luckFillEl.offsetWidth; // Force reflow
+    this.luckFillEl.classList.add('shake');
+    setTimeout(() => {
+      this.luckFillEl.classList.remove('shake');
+    }, 300);
   },
 
   knockObstacle(obs, index) {
@@ -1484,6 +1718,9 @@ const DONKEY_RUNNER = {
     // Play dumb luck sound
     this.playSound('dumbluck');
 
+    // Reset luck meter to 0% (dumb luck used up its chance)
+    this.resetLuckMeter();
+
     // Trigger a short stumble on the donkey
     if (!this.donkey.stumbling) {
       this.donkey.stumbling = true;
@@ -1541,6 +1778,15 @@ const DONKEY_RUNNER = {
     this.nearMissCount++;
     this.playSound('nearmiss');
 
+    // Near miss gives instant +25% luck (clamped to cap)
+    this.addLuck(25);
+
+    // Flash the meter green briefly on instant gain
+    if (this.luckFillEl) {
+      this.luckFillEl.classList.add('nearmiss-flash');
+      setTimeout(() => this.luckFillEl.classList.remove('nearmiss-flash'), 600);
+    }
+
     // Reset near-miss flag after delay
     setTimeout(() => {
       this.nearMissActive = false;
@@ -1578,7 +1824,7 @@ const DONKEY_RUNNER = {
       messageEl.classList.add('snarky-green');
     } else if (eventType === 'game-over') {
       messageEl.classList.add('snarky-red');
-    } else if (eventType === 'high-score' || eventType === 'dumb-luck') {
+    } else if (eventType === 'high-score' || eventType === 'dumb-luck' || eventType === 'record-break') {
       messageEl.classList.add('snarky-gold');
     } else if (eventType === 'jump' || eventType === 'double-jump' || eventType === 'ignored-jump') {
       messageEl.classList.add('snarky-blue');
@@ -1734,6 +1980,12 @@ const DONKEY_RUNNER = {
         ow = this.droneWidth;
         oh = this.droneHeight;
         break;
+      case 'rolling-boulder':
+        ox = this.rollingBoulderX;
+        oy = this.rollingBoulderY;
+        ow = this.rollingBoulderWidth;
+        oh = this.rollingBoulderHeight;
+        break;
       default:
         return false;
     }
@@ -1804,6 +2056,8 @@ const DONKEY_RUNNER = {
       if (this.highScoreEl) {
         this.highScoreEl.textContent = `HI ${String(this.highScore).padStart(5, '0')}`;
       }
+      // Reset record-breaking state for next run
+      this.recordBreaking = false;
     }
 
     // Show game over screen with score breakdown and stats
@@ -2036,6 +2290,7 @@ const DONKEY_RUNNER = {
     // Air-based obstacles
     if (this.jetActive) this.drawJet(ctx);
     if (this.fallingRockActive) this.drawFallingRock(ctx);
+    if (this.rollingBoulderActive) this.drawRollingBoulder(ctx);
     if (this.droneActive) this.drawDrone(ctx);
 
     // Particles
@@ -2594,6 +2849,78 @@ const DONKEY_RUNNER = {
     ctx.fill();
 
     // Warning symbol
+    ctx.fillStyle = '#e8a838';
+    ctx.font = 'bold 10px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('!', x + w / 2, y + h / 2 + 4);
+  },
+
+  // Draw a rolling boulder — animated spinning rock on the ground
+  drawRollingBoulder(ctx) {
+    const x = this.rollingBoulderX;
+    const y = this.rollingBoulderY;
+    const w = this.rollingBoulderWidth;
+    const h = this.rollingBoulderHeight;
+
+    // Orange/red warning glow around the boulder (pulsing)
+    const glowAlpha = 0.12 + Math.sin(this.rollingBoulderRotation * 2) * 0.04;
+    ctx.fillStyle = `rgba(255, 70, 30, ${glowAlpha})`;
+    ctx.beginPath();
+    ctx.ellipse(x + w / 2, y + h / 2, w / 2 + 6, h / 2 + 6, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Save context for rotation
+    ctx.save();
+    ctx.translate(x + w / 2, y + h / 2);
+    ctx.rotate(this.rollingBoulderRotation);
+
+    // Main boulder body — irregular oval shape
+    ctx.fillStyle = '#5A5A5A';
+    ctx.strokeStyle = '#3A3A3A';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, w / 2, h / 2, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // Highlight on top-left (rotates with the boulder)
+    const highlightAngle = -Math.PI / 4;
+    const highlightDist = w / 8;
+    const hlX = Math.cos(highlightAngle) * highlightDist;
+    const hlY = Math.sin(highlightAngle) * highlightDist;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.14)';
+    ctx.beginPath();
+    ctx.ellipse(hlX - w / 8, hlY - h / 8, w / 5, h / 5, highlightAngle, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Dark shadow on bottom-right (rotates with the boulder)
+    const shadowAngle = Math.PI * 3 / 4;
+    const shadowDist = w / 8;
+    const shX = Math.cos(shadowAngle) * shadowDist;
+    const shY = Math.sin(shadowAngle) * shadowDist;
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.12)';
+    ctx.beginPath();
+    ctx.ellipse(shX + w / 8, shY + h / 8, w / 5, h / 5, shadowAngle, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Surface cracks/lines (rotating with the boulder)
+    ctx.strokeStyle = 'rgba(70, 70, 70, 0.6)';
+    ctx.lineWidth = 0.5;
+    for (let i = 0; i < 3; i++) {
+      const angle = (i / 3) * Math.PI * 2 + this.rollingBoulderRotation * 0.5;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(angle) * w / 4, Math.sin(angle) * h / 4);
+      ctx.quadraticCurveTo(
+        Math.cos(angle + 0.3) * w / 3,
+        Math.sin(angle + 0.3) * h / 3,
+        Math.cos(angle + 0.8) * w / 5,
+        Math.sin(angle + 0.8) * h / 5
+      );
+      ctx.stroke();
+    }
+
+    // Warning symbol on top
+    ctx.restore();
     ctx.fillStyle = '#e8a838';
     ctx.font = 'bold 10px Arial';
     ctx.textAlign = 'center';

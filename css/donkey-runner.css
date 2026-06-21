@@ -751,3 +751,119 @@
   color: #FFD700;
   text-shadow: 0 0 12px rgba(255, 215, 0, 0.6), 0 0 24px rgba(255, 215, 0, 0.3);
 }
+
+/* ===== LUCK METER ===== */
+.donkey-luck-meter {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 3px 3px 0 0;
+  overflow: hidden;
+  z-index: 4;
+}
+
+.donkey-luck-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 25%; /* starts at 25% (matching luckMeterValue of 25) */
+  transition: width 2s ease-in-out, background 0.3s ease, box-shadow 0.3s ease;
+  border-radius: 3px 0 0 0;
+}
+
+/* Faster transition for reductions — added via "reducing" class */
+.donkey-luck-fill.reducing {
+  transition: width 0.3s ease-out, background 0.3s ease, box-shadow 0.3s ease;
+}
+
+/* Color gradient based on luck value (0-100 scale) */
+.donkey-luck-fill.luck-danger {
+  /* 0-25: Red — danger zone */
+  background: linear-gradient(90deg, #ef4444, #dc2626);
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.4), inset 0 0 4px rgba(255, 100, 100, 0.2);
+}
+
+.donkey-luck-fill.luck-low {
+  /* 25-35: Orange — building up */
+  background: linear-gradient(90deg, #f97316, #ea580c);
+  box-shadow: 0 0 8px rgba(249, 115, 22, 0.4), inset 0 0 4px rgba(255, 180, 100, 0.2);
+}
+
+.donkey-luck-fill.luck-mid {
+  /* 35-50: Yellow — moderate */
+  background: linear-gradient(90deg, #eab308, #ca8a04);
+  box-shadow: 0 0 8px rgba(234, 179, 8, 0.4), inset 0 0 4px rgba(255, 230, 100, 0.2);
+}
+
+.donkey-luck-fill.luck-high {
+  /* 50-65: Yellow-green — good */
+  background: linear-gradient(90deg, #84cc16, #65a30d);
+  box-shadow: 0 0 8px rgba(132, 204, 22, 0.4), inset 0 0 4px rgba(200, 255, 100, 0.2);
+}
+
+.donkey-luck-fill.luck-excellent {
+  /* 65-75: Green — excellent */
+  background: linear-gradient(90deg, #22c55e, #16a34a);
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.4), inset 0 0 4px rgba(150, 255, 150, 0.2);
+}
+
+.donkey-luck-fill.luck-cap {
+  /* 75+ cap: Bright green with glow */
+  background: linear-gradient(90deg, #4ade80, #22c55e);
+  box-shadow: 0 0 12px rgba(74, 222, 128, 0.6), inset 0 0 4px rgba(200, 255, 200, 0.3);
+}
+
+/* Shake animation for double-jump fail */
+@keyframes luckMeterShake {
+  0% { transform: translateX(0); }
+  10% { transform: translateX(-4px); }
+  20% { transform: translateX(4px); }
+  30% { transform: translateX(-3px); }
+  40% { transform: translateX(3px); }
+  50% { transform: translateX(-2px); }
+  60% { transform: translateX(2px); }
+  70% { transform: translateX(-1px); }
+  80% { transform: translateX(1px); }
+  90% { transform: translateX(-1px); }
+  100% { transform: translateX(0); }
+}
+
+.donkey-luck-fill.shake {
+  animation: luckMeterShake 0.3s ease-in-out;
+}
+
+/* Cap indicator — subtle glow at full cap */
+@keyframes capPulse {
+  0%, 100% { box-shadow: 0 0 12px rgba(74, 222, 128, 0.6), inset 0 0 4px rgba(200, 255, 200, 0.3); }
+  50% { box-shadow: 0 0 20px rgba(74, 222, 128, 0.8), inset 0 0 6px rgba(200, 255, 200, 0.4); }
+}
+
+.donkey-luck-fill.luck-cap {
+  animation: capPulse 2s ease-in-out infinite;
+}
+
+/* Near-miss flash — brief green pulse on instant +25% */
+@keyframes nearMissFlashPulse {
+  0% { box-shadow: 0 0 12px rgba(74, 222, 128, 0.6), inset 0 0 4px rgba(200, 255, 200, 0.3); }
+  50% { box-shadow: 0 0 24px rgba(74, 222, 128, 1), inset 0 0 8px rgba(200, 255, 200, 0.6); }
+  100% { box-shadow: 0 0 12px rgba(74, 222, 128, 0.6), inset 0 0 4px rgba(200, 255, 200, 0.3); }
+}
+
+.donkey-luck-fill.nearmiss-flash {
+  animation: nearMissFlashPulse 0.6s ease-out;
+}
+
+/* Double-jump fail — brief red flash during shake */
+@keyframes doubleJumpFailFlash {
+  0% { background: linear-gradient(90deg, #ef4444, #dc2626); box-shadow: 0 0 12px rgba(239, 68, 68, 0.6), inset 0 0 6px rgba(255, 100, 100, 0.3); }
+  50% { background: linear-gradient(90deg, #ef4444, #dc2626); box-shadow: 0 0 20px rgba(239, 68, 68, 0.8), inset 0 0 10px rgba(255, 100, 100, 0.4); }
+  100% { background: linear-gradient(90deg, #ef4444, #dc2626); box-shadow: 0 0 8px rgba(239, 68, 68, 0.4), inset 0 0 4px rgba(255, 100, 100, 0.2); }
+}
+
+.donkey-luck-fill.doublejump-fail {
+  animation: doubleJumpFailFlash 0.3s ease-out;
+}
